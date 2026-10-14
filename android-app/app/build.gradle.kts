@@ -8,8 +8,16 @@ android {
         applicationId = "com.drnas.console"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.3.1-prefix-links"
+        ndk { abiFilters += listOf("arm64-v8a") }
+        versionCode = 6
+        versionName = "0.4.0-native-host"
+    }
+    ndkVersion = "27.2.12479018"
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
     buildTypes {
         release {

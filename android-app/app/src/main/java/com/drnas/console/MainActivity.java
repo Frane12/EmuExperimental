@@ -66,8 +66,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.3.1");
-        append("No Windows runner connected — this APK does not launch games.");
+        append("DRNAS CONSOLE · Runtime Core v0.4.0");
+        append("ARM64 Bionic NDK host added; Proton/guest launcher still not connected.");
         render();
     }
     @Override public void onConfigurationChanged(Configuration cfg) {
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.3.1 EXPERIMENTAL",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.4 NDK EXPERIMENTAL",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -190,7 +190,7 @@ public final class MainActivity extends Activity {
         content.addView(label("SESSION LAB / ANDROID",11,ACCENT,true),pad(0,6));
         heading("PC gaming, your rules.");
         content.addView(label("Proof of Android process lifecycle first. " +
-                "Proton 10, FEXCore 2609, DXVK 1.10.3 and Turnip will remain modular.",14,MUTED,false),pad(0,20));
+                "Proton 11, FEXCore 2609, DXVK 1.10.3 and Turnip remain modular.",14,MUTED,false),pad(0,20));
         LinearLayout game = card();
         game.addView(label("SELECTED GAME PROFILE",10,ACCENT,true),pad(0,8));
         game.addView(label(currentGame,23,TEXT,true),pad(0,9));
@@ -206,18 +206,18 @@ public final class MainActivity extends Activity {
         }
         horizontal.addView(row);
         game.addView(horizontal,pad(0,6));
-        game.addView(label("Proton 10 ARM64EC · FEXCore 2609 O3 · DXVK 1.10.3",12,MUTED,false),pad(9,5));
-        note(game,"Game launch is NOT implemented in v0.2. Game cards represent profiles only.");
+        game.addView(label("Proton 11 ARM64EC · FEXCore 2609 · DXVK 1.10.3",12,MUTED,false),pad(9,5));
+        note(game,"Game launch requires a glibc guest loader, an X server and graphics/audio connections. Profiles are not launched yet.");
 
         LinearLayout bootPanel=card();
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (experimental)",true,v->startContainer());
-        note(bootPanel,"First boot may unpack gigabytes and take several minutes. Guest launch requires Bionic/glibc/X11/Vulkan support not yet included.");
+        note(bootPanel,"Native ARM64 NDK host probes Wine ELF and Vulkan on-device. Real Proton execution still requires a compatible glibc guest loader, X server and graphics/audio wiring.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));
-        panel.addView(label("Starts a bounded diagnostic /system/bin/sh process; reads output asynchronously; allows stop/cleanup. Does NOT load Wine.",13,MUTED,false),pad(0,9));
+        panel.addView(label("Independent bounded Android shell test. The NDK ARM64 host is now tested by Start container; neither test launches Wine.",13,MUTED,false),pad(0,9));
         stateBadge=label("State: "+sessions.getState(),15,WARM,true);
         panel.addView(stateBadge,pad(0,9));
         addButton(panel,"▶ Start native smoke test",true,v->{

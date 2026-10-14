@@ -21,15 +21,15 @@ public final class RuntimeProbe {
                 "\nRAM total: " + (mi.totalMem / (1024 * 1024)) + " MiB" +
                 "\nAndroid Vulkan feature: " + (vulkanFeature ? "present" : "not advertised") +
                 "\nAdreno chip: NOT PROBED (no GPU ID spoofing)" +
-                "\nProton/Wine: prefix staging available; GUEST LOADER MISSING" +
+                "\nProton/Wine: NDK ELF probe available; glibc GUEST LOADER MISSING" +
                 "\nFEXCore: PE bridge check + prefix layering available" +
                 "\nDXVK/Turnip: archives stageable; Vulkan ICD NOT CONNECTED";
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.3: no native Wine/Bionic glibc loader, " +
+        return "EXPERIMENTAL v0.4: Bionic ARM64 JNI bridge is packaged; no glibc Wine guest loader, " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
-                "Proton, DXVK, Turnip and FEX may be staged into an isolated prefix, but Wine cannot yet execute.";
+                "Native NDK host can probe ELF/Android Vulkan. Wine remains blocked until glibc, X11 and graphics/audio runtime adapters are integrated.";
     }
     private RuntimeProbe() {}
 }

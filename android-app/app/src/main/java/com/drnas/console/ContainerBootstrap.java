@@ -47,7 +47,7 @@ public final class ContainerBootstrap {
             String result="BOOT BLOCKED";boolean guestStarted=false;
             try {
                 prepare();
-                result="HOST READY / GUEST LOADER MISSING";
+                result="NDK HOST READY / GLIBC GUEST LOADER MISSING";
             } catch(Throwable failure) {
                 result="BOOT BLOCKED: "+failure.getClass().getSimpleName()+": "+failure.getMessage();
                 log(result);
@@ -153,7 +153,7 @@ public final class ContainerBootstrap {
             }
         }
         for(String note:unsupported)log("Package skipped: "+note);
-        if(proton==null)throw new IOException("Proton 10 ARM64EC .wcp missing or invalid. Import it in Components.");
+        if(proton==null)throw new IOException("Proton ARM64EC .wcp missing or invalid. Import it in Components.");
         if(dxvk==null)throw new IOException("DXVK 1.10.3 .wcp missing or invalid. Import it in Components.");
         if(turnip==null)throw new IOException("Turnip driver .zip missing or invalid. Import our .zip in Components.");
         log("Selected Proton "+proton.version+", DXVK "+dxvk.version+", "+turnip.version);
@@ -200,12 +200,18 @@ public final class ContainerBootstrap {
         File wine=new File(proton.folder,
                 WcpRuntimeStager.clean(wineConfig.getString("binPath"),false)+"/wine");
         if(!wine.isFile())throw new IOException("Missing Wine entrypoint in Proton package");
+        if(!NativeHost.available())
+            throw new IOException("NDK ARM64 host library unavailable: "+NativeHost.loadError());
+        log("[ndk] "+NativeHost.hostInfo());
+        log("[ndk] "+NativeHost.probeFile(wine.getAbsolutePath()));
+        log("[ndk] "+NativeHost.vulkanInfo());
         JSONObject plan=new JSONObject();
         plan.put("proton",proton.version).put("protonWine",wine.getAbsolutePath())
             .put("fexCore",bridge.getString("versionName")).put("dxvk",dxvk.version)
             .put("turnipArchive",turnip.version).put("turnipStore",turnip.folder.getAbsolutePath())
             .put("prefix",prefix.getAbsolutePath()).put("hostApi",Build.VERSION.SDK_INT)
             .put("guestExecutableStarted",false)
+            .put("nativeBionicHostAvailable",NativeHost.available())
             .put("wineLoaderConnected",false).put("xServerConnected",false)
             .put("audioConnected",false).put("turnipVulkanICDConnected",false);
         WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
@@ -214,26 +220,14 @@ public final class ContainerBootstrap {
                 PackageManager.FEATURE_VULKAN_HARDWARE_VERSION);
         log("Android Vulkan feature: "+(vulkan?"present":"NOT advertised")+
                 "; custom Turnip ICD is staged, not loaded");
-        // This process genuinely executes on-device and returns an exit code,
-        // but it must not be presented as running Proton/Wine.
-        Process process=new ProcessBuilder("/system/bin/sh","-c",
-                "printf 'DRNAS_ANDROID_HOST_PROCESS_OK\\n'; uname -m; id").redirectErrorStream(true).start();
-        try(BufferedReader input=new BufferedReader(new InputStreamReader(
-                process.getInputStream(),StandardCharsets.UTF_8))) {
-            String line;
-            while((line=input.readLine())!=null)log("[host] "+line);
-        }
-        int exit=process.waitFor();
-        if(exit!=0)throw new IOException("Android host preflight exit="+exit);
-        File nativeHost=new File(ctx.getApplicationInfo().nativeLibraryDir,"libdrnas_winehost.so");
-        if(!nativeHost.exists()) {
-            log("BLOCKED: Wine is glibc/ARM64EC, not a native Android executable.");
-            log("Android 16 also restricts executing ELF from writable app storage.");
-            log("Missing: packaged Bionic/glibc Wine host bridge + X server + audio + Turnip Vulkan ICD loader.");
-            log("FEX DLLs alone are not a standalone CPU emulator. Proton game launch NOT attempted.");
-        } else {
-            log("Native host bridge detected but automatic activation is disabled until ABI validation.");
-        }
+        // v0.4 now runs real compiled ARM64 code via JNI; the native code
+        // probes guest ELF and Android Vulkan, but it is not an ELF loader.
+        // Never pass untrusted Wine/Proton executables to ProcessBuilder:
+        // dynamic glibc/PT_INTERP, executable storage and X11 must be solved.
+        log("[ndk] Actual Bionic ARM64 native library executed successfully.");
+        log("BOOT WAITING: glibc userland/ELF interpreter, X11 display, audio and Turnip ICD activation.");
+        log("Wine guest process NOT STARTED; FEX DLL files are bridges, not an executable CPU emulator.");
+        log("Use the Wine ELF/PT_INTERP diagnostic above to select a compatible runtime adapter.");
     }
     private static File findWindowsDir(File prefix) throws IOException {
         File[] roots={
