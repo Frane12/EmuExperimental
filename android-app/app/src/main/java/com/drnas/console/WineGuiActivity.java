@@ -12,6 +12,7 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 import java.io.*;
 import au.com.darkside.xserver.XServer;
@@ -27,6 +28,7 @@ public final class WineGuiActivity extends Activity {
     private RawWineTrace raw;
     private volatile boolean started;
     private volatile boolean destroyed;
+    private TextView startupStatus;
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -58,6 +60,17 @@ public final class WineGuiActivity extends Activity {
         layout.addView(xserver.getScreen(),new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Quiet startup notice, not diagnostics. An offline Mono installation
+        // may need time before the Wine desktop maps its first X11 window.
+        startupStatus=new TextView(this);
+        startupStatus.setText("Preparing Windows desktop…");
+        startupStatus.setTextColor(0xFFE0EFF8);
+        startupStatus.setTextSize(16);
+        startupStatus.setGravity(Gravity.CENTER);
+        startupStatus.setBackgroundColor(0xA9000000);
+        layout.addView(startupStatus,new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(56),Gravity.CENTER));
 
         // The sole on-screen control is a small, translucent menu.
         // Long-press to save a log only if debugging is necessary.
@@ -129,6 +142,14 @@ public final class WineGuiActivity extends Activity {
                 },"drnas-desktop").start();
             }
         });
+        // Hide the status as soon as real Wine windows are mapped.
+        xserver.getScreen().postDelayed(new Runnable() {
+            @Override public void run() {
+                if(destroyed || startupStatus==null)return;
+                if(xserver.mappedWindowCount()>0)startupStatus.setVisibility(View.GONE);
+                else xserver.getScreen().postDelayed(this,700);
+            }
+        },700);
         // Report absence of a mapped window only to the private session log.
         xserver.getScreen().postDelayed(()->{
             if(!destroyed && xserver.mappedWindowCount()==0)
@@ -138,6 +159,15 @@ public final class WineGuiActivity extends Activity {
 
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
+        if(line.startsWith("Installing Wine Mono") ||
+                line.startsWith("Installing Microsoft VC++") ||
+                line.startsWith("Launching Wine explorer")) {
+            runOnUiThread(()->{
+                if(startupStatus!=null && !destroyed)
+                    startupStatus.setText(line.startsWith("Launching ")?
+                            "Opening Windows desktop…":line);
+            });
+        }
     }
 
     private void showKeyboard() {
