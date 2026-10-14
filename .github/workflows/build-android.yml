@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.13 Stable or Transient Test
+name: EmuExperimental - Android APK v0.5.14 Stable or Transient Test
 on:
   push:
     branches:
@@ -92,17 +92,17 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.13-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.13\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.14-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.14\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.13-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.13 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.lab (separate from com.drnas.console).\nInstall alongside existing DRNAS without uninstalling or deleting old app data.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.14-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.14 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.lab (separate from com.drnas.console).\nInstall alongside existing DRNAS without uninstalling or deleting old app data.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.13-APK-ZIP
+          name: Drnas-Console-v0.5.14-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
