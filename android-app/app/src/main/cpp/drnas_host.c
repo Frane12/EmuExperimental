@@ -194,8 +194,8 @@ static void probe_file_map(char *out,size_t cap,int fd,size_t page,
     }
     if(writable_first) {
         /* Explicitly dirty a MAP_PRIVATE page; the file itself is untouched. */
-        unsigned char *b=(unsigned char *)p;
-        b[0]=b[0];
+        volatile unsigned char *b=(volatile unsigned char *)p;
+        b[0]=(unsigned char)(b[0]^1u);
     }
     if(mprotect(p,page,PROT_READ|PROT_EXEC)<0) {
         int error=errno;
