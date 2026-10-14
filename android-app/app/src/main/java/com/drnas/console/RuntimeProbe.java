@@ -27,12 +27,12 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.14: Wine loader path correction plus native ntdll.so read/ELF " +
-                "and Android app-private temp read/write checks before calling linker64. " +
-                "Android SAF permission controls only the user-selected Wine R: folder, " +
-                "not Proton libraries in app-private storage; all-files access is not needed for this. " +
-                "Wine --version and isolated wineboot still require device tests. " +
-                "X11/audio/Turnip ICD and Windows games are NOT yet verified running.";
+        return "EXPERIMENTAL v0.5.15: Wine CLI verified on Adreno 840, Wineboot not initialized. " +
+                "RAW trace shows executable PE sections of ntdll.dll fail to obtain RX memory protection. " +
+                "A new native probe compares file-backed R->RX, dirty private RW->RX and anonymous RW->RX " +
+                "mappings without executing guest bytes. Results go to both session and RAW logs. " +
+                "External storage permissions do NOT change Android SELinux executable-memory policy. " +
+                "X11/audio/Turnip ICD and Windows games remain unverified.";
     }
     private RuntimeProbe() {}
 }
