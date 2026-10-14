@@ -95,8 +95,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.16");
-        append("Full session log recorded separately from trimmed on-screen diagnostics.");
+        append("DRNAS CONSOLE · Runtime Core v0.5.17");
+        append("Full session logs are retained privately; desktop UI has no diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
@@ -263,14 +263,14 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.16 WINE PE RX MAPPING PROBE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.17 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
         HorizontalScrollView bar=new HorizontalScrollView(this);
         bar.setHorizontalScrollBarEnabled(false);
         LinearLayout buttons=horizontal();
-        for(String name:new String[]{"Console","Components","Diagnostics"}) {
+        for(String name:new String[]{"Console","Components"}) {
             Button b=button(name,name.equals(section),v->showSection(name));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,dp(42));
@@ -285,53 +285,25 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("EXPERIMENTAL WINDOWS RUNTIME · GAME EXECUTION NOT YET VALIDATED",10,MUTED,true),pad(6,0));
+
         scroll.post(()->scroll.scrollTo(0,pageY));
     }
 
+    /** Friendly launchpad; RAW boot and Wine logs stay on disk, not on screen. */
     private void showConsole() {
-        content.addView(label("SESSION LAB / ANDROID",11,ACCENT,true),pad(0,6));
-        heading("PC gaming, your rules.");
-        content.addView(label("Proton 11.0-2 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are shipped inside this APK. They install automatically on first launch; Turnip remains optional.",14,MUTED,false),pad(0,20));
-        LinearLayout game = card();
-        game.addView(label("SELECTED GAME PROFILE",10,ACCENT,true),pad(0,8));
-        game.addView(label(currentGame,23,TEXT,true),pad(0,9));
-        HorizontalScrollView horizontal=new HorizontalScrollView(this);
-        horizontal.setHorizontalScrollBarEnabled(false);
-        LinearLayout row=horizontal();
-        for(String g:new String[]{"Far Cry 3","Crysis","Far Cry 4"}) {
-            Button b=button(g,g.equals(currentGame),v->{currentGame=g;render();});
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,dp(43));
-            lp.rightMargin=dp(6);
-            row.addView(b,lp);
-        }
-        horizontal.addView(row);
-        game.addView(horizontal,pad(0,6));
-        game.addView(label("Proton 11.0-2 ARM64EC · FEXCore 2609 · DXVK 1.10.3",12,MUTED,false),pad(9,5));
-        note(game,"Game launch still requires a working Wine process, X11 and graphics/audio bridges. This build only probes wine --version.");
-
-        LinearLayout bootPanel=card();
-        bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
-        bootPanel.addView(label("Auto-installs bundled Proton 11.0-2, FEX 2609 and DXVK 1.10.3, then initializes Wine without requiring a component picker. Custom Turnip ZIP can still be imported separately.",13,MUTED,false),pad(0,10));
-        addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
-        addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
-        addButton(bootPanel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
-        addButton(bootPanel,"▶ Windows file manager (R:)",false,v->openWineFiles());
-        addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
-        addButton(bootPanel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
-        note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
-
-        LinearLayout panel=card();
-        panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));
-        panel.addView(label("Independent bounded Android shell test. The NDK ARM64 host is now tested by Start container; neither test launches Wine.",13,MUTED,false),pad(0,9));
-        stateBadge=label("State: "+sessions.getState(),15,WARM,true);
-        panel.addView(stateBadge,pad(0,9));
-        addButton(panel,"▶ Start native smoke test",true,v->{
-            if(!sessions.startAndroidSmokeTest())append("Start rejected: another session active");
-        });
-        addButton(panel,"■ Stop test process",false,v->sessions.stop());
-        addButton(panel,"↗ Open diagnostics",false,v->showSection("Diagnostics"));
+        heading("Windows desktop");
+        content.addView(label("1280 × 720  ·  Proton 11 ARM64EC  ·  X11",14,MUTED,false),pad(0,16));
+        LinearLayout desktop=card();
+        desktop.addView(label("DRNAS EMU",15,ACCENT,true),pad(0,12));
+        addButton(desktop,"▶ Open Windows desktop",true,v->startDesktop());
+        addButton(desktop,"Open file manager (R:)",false,v->startFiles());
+        addButton(desktop,"Wine configuration",false,v->startConfig());
+        content.addView(label("Windows files can be shared through the Android R: folder.",
+                13,MUTED,false),pad(9,4));
+        LinearLayout folder=card();
+        folder.addView(label("ANDROID FILES",12,ACCENT,true),pad(0,8));
+        addButton(folder,"Select Android folder for R:",false,v->requestSharedFolder());
+        addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
     }
 
     private void showComponents() {
@@ -351,7 +323,7 @@ public final class MainActivity extends Activity {
         addButton(sharing,"Choose folder for Wine R:",true,v->requestSharedFolder());
         addButton(sharing,"Import / refresh R: from Android",false,v->synchronizeSharedFolder(false));
         addButton(sharing,"Open R: in Windows file manager",false,v->openWineFiles());
-        note(panel,"FEXCore PE bridges are verified at import. Proton TAR+ZSTD, DXVK TAR+XZ and Turnip ZIP are validated on boot. Live Windows loader is not yet included.");
+
 
         LinearLayout installed=card();
         installed.addView(label("LOCAL VAULT",12,ACCENT,true),pad(0,8));
@@ -521,9 +493,42 @@ public final class MainActivity extends Activity {
         },"drnas-raw-trace-export").start();
     }
 
+    private boolean readyForDesktop() {
+        try {
+            File plan=new File(getFilesDir(),"containers/default/boot-plan.json");
+            return plan.isFile() &&
+                    com.drnas.console.WcpRuntimeStager.readJson(plan)
+                            .optBoolean("winebootGuestVerified",false);
+        } catch(Exception ignored) { return false; }
+    }
+    private void startDesktop() {
+        if(container.isBusy()) {
+            Toast.makeText(this,"Preparing Windows; please wait.",Toast.LENGTH_SHORT).show();
+        } else if(readyForDesktop()) {
+            openWineGui();
+        } else {
+            Toast.makeText(this,"Preparing Windows desktop…",Toast.LENGTH_SHORT).show();
+            startWineboot();
+        }
+    }
+    private void startFiles() {
+        if(container.isBusy()) {
+            Toast.makeText(this,"Preparing Windows; please wait.",Toast.LENGTH_SHORT).show();
+        } else if(readyForDesktop()) openWineFiles();
+        else startWineboot(); // successful boot opens Explorer; user can choose R: afterwards
+    }
+    private void startConfig() {
+        if(container.isBusy()) {
+            Toast.makeText(this,"Preparing Windows; please wait.",Toast.LENGTH_SHORT).show();
+        } else if(readyForDesktop())
+            startActivity(new Intent(this,WineGuiActivity.class)
+                    .putExtra("DRNAS_GUI_APP","config"));
+        else startWineboot();
+    }
+
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
-        else { append("Wine CLI requested; check live Diagnostics"); showSection("Diagnostics"); }
+        else { append("Wine CLI requested; output retained in private logs."); }
     }
     private void openWineGui() {
         if(container.isBusy()){append("Wait until container initialization finishes.");return;}
@@ -537,7 +542,6 @@ public final class MainActivity extends Activity {
         if(!container.startWineboot()) append("Container bootstrap already in progress");
         else {
             append("Bundled runtime verification + Wineboot requested; please wait for status before opening GUI.");
-            showSection("Diagnostics");
         }
     }
     private void selectWcp() {
