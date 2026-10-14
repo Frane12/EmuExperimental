@@ -27,9 +27,12 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.4: bounded RAW native Wine/wineserver trace and Android TXT export; Wine PE execution logic unchanged. " +
-                "X server, PulseAudio or Vulkan loader is wired to Android. " +
-                "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. Opt-in wineboot attempts disposable prefix initialization; real success needs exit 0 and registry changes. X11/audio/Turnip ICD and games are not connected.";
+        return "EXPERIMENTAL v0.5.14: Wine loader path correction plus native ntdll.so read/ELF " +
+                "and Android app-private temp read/write checks before calling linker64. " +
+                "Android SAF permission controls only the user-selected Wine R: folder, " +
+                "not Proton libraries in app-private storage; all-files access is not needed for this. " +
+                "Wine --version and isolated wineboot still require device tests. " +
+                "X11/audio/Turnip ICD and Windows games are NOT yet verified running.";
     }
     private RuntimeProbe() {}
 }
