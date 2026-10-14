@@ -12,7 +12,7 @@ package com.drnas.console;
 public final class CpuAssist {
     public static String probe() {
         if (!NativeHost.available()) return "CPU Assist native host unavailable: " + NativeHost.loadError();
-        return NativeHost.cpuAssistProbe();
+        return NativeHost.acceleratorProbe();
     }
     public static String baseline() {
         if (!NativeHost.available()) return "CPU Assist native host unavailable: " + NativeHost.loadError();
