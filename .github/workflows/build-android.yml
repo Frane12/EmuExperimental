@@ -48,6 +48,12 @@ jobs:
         run: |
           python3 -m py_compile tools/package_bundled_runtime.py
           python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
+      - name: Bundle pinned Wine Mono 11.3.0 ARM64 for automatic first-run setup
+        run: |
+          curl -fL --retry 3 --retry-delay 3 \
+            "https://github.com/wine-mono/wine-mono/releases/download/wine-mono-11.3.0/wine-mono-11.3.0-arm64.msi" \
+            -o android-app/app/src/main/assets/wine-mono.msi
+          echo "b0c47d374efaf22cbff76cb10488ac2d1627b067e085aef7acec573884120e0f  android-app/app/src/main/assets/wine-mono.msi" | sha256sum --check
       - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
         run: |
           python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
@@ -92,6 +98,7 @@ jobs:
           sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep wine-mono.msi
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/proton-11.0-2-arm64ec.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
