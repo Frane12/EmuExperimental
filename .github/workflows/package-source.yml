@@ -1,0 +1,61 @@
+name: EmuExperimental - Downloadable Source ZIP
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android-app/**"
+      - "tools/**"
+      - "tests/**"
+      - "docs/**"
+      - "contracts/**"
+      - "profiles/**"
+      - "web-prototype/**"
+      - "README.md"
+      - ".github/workflows/package-source.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package the standalone application and source tree
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          root = Path(".")
+          wanted = ["android-app", "tools", "tests", "docs",
+                    "contracts", "profiles", "web-prototype", "README.md"]
+          banned = {".git", ".gradle", "build", ".idea", ".cxx", "__pycache__"}
+          dst = Path("EmuExperimental-DrnasConsole-V0.2-Source.zip")
+          count = 0
+          with ZipFile(dst, "w", ZIP_DEFLATED, compresslevel=9) as z:
+              for part in wanted:
+                  item = root / part
+                  if not item.exists():
+                      raise FileNotFoundError(part)
+                  files = [item] if item.is_file() else sorted(item.rglob("*"))
+                  for f in files:
+                      if not f.is_file() or any(x in banned for x in f.parts):
+                          continue
+                      if f.suffix in {".apk", ".wcp", ".so", ".dll", ".dex", ".class", ".jar"}:
+                          continue
+                      if f.stat().st_size > 1024 * 1024:
+                          continue
+                      z.write(f, Path("EmuExperimental-DrnasConsole-V0.2") / f.relative_to(root))
+                      count += 1
+          print("Source files:", count, "ZIP bytes:", dst.stat().st_size)
+          assert count >= 20, "Unexpectedly few source files"
+          PY
+          unzip -t EmuExperimental-DrnasConsole-V0.2-Source.zip | tail -n 1
+          sha256sum EmuExperimental-DrnasConsole-V0.2-Source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EmuExperimental-DrnasConsole-V0.2-Source
+          path: EmuExperimental-DrnasConsole-V0.2-Source.zip
+          retention-days: 30
+          if-no-files-found: error
