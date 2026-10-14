@@ -18,6 +18,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.OutputStream;
 
 import java.text.SimpleDateFormat;
@@ -32,6 +35,7 @@ import java.util.Locale;
 public final class MainActivity extends Activity {
     private static final int PICK_WCP = 301;
     private static final int EXPORT_SESSION_LOG = 302;
+    private static final int EXPORT_RAW_WINE_LOG = 303;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -78,7 +82,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.3");
+        append("DRNAS CONSOLE · Runtime Core v0.5.4");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
@@ -175,7 +179,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.3 EXPORT TXT",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.4 RAW TRACE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -229,6 +233,7 @@ public final class MainActivity extends Activity {
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
+        addButton(bootPanel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
 
         LinearLayout panel=card();
@@ -274,13 +279,14 @@ public final class MainActivity extends Activity {
         LinearLayout panel=card();
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
         addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
+        addButton(panel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         liveLog=label(log.toString(),12,ACCENT,false);
         liveLog.setTypeface(Typeface.MONOSPACE);
         liveLog.setTextIsSelectable(true);
         liveLog.setPadding(dp(12),dp(11),dp(12),dp(11));
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
         panel.addView(liveLog,pad(0,10));
-        note(panel,"Old on-screen lines may be trimmed, but all emitted session events are kept in a private TXT file until you export it. Wine's internally suppressed debug lines are not part of the app event log.");
+        note(panel,"Full session TXT includes all console messages. RAW Wine TXT separately captures unfiltered Wine/wineserver output (up to 24 MiB per wineboot test). Save it after the test finishes.");
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Start native smoke test",false,v->{
@@ -351,6 +357,72 @@ public final class MainActivity extends Activity {
             Toast.makeText(this,"Could not export TXT log",Toast.LENGTH_LONG).show();
         }
     }
+    private File rawWineTraceFile() {
+        return new File(new File(getFilesDir(),"logs"),RawWineTrace.LATEST);
+    }
+
+    private void exportRawWineTrace() {
+        if(container.isBusy()) {
+            append("RAW Wine trace export: wait until Wineboot test finishes.");
+            Toast.makeText(this,"Wait until the Wineboot test finishes.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        File raw=rawWineTraceFile();
+        if(!raw.isFile() || raw.length()<30 ||
+                java.nio.file.Files.isSymbolicLink(raw.toPath())) {
+            append("RAW Wine trace is not yet available. Run Wineboot test first.");
+            Toast.makeText(this,"Run Wineboot test first to create RAW trace.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("text/plain");
+        i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-RAW-"+new SimpleDateFormat(
+                "yyyy-MM-dd_HH-mm-ss",Locale.US).format(new Date())+".txt");
+        i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        try {
+            startActivityForResult(i,EXPORT_RAW_WINE_LOG);
+        } catch(android.content.ActivityNotFoundException e) {
+            append("RAW Wine TXT export: no Android document picker available.");
+        }
+    }
+
+    private void completeRawWineExport(Uri uri) {
+        if(container.isBusy()) {
+            append("RAW trace export aborted: Wineboot currently running.");
+            Toast.makeText(this,"Wait for Wineboot to finish.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        new Thread(()->{
+            try {
+                File raw=rawWineTraceFile();
+                if(!raw.isFile() || java.nio.file.Files.isSymbolicLink(raw.toPath()))
+                    throw new IOException("RAW trace missing or symlinked");
+                long copied=0;
+                try(InputStream src=new FileInputStream(raw);
+                    OutputStream dst=getContentResolver().openOutputStream(uri,"w")) {
+                    if(dst==null)throw new IOException("Document provider gave no output stream");
+                    byte[] buf=new byte[32768];int count;
+                    while((count=src.read(buf))!=-1) {
+                        dst.write(buf,0,count);copied+=count;
+                    }
+                    dst.flush();
+                }
+                final long total=copied;
+                runOnUiThread(()->{
+                    append("Exported RAW Wine trace: "+total+" bytes");
+                    Toast.makeText(this,"RAW Wine TXT saved ("+total+" bytes)",Toast.LENGTH_LONG).show();
+                });
+            } catch(Exception error) {
+                runOnUiThread(()->{
+                    append("RAW Wine export FAILED: "+error.getClass().getSimpleName()+
+                            ": "+error.getMessage());
+                    Toast.makeText(this,"Could not save RAW Wine trace.",Toast.LENGTH_LONG).show();
+                });
+            }
+        },"drnas-raw-trace-export").start();
+    }
+
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
         else { append("Wine CLI requested; check live Diagnostics"); showSection("Diagnostics"); }
@@ -374,6 +446,10 @@ public final class MainActivity extends Activity {
         Uri uri=data.getData();
         if(request==EXPORT_SESSION_LOG) {
             completeSessionLogExport(uri);
+            return;
+        }
+        if(request==EXPORT_RAW_WINE_LOG) {
+            completeRawWineExport(uri);
             return;
         }
         if(request!=PICK_WCP)return;

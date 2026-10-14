@@ -27,7 +27,7 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.3: full session-event log to private TXT plus Android document-picker export; Wine PE test unchanged. " +
+        return "EXPERIMENTAL v0.5.4: bounded RAW native Wine/wineserver trace and Android TXT export; Wine PE execution logic unchanged. " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
                 "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. Opt-in wineboot attempts disposable prefix initialization; real success needs exit 0 and registry changes. X11/audio/Turnip ICD and games are not connected.";
     }

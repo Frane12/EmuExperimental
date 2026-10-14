@@ -59,11 +59,17 @@ public final class WineServerDiagnostics {
     }
 
     static Thread pipe(Process process,String prefix,Consumer<String> log,int limit) {
+        return pipe(process,prefix,log,limit,null);
+    }
+    static Thread pipe(Process process,String prefix,Consumer<String> log,int limit,
+                       RawWineTrace raw) {
         Thread reader=new Thread(()->{
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
                 String line;int n=0;
                 while((line=br.readLine())!=null) {
+                    if(raw!=null)raw.write(prefix.startsWith("[server B]")?
+                            "wineserver":"server",line);
                     if(n++<limit)
                         log.accept(prefix+line.substring(0,Math.min(line.length(),350)));
                     else if(n==limit+1) log.accept(prefix+"output limit reached");
@@ -106,6 +112,12 @@ public final class WineServerDiagnostics {
     public static ManagedServer prestart(File linker,File wineserver,File cwd,
                                           File nativeLibDir,Map<String,String> env,
                                           Consumer<String> log) throws Exception {
+        return prestart(linker,wineserver,cwd,nativeLibDir,env,log,null);
+    }
+
+    public static ManagedServer prestart(File linker,File wineserver,File cwd,
+                                          File nativeLibDir,Map<String,String> env,
+                                          Consumer<String> log,RawWineTrace raw) throws Exception {
         // GameNative server/unicode.c derives its NLS directory from
         // realpath("/proc/self/exe"). Under the linker64 trick that points
         // to Android's linker, not the staged Wine binary.
@@ -141,7 +153,7 @@ public final class WineServerDiagnostics {
             log.accept("[server B] linker launch rejected: "+e.getMessage());
             return null;
         }
-        Thread pipe=pipe(p,"[server B] ",log,LOG_LIMIT);
+        Thread pipe=pipe(p,"[server B] ",log,LOG_LIMIT,raw);
         long until=System.nanoTime()+STARTUP_OBSERVE_MS*1000000L;
         while(p.isAlive() && System.nanoTime()<until)Thread.sleep(100);
         if(!p.isAlive()) {

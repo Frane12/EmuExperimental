@@ -251,7 +251,8 @@ public final class WineBootProbe {
      */
     public static Result run(File protonFolder,JSONObject wineConfig,
                              File template,File originalWindows,File containerRoot,
-                             File nativeLibraryDir,Consumer<String> report) throws Exception {
+                             File nativeLibraryDir,Consumer<String> report,
+                             RawWineTrace raw) throws Exception {
         File wine=WineLaunchProbe.selectWine(protonFolder,
                 s -> report.accept("[boot/elf] "+s));
         if(wine==null || !WineLaunchProbe.inspect(wine).runnable)
@@ -345,7 +346,7 @@ public final class WineBootProbe {
                 wineServer,protonFolder,env,report);
         report.accept("Direct wineserver exec A/B="+directStatus);
         WineServerDiagnostics.ManagedServer prestarted=WineServerDiagnostics.prestart(
-                linker,wineServer,protonFolder,nativeLibraryDir,env,report);
+                linker,wineServer,protonFolder,nativeLibraryDir,env,report,raw);
         if(prestarted==null) {
             report.accept("Foreground server could not remain alive; skipping Wineboot.");
             return new Result("WINESERVER_PRESTART_FAILED",-1,0);
@@ -378,6 +379,9 @@ public final class WineBootProbe {
                 String line;
                 while((line=lines.readLine())!=null) {
                     ++count;
+                    // The file receives *all* stdout/stderr lines, including
+                    // the 23k+ lines hidden by the UI highlight limit.
+                    raw.write("wineboot",line);
                     String lower=line.toLowerCase(java.util.Locale.ROOT);
                     boolean important=lower.contains("kernel32") ||
                             lower.contains("kernelbase") ||lower.contains("ntdll")||
@@ -400,7 +404,8 @@ public final class WineBootProbe {
                     }
                 }
                 report.accept("[wineboot] output total="+count+", retained="+emitted+
-                        ", priority="+highlights);
+                        ", priority="+highlights+
+                        "; full RAW trace saved="+raw.size()+" bytes");
             }catch(IOException ex) {
                 report.accept("[wineboot] output stream closed: "+ex.getClass().getSimpleName());
             }

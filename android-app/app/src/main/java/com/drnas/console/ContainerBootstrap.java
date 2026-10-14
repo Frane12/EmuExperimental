@@ -243,9 +243,21 @@ public final class ContainerBootstrap {
                 return "WINE CLI VERIFIED / WINEBOOT NOT INITIALIZED";
             }
             log("Starting isolated wineboot --init experiment. Regular prefix will NOT be modified.");
-            WineBootProbe.Result outcome=WineBootProbe.run(
-                    proton.folder,wineConfig,existing(proton.folder,prefixPackPath),
-                    winDir,base,new File(ctx.getApplicationInfo().nativeLibraryDir),this::log);
+            // Capture every native Wine and wineserver line, not just the
+            // console's ~80 highlighted lines. Persist in private app storage
+            // until the user saves it through Android's document picker.
+            WineBootProbe.Result outcome;
+            try(RawWineTrace raw=new RawWineTrace(new File(ctx.getFilesDir(),"logs"))) {
+                log("RAW Wine trace recording enabled: "+
+                        RawWineTrace.LATEST+" (24 MiB disk cap)");
+                outcome=WineBootProbe.run(
+                        proton.folder,wineConfig,existing(proton.folder,prefixPackPath),
+                        winDir,base,new File(ctx.getApplicationInfo().nativeLibraryDir),
+                        this::log,raw);
+                log("RAW Wine trace captured="+raw.size()+" bytes, truncated="+
+                        raw.wasTruncated()+
+                        (raw.issue()==null?"":", write error="+raw.issue()));
+            }
             plan.put("winebootAttempted",true);
             plan.put("winebootStatus",outcome.code);
             plan.put("winebootExit",outcome.exitCode);
