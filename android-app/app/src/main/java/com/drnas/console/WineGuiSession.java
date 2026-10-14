@@ -75,6 +75,7 @@ final class WineGuiSession implements AutoCloseable {
         displayEnvironment(env);
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
+        TurnipRuntime.configureWine(context,plan,env,log);
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
