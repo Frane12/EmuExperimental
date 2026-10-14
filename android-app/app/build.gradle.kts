@@ -49,8 +49,8 @@ android {
                 signingConfig = signingConfigs.getByName("drnasStable")
             } else {
                 // Missing project signing secrets: install experimental CI APK
-                // alongside existing DRNAS instead of forcing data-destroying uninstall.
-                applicationIdSuffix = ".lab"
+                // alongside existing DRNAS and earlier LAB builds without uninstalling data.
+                applicationIdSuffix = ".labv0514"
                 manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }
