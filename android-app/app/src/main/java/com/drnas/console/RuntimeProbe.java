@@ -27,12 +27,11 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.16: controlled Proton 11.0-2 ARM64EC A/B against " +
-                "v0.5.15 Wine 10. New bionic Wine package advertises anonymous PE-image " +
-                "mapping to address dirty file-backed RW->RX denial under SELinux. " +
-                "On-device tests are mandatory: neither successful Wineboot nor Windows " +
-                "execution is claimed. Original v0.5.15 remains installed separately. " +
-                "X11/audio/Turnip Vulkan ICD and games are NOT verified.";
+        return "DRNAS v0.5.17 desktop interface: embedded X11 presents a stable 1280x720 " +
+                "Wine Explorer virtual desktop, scaled to the Android display with translated touch. " +
+                "GUI diagnostic text is hidden, not deleted; RAW logs remain available on demand. " +
+                "Proton 11.0-2 ARM64EC, FEX 2609 and DXVK 1.10.3 are bundled. " +
+                "Turnip ICD and GPU acceleration must be verified separately.";
     }
     private RuntimeProbe() {}
 }
