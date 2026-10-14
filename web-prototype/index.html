@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a101b">
+<title>Drnas Console — interactive concept</title>
+<style>
+:root{--bg:#0a101b;--surface:#111b2b;--surface2:#172338;--line:#29384c;--text:#ecf3fc;--muted:#9aaac0;--accent:#7be4c3;--amber:#ffc476;--red:#f08e8e}
+*{box-sizing:border-box}body{background:radial-gradient(ellipse at 73% 0%,#172d46 0%,var(--bg) 48%);color:var(--text);font:14px/1.48 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;min-height:100vh}button,select,input{font:inherit}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.shell{max-width:1480px;margin:auto;min-height:100vh;display:grid;grid-template-columns:218px minmax(0,1fr)}
+aside{border-right:1px solid var(--line);background:#0e1725b3;padding:25px 16px;display:flex;flex-direction:column;gap:28px}
+.brand{display:flex;align-items:center;gap:11px;font-size:16px;font-weight:900;letter-spacing:.8px}.glyph{width:39px;height:39px;display:grid;place-items:center;background:linear-gradient(140deg,#65e5d0,#5a96b9);color:#092437;border-radius:12px;font-size:21px}.brand small{display:block;color:var(--muted);font-size:10px;font-weight:600;letter-spacing:2px}
+nav{display:grid;gap:7px}.nav-btn{width:100%;text-align:left;background:none;border:1px solid transparent;border-radius:12px;color:var(--muted);padding:12px 13px}.nav-btn.active{background:#203449;border-color:#33566a;color:var(--accent);font-weight:700}.nav-btn:hover{background:#1d2b3f}
+.footer-note{margin-top:auto;font-size:11px;color:var(--muted);border-top:1px solid var(--line);padding-top:20px}.footer-note b{color:var(--accent)}
+main{padding:26px min(4vw,46px) 40px;min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:27px}.eyebrow{color:var(--accent);text-transform:uppercase;letter-spacing:2.2px;font-size:11px;font-weight:800}.muted{color:var(--muted)}.status{font-size:12px;color:var(--amber);border:1px solid #94744a55;background:#6f552c22;border-radius:30px;padding:7px 12px;white-space:nowrap}
+h1{font-size:clamp(27px,3.3vw,44px);letter-spacing:-1.2px;line-height:1.14;margin:8px 0 12px}h2{font-size:18px;margin:0}h3{margin:0 0 9px;font-size:15px}
+.lead{max-width:620px;color:var(--muted);margin:0 0 24px}.section-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 15px}.tiny{font-size:11px;color:var(--muted)}
+.game-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.game{height:173px;border:1px solid #4c6d842b;border-radius:18px;position:relative;overflow:hidden;text-align:left;padding:17px;display:flex;flex-direction:column;justify-content:space-between;color:#fff;box-shadow:inset 0 0 40px #0003;transition:transform .2s,border-color .2s}.game:hover{transform:translateY(-2px)}.game.active{border:2px solid var(--accent)}.game::before{content:"";position:absolute;inset:-50%;transform:rotate(-20deg);background:repeating-linear-gradient(90deg,#ffffff04 0,#ffffff04 1px,transparent 1px,transparent 20px);pointer-events:none}.game.a{background:linear-gradient(145deg,#0f4e55 0%,#345f51 55%,#a47b4a)}.game.b{background:linear-gradient(145deg,#233d56,#758a8e 55%,#4d5d54)}.game.c{background:linear-gradient(145deg,#403350,#576c70 55%,#d19d53)}.game small,.game strong{position:relative}.game small{color:#e8f6f0;opacity:.84;letter-spacing:1px;font-size:10px}.game strong{font-size:23px;letter-spacing:-.8px}.chip{display:inline-block;padding:3px 8px;background:#0006;border-radius:20px;font-size:10px;margin-top:5px}
+.panel{border:1px solid var(--line);border-radius:17px;padding:19px;background:linear-gradient(160deg,#162338,#111a29)}.row-panels{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:17px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.dim{text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:1.4px;font-size:10px}
+.field{display:grid;grid-template-columns:135px minmax(0,1fr);gap:10px;align-items:center;margin:12px 0}.field label{color:var(--muted);font-size:12px}.field select,.field input{width:100%;border:1px solid #3a5067;border-radius:9px;background:#0b1523;color:var(--text);padding:10px;min-width:0}.field input[type=checkbox]{width:18px;accent-color:#70dbc0}.field input[type=number]{max-width:140px}.field .hint{color:var(--muted);font-size:11px;margin-top:3px}
+.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.btn{padding:10px 15px;border-radius:11px;border:1px solid #476278;background:#203147;color:#e7f6fc;font-weight:650}.btn.primary{background:var(--accent);color:#0b2631;border-color:var(--accent)}.btn:hover{filter:brightness(1.09)}
+.kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #ffffff10;padding:11px 0}.kv:last-child{border:0}.kv strong{font-size:12px}.log{background:#07101a;border:1px solid #263548;border-radius:11px;padding:13px;color:#a1c8bd;font:12px/1.7 ui-monospace,Menlo,Consolas,monospace;min-height:132px;max-height:205px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.view[hidden]{display:none!important}.note{padding:12px;background:#d9ab5c10;border:1px solid #d9ab5c44;color:#e9c99b;border-radius:10px;font-size:12px}
+.touch-area{touch-action:none;user-select:none;-webkit-user-select:none;min-height:230px;border:1px dashed #75afaa;border-radius:16px;background:linear-gradient(90deg,#51a9bb19 34%,#7ae9c20b 34%);display:flex;align-items:center;justify-content:space-around;gap:12px;text-align:center;position:relative;margin-top:14px}
+.zone{pointer-events:none}.zone b{display:block;font-size:17px}.zone small{font-size:11px;color:var(--muted)}.touch-readout{color:var(--accent);font:12px ui-monospace,monospace;margin-top:13px;min-height:40px}
+@media(max-width:1000px){.shell{grid-template-columns:165px 1fr}.row-panels{grid-template-columns:1fr}.field{grid-template-columns:120px 1fr}main{padding:22px}}
+@media(max-width:660px){.shell{display:block}aside{padding:14px 16px;display:block;border-right:0;border-bottom:1px solid var(--line)}.brand{margin-bottom:13px}nav{display:flex;overflow:auto;gap:5px}.nav-btn{white-space:nowrap;width:auto;padding:7px 10px;font-size:12px}.footer-note{display:none}main{padding:21px 14px}.topbar{margin-bottom:21px}.status{font-size:10px;padding:6px 9px}.game-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.game{height:136px;padding:9px;border-radius:12px}.game strong{font-size:16px;line-height:1.05}.game small{font-size:9px}.panel{padding:14px}.field{grid-template-columns:105px minmax(0,1fr);gap:5px}.field label{font-size:11px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="brand"><div class="glyph">◈</div><div>DRNAS <span style="color:#7be4c3">CONSOLE</span><small>EXPERIMENTAL • V0</small></div></div>
+    <nav aria-label="Sections">
+      <button class="nav-btn active" data-nav="library">▦ &nbsp; Game Library</button>
+      <button class="nav-btn" data-nav="runtime">⚙ &nbsp; Runtime Stack</button>
+      <button class="nav-btn" data-nav="input">✥ &nbsp; Input Lab</button>
+      <button class="nav-btn" data-nav="diagnostics">▥ &nbsp; Diagnostics</button>
+    </nav>
+    <div class="footer-note">TARGET DEVICE<br><b>Adreno 840</b><br>POCO F8 Ultra (profile target, not detected)<br><br>All launch actions are simulated.</div>
+  </aside>
+  <main>
+    <div class="topbar"><span class="eyebrow">YOUR PRIVATE GAMING SYSTEM</span><span class="status">● UI CONCEPT — NO EMULATION</span></div>
+    <section class="view" id="view-library">
+      <h1>PC gaming, your rules.</h1>
+      <p class="lead">One clean console interface. Every runtime, GPU driver, audio backend and input profile independent. Select a game to preview its session.</p>
+      <div class="section-header"><h2>Library</h2><span class="tiny">3 example entries · no game files included</span></div>
+      <div class="game-grid">
+        <button class="game a active" data-game="far-cry-3"><small>OPEN WORLD • DX11</small><strong>FAR<br>CRY 3</strong><span class="chip">PROFILE · A840</span></button>
+        <button class="game b" data-game="crysis"><small>BENCHMARK • DX10</small><strong>CRYSIS</strong><span class="chip">PROFILE · TEST</span></button>
+        <button class="game c" data-game="far-cry-4"><small>OPEN WORLD • DX11</small><strong>FAR<br>CRY 4</strong><span class="chip">PROFILE · TEST</span></button>
+      </div>
+      <div class="row-panels">
+        <div class="panel"><div class="panel-head"><div><div class="dim">SESSION CONFIG</div><h2 id="game-title">Far Cry 3</h2></div><span class="status">EXPERIMENTAL</span></div>
+          <div class="kv"><span class="muted">Translation</span><strong id="translation-summary">FEXCore 2609</strong></div>
+          <div class="kv"><span class="muted">Renderer</span><strong id="graphics-summary">DXVK · A840 NeuroFlow</strong></div>
+          <div class="kv"><span class="muted">Audio</span><strong id="audio-summary">Balanced</strong></div>
+          <div class="kv"><span class="muted">Frame target</span><strong id="frame-summary">40 FPS</strong></div>
+          <div class="buttons"><button class="btn primary" id="launch">▶ Simulate launch</button><button class="btn" id="edit-profile">Edit profile</button><button class="btn" id="export">↓ Export JSON</button></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>Session philosophy</h3><span class="dim">STRICT</span></div>
+          <div class="kv"><span>✓ Separate component versions</span></div>
+          <div class="kv"><span>✓ GPU identity is never spoofed</span></div>
+          <div class="kv"><span>✓ Input ownership per finger</span></div>
+          <div class="kv"><span>✓ One-click profile rollback</span></div>
+          <p class="tiny" style="margin-top:14px">No backend is bundled in this concept. Compatibility is not implied.</p>
+        </div>
+      </div>
+    </section>
+    <section class="view" id="view-runtime" hidden>
+      <h1>Runtime Stack</h1><p class="lead">Independent components, pinned profiles, no hidden mutation. These selectors configure a mock manifest; they do not install runtimes.</p>
+      <div class="row-panels" style="margin-top:0">
+        <div class="panel"><div class="panel-head"><h2>Execution</h2><span class="dim">CONFIG</span></div>
+          <div class="field"><label for="runtime">Windows layer</label><select id="runtime"><option value="wine-arm64ec-experimental">Wine ARM64EC (experimental)</option><option value="wine-bionic">Wine Bionic (baseline concept)</option><option value="proton-arm64ec-experimental">Proton ARM64EC (research)</option></select></div>
+          <div class="field"><label for="translator">CPU translator</label><select id="translator"><option value="fexcore-2609">FEXCore 2609</option><option value="box64">Box64</option></select></div>
+          <div class="field"><label for="wrapper">Graphics API</label><select id="wrapper"><option value="dxvk">DXVK / D3D11</option><option value="vkd3d-proton">VKD3D-Proton / D3D12</option><option value="wined3d">WineD3D / OpenGL</option></select></div>
+          <div class="field"><label for="driver">Vulkan driver</label><select id="driver"><option value="turnip-a840-neuroflow-experimental">A840 NeuroFlow (experimental)</option><option value="system-vulkan">System Vulkan (baseline)</option><option value="turnip-a830">A830 Turnip (incompatible target)</option><option value="turnip-a810">A810 Turnip (incompatible target)</option></select></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h2>Performance</h2><span class="dim">PER GAME</span></div>
+          <div class="field"><label for="audio">Audio preset</label><select id="audio"><option value="balanced">Balanced</option><option value="low">Low latency</option><option value="compatibility">Compatibility</option></select></div>
+          <div class="field"><label for="fps">Frame cap</label><input id="fps" type="number" min="15" max="240" value="40"></div>
+          <div class="field"><label for="latency">Max frame latency</label><input id="latency" type="checkbox" checked></div>
+          <div class="note">Only A840 target configs are allowed in this prototype. Selecting A810/A830 intentionally triggers a validation error.</div>
+          <div class="buttons"><button class="btn primary" id="validate">✓ Validate profile</button><button class="btn" id="restore">↶ Restore baseline</button><button class="btn" id="export2">↓ Export JSON</button></div>
+          <div id="validation-result" class="tiny" style="margin-top:13px" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+    <section class="view" id="view-input" hidden>
+      <h1>Input Lab</h1><p class="lead">Touch events are routed by pointer ID, not by overlapping full-screen overlays. Try moving two fingers at the same time.</p>
+      <div class="panel"><div class="panel-head"><h2>Multi-touch router demo</h2><span class="dim">BROWSER SIMULATION</span></div>
+        <div class="touch-area" id="touch-area">
+          <div class="zone"><b>＋ WALK</b><small>Left 34% · stick owner</small></div>
+          <div class="zone"><b>◎ LOOK</b><small>Remaining screen · relative mouse owner</small></div>
+        </div>
+        <div id="touch-readout" class="touch-readout">Pointers: 0 · Drag on either side to test ownership.</div>
+        <div class="note">A pointer acquires its owner on DOWN and keeps it through MOVE and UP/CANCEL. This demo does not send actual gamepad or mouse events to a game.</div>
+      </div>
+    </section>
+    <section class="view" id="view-diagnostics" hidden>
+      <h1>Diagnostics</h1><p class="lead">Logs and compatibility checks are first-class features, not an afterthought.</p>
+      <div class="panel"><div class="panel-head"><h2>Session Log</h2><span class="dim">SIMULATED EVENTS</span></div>
+        <div class="log" id="log" role="log" aria-live="polite">[ready] Drnas Console concept v0.1\n[ready] No emulator backend connected.</div>
+        <div class="buttons"><button class="btn primary" id="launch2">▶ Simulate launch</button><button class="btn" id="clear-log">Clear log</button><button class="btn" id="export3">↓ Export JSON</button></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+(function() {
+"use strict";
+const $ = id => document.getElementById(id);
+const games = {"far-cry-3":"Far Cry 3","crysis":"Crysis","far-cry-4":"Far Cry 4"};
+let game = "far-cry-3";
+let activeSession = false;
+const fields = ["runtime","translator","wrapper","driver","audio","fps","latency"];
+function goto(name) {
+  document.querySelectorAll("[data-nav]").forEach(el => el.classList.toggle("active",el.dataset.nav===name));
+  document.querySelectorAll(".view").forEach(el => { el.hidden = el.id!=="view-"+name; });
+}
+document.querySelectorAll("[data-nav]").forEach(el => el.addEventListener("click",()=>goto(el.dataset.nav)));
+document.querySelectorAll("[data-game]").forEach(el => el.addEventListener("click",() => {
+  game=el.dataset.game;
+  document.querySelectorAll("[data-game]").forEach(a=>a.classList.toggle("active",a.dataset.game===game));
+  $("game-title").textContent=games[game];
+  refresh();
+}));
+function value(id) { return $(id).type==="checkbox" ? $(id).checked : $(id).value; }
+function profile() {
+  const wrapper=value("wrapper");
+  return {schema:1, gameId:game, name:games[game], windowsRuntime:value("runtime"),
+    cpuTranslator:value("translator"),
+    graphics:{api:wrapper==="vkd3d-proton"?"d3d12":wrapper==="wined3d"?"opengl":"d3d11",wrapper,driver:value("driver")},
+    audio:{engine:"pulse-to-android",latency:value("audio")},
+    input:{keyboardAndMouse:true,pointerOwnerRouting:true},
+    frameCap:Number(value("fps")),maxFrameLatency:value("latency"),experimental:true};
+}
+function check() {
+  const p=profile(),errors=[];
+  if (!Number.isInteger(p.frameCap)||p.frameCap<15||p.frameCap>240) errors.push("Frame cap must be 15–240.");
+  if (p.graphics.driver==="turnip-a810"||p.graphics.driver==="turnip-a830") errors.push("Wrong chip family: A840 profile cannot load a driver for A810/A830.");
+  if (p.graphics.wrapper==="wined3d"&&p.graphics.driver!=="system-vulkan") errors.push("WineD3D/OpenGL path is not using this Vulkan selector; choose system baseline.");
+  if (p.windowsRuntime.startsWith("proton-")) errors.push("Proton ARM64EC backend is research-only; no validated Android implementation attached.");
+  return errors;
+}
+function refresh() {
+  $("translation-summary").textContent=$("translator").selectedOptions[0].textContent;
+  $("graphics-summary").textContent=$("wrapper").selectedOptions[0].textContent+" · "+$("driver").selectedOptions[0].textContent;
+  $("audio-summary").textContent=$("audio").selectedOptions[0].textContent;
+  $("frame-summary").textContent=value("fps")+" FPS";
+  const errors=check();
+  $("validation-result").textContent=errors.length?errors.join("  |  "):"✓ Manifest checks passed (simulation only).";
+  $("validation-result").style.color=errors.length?"#f08e8e":"#7be4c3";
+}
+fields.forEach(id=>$(id).addEventListener("change",refresh));
+function log(s){$("log").textContent+="\n["+new Date().toLocaleTimeString()+"] "+s;$("log").scrollTop=$("log").scrollHeight;}
+function simulate(){
+  if(activeSession)return;
+  goto("diagnostics");
+  const errors=check();
+  log("Checking "+games[game]+" / selected device target A840");
+  if(errors.length){errors.forEach(e=>log("ERROR: "+e));return;}
+  activeSession=true;
+  log("PASS: profile shape accepted (mock validator).");
+  log("SIMULATING: resolve Wine / translator / graphics / audio modules.");
+  log("SIMULATING: request Android session + prepare input ownership.");
+  log("NOT EXECUTED: No Wine, FEX, Turnip loader or game process connected.");
+  activeSession=false;
+}
+["launch","launch2"].forEach(id=>$(id).addEventListener("click",simulate));
+$("edit-profile").addEventListener("click",()=>goto("runtime"));
+$("validate").addEventListener("click",refresh);
+$("restore").addEventListener("click",()=>{
+  $("runtime").value="wine-arm64ec-experimental";$("translator").value="fexcore-2609";
+  $("wrapper").value="dxvk";$("driver").value="system-vulkan";
+  $("audio").value="balanced";$("fps").value="40";$("latency").checked=true;refresh();
+});
+$("clear-log").addEventListener("click",()=>{$("log").textContent="[cleared] Simulation log reset.";});
+function exportProfile(){
+  const blob = new Blob([JSON.stringify(profile(),null,2)+"\n"],{type:"application/json"});
+  const url=URL.createObjectURL(blob); const a=document.createElement("a");
+  a.href=url;a.download="drnas-console-"+game+".json";document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+}
+["export","export2","export3"].forEach(id=>$(id).addEventListener("click",exportProfile));
+const area=$("touch-area"),owners=new Map();
+function updatePointers(){
+  let stick=0,mouse=0;owners.forEach(x=>{if(x==="WALK")stick++;else mouse++;});
+  $("touch-readout").textContent="Pointers: "+owners.size+" · Left stick: "+stick+" · Relative mouse: "+mouse;
+}
+area.addEventListener("pointerdown",e=>{
+  e.preventDefault();
+  const rect=area.getBoundingClientRect();
+  const side=(e.clientX-rect.left)/rect.width<.34?"WALK":"LOOK";
+  owners.set(e.pointerId,side);area.setPointerCapture(e.pointerId);updatePointers();
+});
+area.addEventListener("pointermove",e=>{if(owners.has(e.pointerId)){e.preventDefault();updatePointers();}});
+["pointerup","pointercancel","lostpointercapture"].forEach(event=>area.addEventListener(event,e=>{owners.delete(e.pointerId);updatePointers();}));
+refresh();
+})();
+</script>
+</body>
+</html>
