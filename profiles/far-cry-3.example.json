@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "gameId": "far-cry-3",
+  "name": "Far Cry 3",
+  "windowsRuntime": "wine-arm64ec-experimental",
+  "cpuTranslator": "fexcore-2609",
+  "graphics": {
+    "api": "d3d11",
+    "wrapper": "dxvk",
+    "driver": "turnip-a840-neuroflow-experimental"
+  },
+  "audio": {
+    "engine": "pulse-to-android",
+    "latency": "balanced"
+  },
+  "input": {
+    "keyboardAndMouse": true,
+    "pointerOwnerRouting": true
+  },
+  "frameCap": 40,
+  "maxFrameLatency": true,
+  "experimental": true
+}
