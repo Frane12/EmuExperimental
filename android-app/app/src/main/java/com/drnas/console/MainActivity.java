@@ -56,7 +56,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.2.1");
+        append("DRNAS CONSOLE · Runtime Core v0.2.2");
         append("No Windows runner connected — this APK does not launch games.");
         render();
     }
