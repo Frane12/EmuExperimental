@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK V0.4.6 Wineserver Diagnostics
+name: EmuExperimental - Android APK Stable Signed
 on:
   push:
     branches:
@@ -19,6 +19,21 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Restore persistent signing key
+        env:
+          DRNAS_KEYSTORE_BASE64: ${{ secrets.DRNAS_KEYSTORE_BASE64 }}
+          DRNAS_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
+          DRNAS_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
+          DRNAS_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$DRNAS_KEYSTORE_BASE64" || -z "$DRNAS_STORE_PASSWORD" || -z "$DRNAS_KEY_ALIAS" || -z "$DRNAS_KEY_PASSWORD" ]]; then
+            echo "::error::Stable signing secrets missing. Configure all four in repository Actions secrets, then rerun."
+            exit 1
+          fi
+          printf '%s' "$DRNAS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/drnas-signing.p12"
+          chmod 600 "$RUNNER_TEMP/drnas-signing.p12"
+          keytool -list -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" >/dev/null
+          echo "DRNAS_SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/drnas-signing.p12" >> "$GITHUB_ENV"
       - name: Install Android platform SDK
         run: |
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
@@ -32,8 +47,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Run WCP parser JVM regression tests and build debug APK
+      - name: Run JVM regression tests and build persistently signed debug APK
         working-directory: android-app
+        env:
+          DRNAS_SIGNING_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
+          DRNAS_SIGNING_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
+          DRNAS_SIGNING_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
       - name: Verify APK contains native ARM64 host and Android manifest
         run: |
@@ -42,9 +61,10 @@ jobs:
           sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-V0.4.6-Wineserver-Diagnostics-debug-apk
+          name: Drnas-Console-Stable-Signed-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

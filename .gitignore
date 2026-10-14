@@ -1,0 +1,11 @@
+# Keep signing credentials and device backups out of source control.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+DRNAS-private-backup*.tar
+**/local.properties
+**/.gradle/
+**/build/

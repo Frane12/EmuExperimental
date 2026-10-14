@@ -1,3 +1,11 @@
+val drnasKeyPath = System.getenv("DRNAS_SIGNING_KEYSTORE_FILE")
+val drnasStorePassword = System.getenv("DRNAS_SIGNING_STORE_PASSWORD")
+val drnasKeyAlias = System.getenv("DRNAS_SIGNING_KEY_ALIAS")
+val drnasKeyPassword = System.getenv("DRNAS_SIGNING_KEY_PASSWORD")
+val drnasStableSigning = listOf(
+    drnasKeyPath,drnasStorePassword,drnasKeyAlias,drnasKeyPassword
+).all { !it.isNullOrBlank() }
+
 plugins {
     id("com.android.application")
 }
@@ -19,7 +27,24 @@ android {
             version = "3.22.1"
         }
     }
+    signingConfigs {
+        if (drnasStableSigning) {
+            create("drnasStable") {
+                storeFile = file(requireNotNull(drnasKeyPath))
+                storePassword = requireNotNull(drnasStorePassword)
+                keyAlias = requireNotNull(drnasKeyAlias)
+                keyPassword = requireNotNull(drnasKeyPassword)
+            }
+        }
+    }
     buildTypes {
+        getByName("debug") {
+            // Default Android debug signing is unique to each ephemeral CI runner.
+            // Use the SAME private secret-backed key on EVERY downloadable build.
+            if (drnasStableSigning) {
+                signingConfig = signingConfigs.getByName("drnasStable")
+            }
+        }
         release {
             isMinifyEnabled = false
         }
