@@ -152,6 +152,68 @@ public final class WineLaunchProbe {
         env.put("WINELOADER",wine.getAbsolutePath());
     }
 
+    /**
+     * App-private storage is owned by our application UID. Android's
+     * MANAGE_EXTERNAL_STORAGE permission does not affect this directory.
+     * Exercise actual read/write syscalls instead of guessing about HyperOS.
+     */
+    static String checkPrivateReadWrite(File tempDir,Consumer<String> report) {
+        File trial=null;
+        try {
+            trial=File.createTempFile("drnas-io-", ".tmp",tempDir);
+            try(FileOutputStream out=new FileOutputStream(trial)) {
+                out.write(0x5a);out.flush();
+            }
+            try(FileInputStream in=new FileInputStream(trial)) {
+                if(in.read()!=0x5a)throw new IOException("readback mismatch");
+            }
+            report.accept("APP_PRIVATE_RW_OK: Wine temp directory read/write verified under app UID (no all-files grant needed)");
+            return null;
+        } catch(IOException|SecurityException failure) {
+            report.accept("APP_PRIVATE_RW_FAILED: "+failure.getClass().getSimpleName()+
+                    ": "+failure.getMessage());
+            return "APP_PRIVATE_RW_FAILED";
+        } finally {
+            if(trial!=null && trial.exists() && !trial.delete())
+                report.accept("Warning: could not remove temporary read/write probe");
+        }
+    }
+
+    /**
+     * The selected GameNative Wine ABI uses aarch64-unix/ntdll.so.
+     * Verify it was actually extracted and can be READ before invoking the
+     * Android linker. Read access does not guarantee executable mmap/dlopen.
+     */
+    static String checkUnixNtdll(File libdir,Consumer<String> report) {
+        File unix=new File(libdir,"wine/aarch64-unix/ntdll.so");
+        if(!unix.isFile() || unix.length()==0) {
+            report.accept("WINE_NTDLL_MISSING: no staged native module at "+unix.getAbsolutePath());
+            return "WINE_NTDLL_MISSING";
+        }
+        byte[] hdr=new byte[20];
+        try(FileInputStream in=new FileInputStream(unix)) {
+            int pos=0;
+            while(pos<hdr.length) {
+                int n=in.read(hdr,pos,hdr.length-pos);
+                if(n<0)break;
+                pos+=n;
+            }
+            if(pos!=20 || (hdr[0]&255)!=0x7f || hdr[1]!='E' ||
+                    hdr[2]!='L' || hdr[3]!='F' || (hdr[4]&255)!=2 ||
+                    (hdr[5]&255)!=1 || (hdr[18]&255)!=183 || hdr[19]!=0) {
+                report.accept("WINE_NTDLL_INVALID_ELF: Wine ntdll.so is not ELF64 AArch64");
+                return "WINE_NTDLL_INVALID_ELF";
+            }
+        } catch(IOException|SecurityException e) {
+            report.accept("WINE_NTDLL_READ_DENIED: "+e.getClass().getSimpleName()+
+                    ": "+e.getMessage());
+            return "WINE_NTDLL_READ_DENIED";
+        }
+        report.accept("WINE_NTDLL_READ_OK: staged ELF64 AArch64 ntdll.so, "+
+                unix.length()+" bytes, readable by app UID (dlopen not yet verified)");
+        return null;
+    }
+
     private static File prefixRoot(File prefix) {
         File nested=new File(prefix,".wine");
         return new File(nested,"drive_c").isDirectory()?nested:prefix;
@@ -219,6 +281,10 @@ public final class WineLaunchProbe {
         File tmp=new File(prefix.getParentFile(),"tmp");
         if(!tmp.isDirectory()&&!tmp.mkdirs())
             throw new IOException("Cannot prepare temp directory");
+        String privateRw=checkPrivateReadWrite(tmp,report);
+        if(privateRw!=null)return new Result(privateRw,false,target.getName());
+        String nativeDll=checkUnixNtdll(libdir,report);
+        if(nativeDll!=null)return new Result(nativeDll,false,target.getName());
         StringBuilder libPath=new StringBuilder(libdir.getAbsolutePath());
         for(String sub:new String[]{"wine/aarch64-unix","wine","aarch64-unix"}) {
             File folder=new File(libdir,sub);
@@ -261,14 +327,23 @@ public final class WineLaunchProbe {
         final Process running=process;
         final java.util.concurrent.atomic.AtomicBoolean versionSeen=
                 new java.util.concurrent.atomic.AtomicBoolean(false);
+        final java.util.concurrent.atomic.AtomicBoolean ntdllLoadFailed=
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        final java.util.concurrent.atomic.AtomicBoolean execPermissionDenied=
+                new java.util.concurrent.atomic.AtomicBoolean(false);
         Thread output=new Thread(()->{
             int lines=0;
             try(BufferedReader input=new BufferedReader(new InputStreamReader(
                     running.getInputStream(),StandardCharsets.UTF_8))) {
                 String line;
                 while((line=input.readLine())!=null) {
-                    if(line.toLowerCase(Locale.ROOT).matches(".*\\bwine-[0-9]+\\.[0-9]+.*"))
+                    String lower=line.toLowerCase(Locale.ROOT);
+                    if(lower.matches(".*\\bwine-[0-9]+\\.[0-9]+.*"))
                         versionSeen.set(true);
+                    if(lower.contains("could not load ntdll.so"))
+                        ntdllLoadFailed.set(true);
+                    if(lower.contains("permission denied") || lower.contains("operation not permitted"))
+                        execPermissionDenied.set(true);
                     if(lines++ < 55)report.accept("[wine stdout] "+line.substring(0,Math.min(500,line.length())));
                 }
             }catch(IOException ex){report.accept("Wine pipe: "+ex.getMessage());}
@@ -292,8 +367,14 @@ public final class WineLaunchProbe {
                 " versionBannerSeen="+versionSeen.get()+
                 " (Android linker invocation; not Windows execution)");
         boolean passed=exit==0 && versionSeen.get();
-        return new Result(passed?"WINE_VERSION_OK":exit!=0?"WINE_VERSION_EXIT_"+exit:
-                "WINE_EXIT_0_WITHOUT_VERSION_BANNER",passed,target.getName());
+        String status=passed?"WINE_VERSION_OK":
+                ntdllLoadFailed.get()? (execPermissionDenied.get()?
+                        "WINE_NTDLL_DLOPEN_DENIED":"WINE_NTDLL_DLOPEN_FAILED"):
+                exit!=0?"WINE_VERSION_EXIT_"+exit:"WINE_EXIT_0_WITHOUT_VERSION_BANNER";
+        if(ntdllLoadFailed.get())
+            report.accept("Wine ntdll loading failed AFTER file read preflight; "+
+                    "inspect loader namespace/SELinux/dependencies, not Android external-storage grants.");
+        return new Result(status,passed,target.getName());
     }
     private WineLaunchProbe(){}
 }
