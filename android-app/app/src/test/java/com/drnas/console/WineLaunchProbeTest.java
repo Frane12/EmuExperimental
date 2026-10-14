@@ -47,4 +47,45 @@ public class WineLaunchProbeTest {
         assertFalse(r.runnable);
         assertTrue(r.description.contains("unconfirmed target"));
     }
+
+    @Test public void selectsGameNativeRealLoaderWhenBinWineIsEmpty() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-proton-layout");
+        try {
+            java.nio.file.Path bin=root.resolve("bin");
+            java.nio.file.Path loader=root.resolve("lib/wine/aarch64-unix");
+            Files.createDirectories(bin);Files.createDirectories(loader);
+            Files.write(bin.resolve("wine"),new byte[0]);
+            Files.write(bin.resolve("wineserver"),new byte[0]);
+            Files.copy(nativeElf("/system/bin/linker64").toPath(),loader.resolve("wine"));
+            java.util.ArrayList<String> messages=new java.util.ArrayList<>();
+            File chosen=WineLaunchProbe.selectWine(root.toFile(),messages::add);
+            assertNotNull(chosen);
+            assertEquals(loader.resolve("wine").toFile().getCanonicalPath(),
+                    chosen.getCanonicalPath());
+            assertTrue(messages.stream().anyMatch(x->x.contains("Empty Wine placeholder")));
+            assertTrue(messages.stream().anyMatch(x->x.contains(
+                    "Selected actual Bionic Wine entry: lib/wine/aarch64-unix/wine")));
+        } finally {
+            try(java.util.stream.Stream<java.nio.file.Path> files=Files.walk(root)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p->{
+                    try {Files.deleteIfExists(p);} catch(Exception ignored){}
+                });
+            }
+        }
+    }
+    @Test public void neverTreatsWineserverAsWineEntrypoint() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-proton-no-wine");
+        try {
+            java.nio.file.Path bin=root.resolve("bin");
+            Files.createDirectories(bin);
+            Files.copy(nativeElf("/system/bin/linker64").toPath(),bin.resolve("wineserver"));
+            assertNull(WineLaunchProbe.selectWine(root.toFile(),msg->{}));
+        } finally {
+            try(java.util.stream.Stream<java.nio.file.Path> files=Files.walk(root)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p->{
+                    try {Files.deleteIfExists(p);} catch(Exception ignored){}
+                });
+            }
+        }
+    }
 }

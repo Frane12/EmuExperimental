@@ -27,7 +27,7 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.4.1: Android Bionic ARM64 JNI included; Proton 11 is also Bionic. " +
+        return "EXPERIMENTAL v0.4.2: GameNative/Bionic Wine real loader path probe added; ARM64 JNI included. " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
                 "Start container attempts Wine --version via Android linker64 only for verified Bionic ARM64 ELF. X11, audio, Turnip ICD, Wine prefix init and Windows/game execution are not implemented.";
     }

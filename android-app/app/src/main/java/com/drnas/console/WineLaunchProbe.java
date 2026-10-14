@@ -19,8 +19,18 @@ import java.util.function.Consumer;
  */
 public final class WineLaunchProbe {
     private static final long MAX_ELF_BYTES=64L*1024*1024;
-    private static final String[] ENTRIES={
-            "wine","wine64","wine-preloader","wine64-preloader"
+    // The GameNative ARM64EC upstream build generates bin/wine as a
+    // symlink to ../lib/wine/aarch64-unix/wine (build-step-arm64ec.sh).
+    // Some WCP producers turn that symlink into an empty placeholder.
+    // The real loader is therefore also probed by its fixed library path.
+    private static final String[] LAUNCH_CANDIDATES={
+            "bin/wine", "bin/wine64",
+            "lib/wine/aarch64-unix/wine", "lib/wine/aarch64-unix/wine64"
+    };
+    private static final String[] SUPPORT_CANDIDATES={
+            "bin/wine-preloader", "lib/wine/aarch64-unix/wine-preloader",
+            "bin/wineserver", "lib/wine/aarch64-unix/wineserver",
+            "bin/wineboot"
     };
     private static final long TIMEOUT_SECONDS=12;
 
@@ -122,6 +132,45 @@ public final class WineLaunchProbe {
         return new File(nested,"drive_c").isDirectory()?nested:prefix;
     }
 
+    private static File pathInside(File root,String name) throws IOException {
+        String base=root.getCanonicalPath()+File.separator;
+        File f=new File(root,name);
+        if(!f.getCanonicalPath().startsWith(base))
+            throw new IOException("Wine entry escaped staged component: "+name);
+        return f;
+    }
+
+    /**
+     * Select an actual Bionic-linked Wine ELF from known GameNative paths.
+     * Empty bin/wine placeholders are diagnostic evidence, not launchers.
+     * There is no arbitrary repository-wide executable search.
+     */
+    static File selectWine(File root,Consumer<String> report) throws Exception {
+        File selected=null;
+        for(String candidate:LAUNCH_CANDIDATES) {
+            File f=pathInside(root,candidate);
+            if(!f.isFile()) {
+                report.accept("Wine entry "+candidate+": absent");
+                continue;
+            }
+            Binary info=inspect(f);
+            report.accept("Wine entry "+candidate+": "+info.description);
+            if(f.length()==0)
+                report.accept("Empty Wine placeholder at "+candidate+
+                        " (upstream bin/wine may be a symlink)");
+            if(selected==null && info.runnable) selected=f;
+        }
+        for(String candidate:SUPPORT_CANDIDATES) {
+            File f=pathInside(root,candidate);
+            if(f.isFile())
+                report.accept("Supporting "+candidate+": "+inspect(f).description);
+        }
+        if(selected!=null)
+            report.accept("Selected actual Bionic Wine entry: "+
+                    root.toPath().relativize(selected.toPath()).toString());
+        return selected;
+    }
+
     /**
      * Returns a result only after a real Process.waitFor and exit-code check.
      * Failure is expected with Android SELinux/app-data execution policies.
@@ -133,24 +182,10 @@ public final class WineLaunchProbe {
         File bindir=new File(protonDir,bin),libdir=new File(protonDir,lib);
         if(!bindir.isDirectory() || !libdir.isDirectory())
             return new Result("WINE_PATHS_MISSING",false,"");
-        report.accept("Bionic Wine search (never assume glibc)");
-        File target=null;
-        List<String> candidates=new ArrayList<>();
-        for(String name:ENTRIES) {
-            File f=new File(bindir,name);
-            if(!f.isFile())continue;
-            Binary info=inspect(f);
-            candidates.add(name+": "+info.description);
-            report.accept("Wine candidate "+name+": "+info.description);
-            if(target==null && info.runnable && (name.equals("wine")||name.equals("wine64")))
-                target=f;
-        }
-        for(String name:new String[]{"wineserver","wineboot"}) {
-            File f=new File(bindir,name);
-            if(f.isFile())report.accept("Supporting "+name+": "+inspect(f).description);
-        }
+        report.accept("GameNative/Bionic Wine probe — including lib/wine/aarch64-unix loader");
+        File target=selectWine(protonDir,report);
         if(target==null) {
-            report.accept("No verified Bionic AArch64 Wine entrypoint; execution skipped.");
+            report.accept("No valid Bionic ARM64 Wine loader at known bin/ or lib/wine/aarch64-unix paths.");
             return new Result("NO_BIONIC_ELF_WINE_ENTRY",false,"");
         }
         File linker=new File("/system/bin/linker64");
@@ -169,7 +204,7 @@ public final class WineLaunchProbe {
         args.add("--library-path");args.add(libPath.toString());
         args.add(target.getAbsolutePath());args.add("--version");
         report.accept("TRY REAL BIONIC WINE --version via Android linker64 ("+
-                TIMEOUT_SECONDS+" second watchdog).");
+                TIMEOUT_SECONDS+" second watchdog), from "+target.getAbsolutePath());
         ProcessBuilder builder=new ProcessBuilder(args);
         builder.directory(protonDir);
         builder.redirectErrorStream(true);
@@ -220,7 +255,8 @@ public final class WineLaunchProbe {
         }
         int exit=process.exitValue();
         report.accept("Wine --version real process exit="+exit+
-                " versionBannerSeen="+versionSeen.get());
+                " versionBannerSeen="+versionSeen.get()+
+                " (Android linker invocation; not Windows execution)");
         boolean passed=exit==0 && versionSeen.get();
         return new Result(passed?"WINE_VERSION_OK":exit!=0?"WINE_VERSION_EXIT_"+exit:
                 "WINE_EXIT_0_WITHOUT_VERSION_BANNER",passed,target.getName());
