@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 /**
  * Experimental container bootstrap:
  * 1) Verify FEX PE bridges already imported by ComponentStore.
- * 2) Extract user-imported Proton 10 / DXVK WCP packages and Turnip ZIP.
+ * 2) Extract user-imported Proton 11 / DXVK WCP packages and Turnip ZIP.
  * 3) Prepare a disposable Wine prefix, assemble FEX and DXVK layers.
  * 4) Perform a real Android host process preflight.
  *
@@ -123,7 +123,7 @@ public final class ContainerBootstrap {
         // Provision BEFORE attempting vault lookup, even for a manually
         // pressed Init button. This removes the first-launch APK copy race.
         // The synchronized installer serializes concurrent first-run requests.
-        log("Ensuring embedded Proton 10, FEX 2609, DXVK and Turnip are ready...");
+        log("Ensuring embedded Proton 11.0-2, FEX 2609, DXVK and Turnip are ready...");
         BundledComponents.install(ctx,this::log);
         File vault=new File(ctx.getFilesDir(),"wcp-vault");
         if(!vault.isDirectory())throw new IOException("Bundled component vault unavailable (check storage space).");
