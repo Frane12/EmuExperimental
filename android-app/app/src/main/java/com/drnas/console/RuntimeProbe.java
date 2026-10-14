@@ -27,9 +27,9 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "DRNAS v0.5.17 desktop interface: embedded X11 presents a stable 1280x720 " +
-                "Wine Explorer virtual desktop, scaled to the Android display with translated touch. " +
-                "GUI diagnostic text is hidden, not deleted; RAW logs remain available on demand. " +
+        return "DRNAS v0.5.18 Wine power interface: embedded X11 presents a stable 1280x720 " +
+                "Wine shell/Start/taskbar virtual desktop, scaled to the Android display with translated touch. " +
+                "Two-step launch with phase progress, verified readiness LED and relative touchpad input. GUI diagnostic text stays hidden; RAW logs remain available on demand. " +
                 "Proton 11.0-2 ARM64EC, FEX 2609 and DXVK 1.10.3 are bundled. " +
                 "Turnip ICD and GPU acceleration must be verified separately.";
     }
