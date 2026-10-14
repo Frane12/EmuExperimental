@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.4.4");
+        append("DRNAS CONSOLE · Runtime Core v0.4.5");
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.4.4 WINEBOOT LAB",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.4.5 WINEBOOT NOEXEC",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -214,7 +214,7 @@ public final class MainActivity extends Activity {
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
-        note(bootPanel,"Native Bionic Wine --version is verified. Optional Wineboot --init experiment creates a separate disposable prefix, with a 50-second watchdog and registry checks. No X11 or games yet.");
+        note(bootPanel,"Wine --version works on Android/Bionic. Isolated wineboot test now bypasses Wine's second execv using upstream WINELOADERNOEXEC handoff; 50s watchdog and registry checks remain. No X11 or games.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));

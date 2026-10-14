@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  */
 public final class WineBootProbe {
     private static final int TIMEOUT_SECONDS=50;
-    private static final int MAX_LOG_LINES=85;
+    private static final int MAX_LOG_LINES=120;
     private static final String[] REGISTRY={"system.reg","user.reg","userdef.reg"};
 
     public static final class Result {
@@ -44,6 +44,21 @@ public final class WineBootProbe {
         result.set(result.size()-1,"wineboot.exe");
         result.add("--init");
         return result;
+    }
+
+    /**
+     * Wine's ntdll/unix/loader.c -> __wine_main() checks
+     * WINELOADERNOEXEC before check_command_line(). Wine's ordinary
+     * command-line path tries a second execv() of its ELF loader,
+     * which cannot run from Android 16 writable app storage.
+     *
+     * Our ProcessBuilder has ALREADY launched this exact Bionic ELF through
+     * Android's linker64, so tell Wine it is at its second-stage entrypoint.
+     * Wine unsets this variable itself before starting the main thread.
+     * Never add this env var to the independent wine --version preflight.
+     */
+    static void configureSecondStage(Map<String,String> env) {
+        env.put("WINELOADERNOEXEC","1");
     }
 
     private static String registryFingerprint(File folder) throws Exception {
@@ -179,8 +194,10 @@ public final class WineBootProbe {
         if(wineServer.isFile() && WineLaunchProbe.inspect(wineServer).runnable)
             env.put("WINESERVER",wineServer.getAbsolutePath());
         env.put("LC_ALL","C");
-        env.put("WINEDEBUG","-all");
+        env.put("WINEDEBUG","+process,+server"); // bounded output shows wineserver/PE initialization failures
         env.put("PROTON_NO_NTSYNC","1");
+        configureSecondStage(env);
+        report.accept("WINELOADERNOEXEC=1 (skip Wine internal second execv; host linker64 has already loaded ELF)");
         report.accept("WINEPREFIX="+isolated.getAbsolutePath());
         report.accept("WINELOADER/LD_LIBRARY_PATH set; X11, audio, Turnip ICD not connected.");
         Process child;

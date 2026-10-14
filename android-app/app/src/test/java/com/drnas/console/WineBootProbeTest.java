@@ -42,4 +42,14 @@ public class WineBootProbeTest {
         assertThrows(IllegalArgumentException.class,()->WineBootProbe.command(
                 new File("/system/bin/linker64"),new File("wine")));
     }
+
+    @Test public void skipsOnlyWinebootReexecViaWineSecondStageFlag() {
+        java.util.Map<String,String> childEnv=new java.util.HashMap<>();
+        WineBootProbe.configureSecondStage(childEnv);
+        assertEquals("1",childEnv.get("WINELOADERNOEXEC"));
+        assertEquals(1,childEnv.size());
+        assertFalse(WineBootProbe.command(new File("/system/bin/linker64"),
+                new File("/data/user/0/com.drnas.console/files/wine"))
+                .contains("WINELOADERNOEXEC"));
+    }
 }
