@@ -14,8 +14,10 @@ import org.json.JSONObject;
 /** APK-owned Bionic X11/font clients; imported Proton and regular prefixes stay intact. */
 final class WineGuiRuntime {
     static final String ASSET="gui-runtime-v1.zip";
+    private static File verifiedRoot;
     static synchronized File install(Context context,Consumer<String> log) throws Exception {
         File root=new File(context.getFilesDir(),"gui-runtime/v1");
+        if(verifiedRoot!=null && verifiedRoot.equals(root) && new File(root,"lib/libX11.so.6").isFile())return root;
         if(!root.isDirectory()&&!root.mkdirs())throw new IOException("Cannot create GUI runtime");
         Map<String,byte[]> entries=new LinkedHashMap<>();long total=0;
         try(ZipInputStream zip=new ZipInputStream(context.getAssets().open(ASSET))) {
@@ -48,14 +50,15 @@ final class WineGuiRuntime {
         for(Iterator<String> it=hashes.keys();it.hasNext();)names.add(it.next());
         int aliases=installAliases(new File(root,"lib"),names);
         log.accept("GUI runtime verified: "+hashes.length()+" Bionic libraries; installed/repaired="+repaired+"; linker aliases="+aliases);
+        verifiedRoot=root;
         return root;
     }
     static String aliasFor(String name) throws IOException {
         if(!name.matches("lib[A-Za-z0-9_+-]+\\.so(?:\\.[A-Za-z0-9_.+-]+)?"))
             throw new IOException("Invalid GUI library name");
-        // Keep Android's own unversioned Vulkan loader as the platform default.
-        // Wine's explicitly versioned libvulkan.so.1 remains available.
-        if(name.startsWith("libvulkan.so") || name.endsWith(".so"))return null;
+        // Both Wine Vulkan names resolve to the bundled Khronos ICD loader.
+        // Android's platform loader does not honor VK_DRIVER_FILES.
+        if(name.endsWith(".so"))return null;
         return name.substring(0,name.indexOf(".so")+3);
     }
     static int installAliases(File lib,Collection<String> names) throws IOException {
@@ -112,3 +115,4 @@ final class WineGuiRuntime {
     }
     private WineGuiRuntime(){}
 }
+

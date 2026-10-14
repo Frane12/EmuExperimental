@@ -21,11 +21,24 @@ public final class NativeHost {
     public static String vulkanInfo(){
         return available()?nativeVulkanInfo():"Native Vulkan probe unavailable: "+ERROR;
     }
+    public static String vulkanDeviceName(){
+        return available()?nativeVulkanDeviceName():"";
+    }
     public static String probeFile(String path){
         return available()?nativeProbeFile(path):"Native ELF probe unavailable: "+ERROR;
     }
+    /**
+     * Observe executable-memory policy for the selected read-only DLL/file.
+     * No guest instruction is executed and the source file is not modified.
+     */
+    public static String execMappingProbe(String path){
+        return available()?nativeExecMappingProbe(path):
+                "Native executable-mapping probe unavailable: "+ERROR;
+    }
+    private static native String nativeExecMappingProbe(String path);
     private static native String nativeHostInfo();
     private static native String nativeVulkanInfo();
+    private static native String nativeVulkanDeviceName();
     private static native String nativeProbeFile(String path);
     private NativeHost(){}
 }

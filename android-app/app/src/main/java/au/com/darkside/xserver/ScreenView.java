@@ -151,6 +151,124 @@ public class ScreenView extends View {
     private Colormap _defaultColormap = null;
     private final Vector<Colormap> _installedColormaps;
     private final float _pixelsPerMillimeter;
+    // X11 advertises a stable guest framebuffer independently of Android's physical
+    // view size. Set once before clients connect; later inset/IME changes must not
+    // re-create the live X11 root window.
+    private int _guestWidth;
+    private int _guestHeight;
+
+    public void setGuestResolution(int width,int height) {
+        if (_rootWindow != null) throw new IllegalStateException("X11 screen already started");
+        if (width < 640 || height < 480 || width > 4096 || height > 2160)
+            throw new IllegalArgumentException("Unsupported guest resolution");
+        _guestWidth = width;
+        _guestHeight = height;
+    }
+    public int getGuestWidth() { return _guestWidth > 0 ? _guestWidth : getWidth(); }
+    public int getGuestHeight() { return _guestHeight > 0 ? _guestHeight : getHeight(); }
+    private float guestScale() {
+        if (_guestWidth == 0 || _guestHeight == 0 || getWidth() == 0 || getHeight() == 0)
+            return 1f;
+        return Math.min((float)getWidth()/_guestWidth,(float)getHeight()/_guestHeight);
+    }
+    private float guestLeft(float scale) { return (getWidth() - getGuestWidth()*scale)/2f; }
+    private float guestTop(float scale) { return (getHeight() - getGuestHeight()*scale)/2f; }
+    private int guestX(float physicalX) {
+        float scale=guestScale();
+        return Math.max(0,Math.min(getGuestWidth()-1,Math.round((physicalX-guestLeft(scale))/scale)));
+    }
+    private int guestY(float physicalY) {
+        float scale=guestScale();
+        return Math.max(0,Math.min(getGuestHeight()-1,Math.round((physicalY-guestTop(scale))/scale)));
+    }
+
+
+    // Laptop-style touchpad: one-finger movement is relative, not a warp to
+    // the finger's absolute X11 coordinates. Tap clicks at the cursor.
+    private boolean _relativeTouchMode;
+    private float _touchLastX, _touchLastY, _touchRemainderX, _touchRemainderY;
+    private float _touchTravel;
+    private long _touchStartedAt;
+    private boolean _touchTwoFingers, _touchDragging;
+
+    public void setRelativeTouchMode(boolean enabled) {
+        _relativeTouchMode=enabled;
+    }
+
+    private boolean handleRelativeTouch(MotionEvent event) {
+        int action=event.getActionMasked();
+        switch(action) {
+        case MotionEvent.ACTION_DOWN:
+            _touchLastX=event.getX(0);
+            _touchLastY=event.getY(0);
+            _touchStartedAt=event.getEventTime();
+            _touchTravel=0f;
+            _touchRemainderX=_touchRemainderY=0f;
+            _touchTwoFingers=false;
+            _touchDragging=false;
+            return true;
+        case MotionEvent.ACTION_POINTER_DOWN:
+            _touchTwoFingers=true;
+            return true;
+        case MotionEvent.ACTION_MOVE:
+            if(event.getPointerCount()!=1) {
+                _touchTwoFingers=true;
+                return true;
+            }
+            float x=event.getX(0),y=event.getY(0);
+            float dx=x-_touchLastX,dy=y-_touchLastY;
+            _touchLastX=x;
+            _touchLastY=y;
+            _touchTravel+=(float)Math.hypot(dx,dy);
+            if(_touchTwoFingers)return true;
+            // Hold the finger for 400 ms and begin a slow drag to press mouse
+            // button one; keep it held while moving, release on finger up.
+            // Fast swipes only move the pointer. A quick tap clicks instead.
+            if(!_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
+                    _touchTravel<dpTouch(24)) {
+                updatePointerButtons(1,true);
+                _touchDragging=true;
+            }
+            float scale=Math.max(0.01f,guestScale());
+            _touchRemainderX+=dx/scale;
+            _touchRemainderY+=dy/scale;
+            int stepX=(int)_touchRemainderX;
+            int stepY=(int)_touchRemainderY;
+            _touchRemainderX-=stepX;
+            _touchRemainderY-=stepY;
+            if(stepX!=0 || stepY!=0)
+                updatePointerPosition(
+                    Math.max(0,Math.min(getGuestWidth()-1,_currentCursorX+stepX)),
+                    Math.max(0,Math.min(getGuestHeight()-1,_currentCursorY+stepY)),0);
+            return true;
+        case MotionEvent.ACTION_POINTER_UP:
+            _touchTwoFingers=true;
+            return true;
+        case MotionEvent.ACTION_UP:
+            if(_touchDragging) {
+                updatePointerButtons(1,false);
+            } else if(_touchTwoFingers) {
+                updatePointerButtons(3,true);
+                updatePointerButtons(3,false);
+            } else if(_touchTravel<dpTouch(15)) {
+                int button=(event.getEventTime()-_touchStartedAt>=650)?3:1;
+                updatePointerButtons(button,true);
+                updatePointerButtons(button,false);
+            }
+            _touchDragging=false;
+            return true;
+        case MotionEvent.ACTION_CANCEL:
+            if(_touchDragging)updatePointerButtons(1,false);
+            _touchDragging=false;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    private float dpTouch(float size) {
+        return size*getResources().getDisplayMetrics().density;
+    }
 
     private Cursor _currentCursor;
     private int _currentCursorX;
@@ -250,7 +368,8 @@ public class ScreenView extends View {
                     if (_rootWindow == null) return false;
         
                     blank(false);    // Reset the screen saver.
-                    updatePointerPosition((int) event.getX(), (int) event.getY(), 0);
+                    if (_relativeTouchMode) return handleRelativeTouch(event);
+                    updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
         
                     if(_enableTouchClicks){
                         if(event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getActionIndex() == 0)
@@ -524,7 +643,7 @@ public class ScreenView extends View {
         if (_isBlanked == flag) return;
 
         _isBlanked = flag;
-        postInvalidate();
+        postInvalidateOnAnimation();
 
         if (!_isBlanked) _xServer.resetScreenSaver();
     }
@@ -633,9 +752,20 @@ public class ScreenView extends View {
             }
 
             _paint.reset();
+            // Keep a constant 1280x720 X11 coordinate system, scaled uniformly
+            // with letterboxing; drawing and touch use the SAME transformation.
+            int checkpoint=canvas.save();
+            if (_guestWidth>0 && _guestHeight>0) {
+                float scale=guestScale();
+                canvas.drawColor(0xff000000);
+                canvas.translate(guestLeft(scale),guestTop(scale));
+                canvas.scale(scale,scale);
+                canvas.clipRect(0,0,_guestWidth,_guestHeight);
+            }
             _rootWindow.draw(canvas, _paint);
             _xServer.canvasDrawn();
             canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
+            canvas.restoreToCount(checkpoint);
 
             _drawnCursor = _currentCursor;
             _drawnCursorX = _currentCursorX;
@@ -656,7 +786,11 @@ public class ScreenView extends View {
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
 
-        _rootWindow = new Window(_rootId, _xServer, null, this, null, 0, 0, width, height, 0, false, true);
+        // Android insets / keyboard can resize the physical View. Do not
+        // destroy X11 root resources while Explorer has active client windows.
+        if (_rootWindow != null) { postInvalidateOnAnimation(); return; }
+        int rootWidth=getGuestWidth(),rootHeight=getGuestHeight();
+        _rootWindow = new Window(_rootId, _xServer, null, this, null, 0, 0, rootWidth, rootHeight, 0, false, true);
         _sharedClipboardWindow = new Window(_xServer.nextFreeResourceId()+1, _xServer, null, this, _rootWindow, -1, -1, 1, 1, 0, true, false); // hidden window managing android <-> xServer clipboard
         _sharedClipboardWindow.setIsServerWindow(true); // flag as functional server only window (there is a urgent need to introduce interfaces..)
         _sharedClipboardProperty = new Property(_xServer.findAtom("CLIPBOARD").getId(), _xServer.findAtom("CLIPBOARD").getId(), (byte)32); // property which will hold the clipboard data
@@ -699,8 +833,8 @@ public class ScreenView extends View {
         _xServer.addResource(_sharedClipboardWindow);
 
         _currentCursor = _rootWindow.getCursor();
-        _currentCursorX = width / 2;
-        _currentCursorY = height / 2;
+        _currentCursorX = rootWidth / 2;
+        _currentCursorY = rootHeight / 2;
         _drawnCursorX = _currentCursorX;
         _drawnCursorY = _currentCursorY;
         _motionX = _currentCursorX;
@@ -719,13 +853,28 @@ public class ScreenView extends View {
      * @param y      New Y coordinate.
      * @param cursor The cursor to draw.
      */
+    public void invalidateGuestRect(int left,int top,int right,int bottom) {
+        if(_guestWidth<=0 || _guestHeight<=0) {
+            postInvalidateOnAnimation(left,top,right,bottom);
+            return;
+        }
+        // Dirty only the area covered by the old/new pointer in Android
+        // physical pixels. Repainting the entire Wine desktop on EVERY cursor
+        // event makes software X11 noticeably sluggish.
+        float scale=guestScale(),offsetX=guestLeft(scale),offsetY=guestTop(scale);
+        postInvalidateOnAnimation((int)Math.floor(offsetX+left*scale)-3,
+                       (int)Math.floor(offsetY+top*scale)-3,
+                       (int)Math.ceil(offsetX+right*scale)+3,
+                       (int)Math.ceil(offsetY+bottom*scale)+3);
+    }
+
     private void movePointer(int x, int y, Cursor cursor) {
         if (_drawnCursor != null) {
             int left = _drawnCursorX - _drawnCursor.getHotspotX();
             int top = _drawnCursorY - _drawnCursor.getHotspotY();
             Bitmap bm = _drawnCursor.getBitmap();
 
-            postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+            invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
             _drawnCursor = null;
         }
 
@@ -737,7 +886,7 @@ public class ScreenView extends View {
         int top = y - cursor.getHotspotY();
         Bitmap bm = cursor.getBitmap();
 
-        postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+        invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
     }
 
     /**
@@ -1101,10 +1250,10 @@ public class ScreenView extends View {
         io.writeInt(_defaultColormap.getWhitePixel());    // White pixel.
         io.writeInt(_defaultColormap.getBlackPixel());    // Black pixel.
         io.writeInt(0);    // Current input masks.
-        io.writeShort((short) getWidth());    // Width in pixels.
-        io.writeShort((short) getHeight());    // Height in pixels.
-        io.writeShort((short) (getWidth() / _pixelsPerMillimeter));    // Width in millimeters.
-        io.writeShort((short) (getHeight() / _pixelsPerMillimeter));    // Height in millimeters.
+        io.writeShort((short) getGuestWidth());    // Width in pixels.
+        io.writeShort((short) getGuestHeight());    // Height in pixels.
+        io.writeShort((short) (getGuestWidth() / _pixelsPerMillimeter));    // Width in millimeters.
+        io.writeShort((short) (getGuestHeight() / _pixelsPerMillimeter));    // Height in millimeters.
         io.writeShort((short) 1);    // Minimum installed maps.
         io.writeShort((short) 1);    // Maximum installed maps.
         io.writeInt(vis.getId());    // Root visual ID.

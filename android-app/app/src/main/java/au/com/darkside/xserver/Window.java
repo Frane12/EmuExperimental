@@ -700,7 +700,7 @@ public class Window extends Resource {
      * Request a redraw of the window.
      */
     public void invalidate() {
-        _screen.postInvalidate(_orect.left, _orect.top, _orect.right, _orect.bottom);
+        _screen.invalidateGuestRect(_orect.left, _orect.top, _orect.right, _orect.bottom);
     }
 
     /**
@@ -712,7 +712,7 @@ public class Window extends Resource {
      * @param height Height of the region.
      */
     public void invalidate(int x, int y, int width, int height) {
-        _screen.postInvalidate(_irect.left + x, _irect.top + y, _irect.left + x + width, _irect.top + y + height);
+        _screen.invalidateGuestRect(_irect.left + x, _irect.top + y, _irect.left + x + width, _irect.top + y + height);
     }
 
     /**
@@ -1871,7 +1871,7 @@ public class Window extends Resource {
         _parent = parent;
         if (mapped) {
             map(client);
-            if (!_inputOnly) _screen.postInvalidate(orig.left, orig.top, orig.right, orig.bottom);
+            if (!_inputOnly) _screen.invalidateGuestRect(orig.left, orig.top, orig.right, orig.bottom);
         }
     }
 
@@ -2373,7 +2373,7 @@ public class Window extends Resource {
         }
 
         if (dirty != null && _isMapped && !_inputOnly)
-            _screen.postInvalidate(dirty.left, dirty.top, dirty.right, dirty.bottom);
+            _screen.invalidateGuestRect(dirty.left, dirty.top, dirty.right, dirty.bottom);
 
         return changed;
     }

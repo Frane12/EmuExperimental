@@ -11,23 +11,64 @@ import java.util.function.Consumer;
 
 /** A bounded GUI session on the already verified disposable Wineboot prefix. */
 final class WineGuiSession implements AutoCloseable {
+    private static WineGuiSession active;
+    private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
+    private volatile PulseAudioRuntime audio;
+
+    static void stopActive() throws Exception {
+        WineGuiSession current;
+        synchronized(WineGuiSession.class){current=active;}
+        if(current!=null){
+            current.close();
+            if(!current.finished.await(10,TimeUnit.SECONDS))throw new IOException("Previous Wine session is still stopping");
+        }
+    }
     private volatile Process launcher;
     private volatile WineServerDiagnostics.ManagedServer server;
 
+    static final int DESKTOP_WIDTH=1280;
+    static final int DESKTOP_HEIGHT=720;
     static List<String> command(File linker,File wine) {
+        return command(linker,wine,"desktop");
+    }
+    static List<String> command(File linker,File wine,String app) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        // Explorer is the persistent guest desktop. Do not start winecfg by
+        // default; keep it available for explicit maintenance only.
         args.set(args.size()-1,"explorer.exe");
-        args.add("/desktop=DRNAS,1024x768");args.add("winecfg.exe");
+        // Wine's special desktop name "shell" enables its built-in taskbar
+        // and Start menu; "DRNAS" used in v0.5.17 intentionally did not.
+        args.add("/desktop=shell,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
+        if ("files".equals(app) || "desktop".equals(app)) args.add("winefile.exe");
+        else if ("config".equals(app)) args.add("winecfg.exe");
+        else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
     }
     static void displayEnvironment(Map<String,String> env) {
         env.put("DISPLAY","127.0.0.1:12.0");
         env.put("WINEDLLOVERRIDES","winex11.drv=b;wineandroid.drv=d;winewayland.drv=d");
-        env.put("WINEDEBUG","-all,+x11drv,+module,+seh");
+        // Avoid high-volume per-module / X11 tracing on every GUI operation.
+        // Full logs can still be exported from the app when needed.
+        env.put("WINEDEBUG","-all");
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
+        run(context,log,raw,"desktop");
+    }
+    void run(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
+        synchronized(WineGuiSession.class) {
+            if(active!=null)throw new IOException("A previous desktop is still stopping; retry shortly");
+            active=this;
+        }
+        try { runOwned(context,log,raw,app); }
+        finally {
+            close();
+            synchronized(WineGuiSession.class){if(active==this)active=null;}
+            finished.countDown();
+        }
+    }
+    private void runOwned(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(
                 new File(base,"boot-plan.json").toPath()),StandardCharsets.UTF_8));
@@ -43,6 +84,7 @@ final class WineGuiSession implements AutoCloseable {
         File prefix=new File(base,"wineboot-probe/template/.wine").getCanonicalFile();
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
+        SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
         File lib=new File(proton,plan.optString("protonLibPath","lib")).getCanonicalFile();
@@ -66,6 +108,12 @@ final class WineGuiSession implements AutoCloseable {
         displayEnvironment(env);
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
+        TurnipRuntime.configureWine(context,plan,env,log);
+        TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
+        if(stopped)return;
+        audio=new PulseAudioRuntime();
+        try {audio.start(context,env,log,raw);}
+        catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+"; desktop remains available.");}
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
@@ -82,13 +130,17 @@ final class WineGuiSession implements AutoCloseable {
             if(stopped)return;
             WineBootProbe.configureChildExeRelay(env,nativeDir,wine);
             WineBootProbe.configureSecondStage(env);
-            log.accept("Launching explorer virtual desktop + winecfg; Canvas X11 renderer, 5 minute session.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine)).directory(proton).redirectErrorStream(true);
+            log.accept("Launching Wine explorer.exe virtual desktop "+
+                    DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
+                    ("files".equals(app)?" with winefile.exe":
+                     "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
+                    "; embedded software X11 renderer.");
+            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw);
-            long until=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
+            long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
             while(!stopped && server.alive() && System.nanoTime()<until) {
                 // Explorer can delegate its window to a child and return.
@@ -108,8 +160,10 @@ final class WineGuiSession implements AutoCloseable {
     }
     @Override public void close() {
         stopped=true;
+        PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 

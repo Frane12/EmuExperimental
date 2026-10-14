@@ -1,0 +1,11 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#101827" android:pathData="M22,0 H86 Q108,0 108,22 V86 Q108,108 86,108 H22 Q0,108 0,86 V22 Q0,0 22,0 Z" />
+    <!-- Four folded panes form an asymmetric open portal, with an original palette. -->
+    <path android:fillColor="#36DEC8" android:pathData="M29,34 L49,28 L49,49 L26,51 Z" />
+    <path android:fillColor="#67BFFF" android:pathData="M56,26 L78,33 L82,51 L56,49 Z" />
+    <path android:fillColor="#27A3C9" android:pathData="M26,58 L49,56 L49,80 L31,73 Z" />
+    <path android:fillColor="#A692FF" android:pathData="M56,56 L82,58 L77,73 L56,82 Z" />
+    <path android:fillColor="#101827" android:pathData="M65,61 L74,64 L71,70 L65,72 Z" />
+</vector>

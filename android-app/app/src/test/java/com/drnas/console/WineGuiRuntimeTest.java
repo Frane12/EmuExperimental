@@ -24,13 +24,13 @@ public class WineGuiRuntimeTest {
         for(String name:Arrays.asList("libXext.so.6","libfreetype.so.6","libfontconfig.so.1","libvulkan.so.1"))
             Files.write(new File(lib,name).toPath(),bytes);
         List<String> names=Arrays.asList("libXext.so.6","libfreetype.so.6","libfontconfig.so.1","libvulkan.so.1");
-        assertEquals(3,WineGuiRuntime.installAliases(lib,names));
-        for(String name:Arrays.asList("libXext.so","libfreetype.so","libfontconfig.so")){
+        assertEquals(4,WineGuiRuntime.installAliases(lib,names));
+        for(String name:Arrays.asList("libXext.so","libfreetype.so","libfontconfig.so","libvulkan.so")){
             assertTrue(Files.isSymbolicLink(new File(lib,name).toPath()));
             assertArrayEquals(bytes,Files.readAllBytes(new File(lib,name).toPath()));
         }
-        assertFalse(new File(lib,"libvulkan.so").exists());
-        assertEquals(3,WineGuiRuntime.installAliases(lib,names));
+        assertTrue(new File(lib,"libvulkan.so").exists());
+        assertEquals(4,WineGuiRuntime.installAliases(lib,names));
     }
     @Test public void brokenAliasIsRepairedLocally() throws Exception {
         File lib=tmp.newFolder("repair");
@@ -43,3 +43,4 @@ public class WineGuiRuntimeTest {
         WineGuiRuntime.aliasFor("../libXext.so.6");
     }
 }
+
