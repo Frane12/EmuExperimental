@@ -89,6 +89,17 @@ public class WineLaunchProbeTest {
         }
     }
 
+    @Test public void wineCliProvidesItsOwnNtdllDirectoryToAndroidLinker() {
+        java.util.Map<String,String> env=new java.util.HashMap<>();
+        File libdir=new File("/data/user/0/app/files/proton/lib");
+        File wine=new File("/data/user/0/app/files/proton/bin/wine");
+        WineLaunchProbe.configureWineDllLookup(env,libdir,wine);
+        assertEquals(new File(libdir,"wine").getAbsolutePath(),env.get("WINEDLLPATH"));
+        assertEquals(wine.getAbsolutePath(),env.get("WINELOADER"));
+        assertFalse(env.get("WINEDLLPATH").startsWith("/apex/"));
+        assertFalse(env.get("WINEDLLPATH").endsWith("/aarch64-unix"));
+    }
+
     @Test public void linkerDirectInvocationDoesNotUseGnuFlags() {
         java.util.List<String> args=WineLaunchProbe.linkerCommand(
                 new File("/system/bin/linker64"),
