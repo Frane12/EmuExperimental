@@ -17,8 +17,9 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 26
-        versionName = "0.5.11-bundled-offline-autostart"
+        manifestPlaceholders["appLabel"] = "Drnas Console"
+        versionCode = 27
+        versionName = "0.5.12-fex-four-mappings-autostart"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -46,6 +47,11 @@ android {
             // Use the SAME private secret-backed key on EVERY downloadable build.
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
+            } else {
+                // Missing project signing secrets: install experimental CI APK
+                // alongside existing DRNAS instead of forcing data-destroying uninstall.
+                applicationIdSuffix = ".lab"
+                manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }
         release {
