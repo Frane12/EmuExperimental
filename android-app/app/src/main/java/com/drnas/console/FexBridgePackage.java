@@ -52,7 +52,12 @@ public final class FexBridgePackage {
                 while ((entry = tar.getNextTarEntry()) != null) {
                     if (++count > MAX_ENTRIES) throw new IOException("FEX archive has too many entries");
                     String name = normalize(entry.getName());
-                    if (name.length() == 0 && entry.isDirectory()) continue;
+                    // GNU TAR often starts with "./" (a real root directory entry).
+                    // Never treat a root directory as a payload, but reject empty files.
+                    if (name.isEmpty()) {
+                        if (entry.isDirectory()) continue;
+                        throw new IOException("Empty TAR file member");
+                    }
                     if (!seen.add(name)) throw new IOException("Duplicate archive member");
                     if (!entry.isFile() && !entry.isDirectory())
                         throw new IOException("Unexpected archive link/special file");
@@ -175,11 +180,13 @@ public final class FexBridgePackage {
         }
     }
 
-    private static String normalize(String s) throws IOException {
-        if (s == null || s.startsWith("/") || s.contains("\\") ||
+    // Package-visible for regression tests; this is a pure path validator.
+    static String normalize(String s) throws IOException {
+        if (s == null || s.isEmpty() || s.startsWith("/") || s.contains("\\") ||
                 s.contains("\u0000")) throw new IOException("Unsafe archive path");
         while (s.startsWith("./")) s=s.substring(2);
-        if (s.equals(".") || s.equals("./")) return "";
+        // A directory named "." or "./" is the TAR root, not an invalid file.
+        if (s.isEmpty() || s.equals(".")) return "";
         while (s.endsWith("/") && !s.isEmpty()) s = s.substring(0, s.length()-1);
         if (s.isEmpty()) throw new IOException("Empty archive member");
         for (String part : s.split("/",-1))
