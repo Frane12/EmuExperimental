@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.10 Stable Signed
+name: EmuExperimental - Android APK v0.5.11 Stable Signed
 on:
   push:
     branches:
@@ -6,6 +6,7 @@ on:
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
+      - "tools/package_bundled_runtime.py"
       - ".github/workflows/build-android.yml"
   workflow_dispatch:
 permissions:
@@ -13,7 +14,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -33,6 +34,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Embed Proton 10 ARM64EC, FEX 2609 and DXVK 1.10.3 WCP archives
+        run: python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
       - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
         run: |
           python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
@@ -69,13 +72,17 @@ jobs:
           file android-app/app/build/outputs/apk/debug/app-debug.apk
           sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/proton-10-arm64ec-controller-fix.wcp
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.10-Stable-Signed-debug-apk
+          name: Drnas-Console-v0.5.11-Stable-Signed-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
