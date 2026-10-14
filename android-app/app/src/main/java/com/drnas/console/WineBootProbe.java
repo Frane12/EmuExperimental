@@ -40,6 +40,18 @@ public final class WineBootProbe {
         }
     }
 
+    private static void probeExecutablePages(File file,String label,
+                                             Consumer<String> report,RawWineTrace raw) {
+        if(!file.isFile()) {
+            report.accept("[execmap] "+label+" absent: "+file.getName());
+            raw.write("execmap",label+" absent");
+            return;
+        }
+        String result=NativeHost.execMappingProbe(file.getAbsolutePath());
+        report.accept("[execmap] "+label+" "+result);
+        raw.write("execmap",label+" "+result);
+    }
+
     static void configureChildExeRelay(Map<String,String> environment,
                                        File nativeLibDir,File approvedWine) throws IOException {
         File relay=new File(nativeLibDir,"libdrnas_wine_child_exec.so");
@@ -352,6 +364,23 @@ public final class WineBootProbe {
         }
         File tmp=new File(probeRoot,"tmp");
         if(!tmp.mkdirs())throw new IOException("No tmp");
+
+        // RAW trace on-device evidence for Android 16 / targetSdk 35:
+        // distinguishes missing files, file-backed PROT_EXEC denial,
+        // execmod-style RW->RX denial, and anonymous executable JIT pages.
+        // Probes never execute DLL bytes or change permissions.
+        report.accept("[execmap] Android executable-mapping checks (read-only probe)");
+        probeExecutablePages(
+                new File(nativeLibraryDir,"libdrnas_host.so"),"APP_PACKAGED_NATIVE_SO",report,raw);
+        File wineRoot=new File(libdir,"wine");
+        File builtin=new File(wineRoot,"aarch64-windows/ntdll.dll");
+        if(!builtin.isFile())builtin=new File(wineRoot,"arm64ec-windows/ntdll.dll");
+        probeExecutablePages(builtin,"STAGED_PROTON_NTDLL_PE",report,raw);
+        probeExecutablePages(
+                new File(isolated,"drive_c/windows/system32/ntdll.dll"),
+                "PREFIX_NTDLL_PE",report,raw);
+        report.accept("[execmap] External storage permission cannot override SELinux "+
+                "executable-memory restrictions");
 
         List<String> args=command(linker,wine);
         report.accept("wineboot command: linker64 <verified Wine AArch64 ELF> wineboot.exe --init");
