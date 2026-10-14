@@ -17,8 +17,11 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 13
-        versionName = "0.4.8-wineserver-prestart"
+        versionCode = 14
+        versionName = "0.4.9-nls-path"
+    }
+    packaging {
+        jniLibs.useLegacyPackaging = true
     }
     ndkVersion = "27.2.12479018"
     externalNativeBuild {

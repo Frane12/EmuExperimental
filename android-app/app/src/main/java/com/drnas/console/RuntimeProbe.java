@@ -27,7 +27,7 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.4.8: independent wineserver foreground A/B and isolated wineboot diagnostic. " +
+        return "EXPERIMENTAL v0.4.9: wineserver foreground + isolated NLS path interposer diagnostic. " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
                 "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. Opt-in wineboot attempts disposable prefix initialization; real success needs exit 0 and registry changes. X11/audio/Turnip ICD and games are not connected.";
     }

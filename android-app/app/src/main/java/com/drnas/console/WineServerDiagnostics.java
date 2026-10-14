@@ -104,15 +104,37 @@ public final class WineServerDiagnostics {
      * the child in finally. Alive != socket-ready; Wineboot remains the test.
      */
     public static ManagedServer prestart(File linker,File wineserver,File cwd,
-                                          Map<String,String> env,
+                                          File nativeLibDir,Map<String,String> env,
                                           Consumer<String> log) throws Exception {
-        List<String> args=nativeCommand(linker,wineserver);
+        // GameNative server/unicode.c derives its NLS directory from
+        // realpath("/proc/self/exe"). Under the linker64 trick that points
+        // to Android's linker, not the staged Wine binary.
+        File nls=new File(cwd,"share/wine/nls/l_intl.nls");
+        if(!nls.isFile() || nls.length()<1024 || nls.length()>32L*1024*1024) {
+            log.accept("[server B] Proton's share/wine/nls/l_intl.nls is absent/invalid; cannot start safely.");
+            return null;
+        }
+        File shim=new File(nativeLibDir,"libdrnas_wine_nls.so");
+        if(!shim.isFile()) {
+            log.accept("[server B] ARM64 NLS path shim is absent from APK native library directory.");
+            return null;
+        }
+        File verifiedServer=wineserver.getCanonicalFile();
+        if(!verifiedServer.isFile() || !WineLaunchProbe.inspect(verifiedServer).runnable)
+            throw new IOException("Wine server path not verified as Bionic ARM64");
+        log.accept("[server B] l_intl.nls exists ("+nls.length()+
+                " bytes); testing linker64 /proc/self/exe path compatibility.");
+        log.accept("[server B] shim only changes wineserver realpath(/proc/self/exe), not Android system.");
+        List<String> args=nativeCommand(linker,verifiedServer);
         log.accept("[server B] prestart: linker64 <wineserver> --foreground --persistent=60");
         ProcessBuilder pb=new ProcessBuilder(args);
         pb.directory(cwd).redirectErrorStream(true);
         Map<String,String> child=pb.environment();
         child.putAll(env);
         child.remove("WINELOADERNOEXEC");
+        // Do not inherit this into Wine CLI, shell or Android app.
+        child.put("LD_PRELOAD",shim.getCanonicalPath());
+        child.put("DRNAS_WINESERVER_BIN",verifiedServer.getCanonicalPath());
         Process p;
         try {p=pb.start();}
         catch(IOException e) {

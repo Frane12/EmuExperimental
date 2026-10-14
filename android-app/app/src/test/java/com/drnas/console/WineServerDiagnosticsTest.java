@@ -23,4 +23,17 @@ public final class WineServerDiagnosticsTest {
         assertThrows(IllegalArgumentException.class,()->WineServerDiagnostics.nativeCommand(
                 new File("/system/bin/linker64"),new File("wineserver")));
     }
+
+    @Test public void missingNlsBlocksPrestartWithoutRunningProcess() throws Exception {
+        java.nio.file.Path root=java.nio.file.Files.createTempDirectory("drnas-nls");
+        try {
+            java.util.ArrayList<String> log=new java.util.ArrayList<>();
+            assertNull(WineServerDiagnostics.prestart(
+                    new File("/system/bin/linker64"),root.resolve("bin/wineserver").toFile(),
+                    root.toFile(),root.toFile(),new java.util.HashMap<>(),log::add));
+            assertTrue(log.stream().anyMatch(x->x.contains("l_intl.nls")));
+        } finally {
+            WineBootProbe.removeWithoutFollowingLinks(root.toFile());
+        }
+    }
 }

@@ -245,7 +245,7 @@ public final class ContainerBootstrap {
             log("Starting isolated wineboot --init experiment. Regular prefix will NOT be modified.");
             WineBootProbe.Result outcome=WineBootProbe.run(
                     proton.folder,wineConfig,existing(proton.folder,prefixPackPath),
-                    winDir,base,this::log);
+                    winDir,base,new File(ctx.getApplicationInfo().nativeLibraryDir),this::log);
             plan.put("winebootAttempted",true);
             plan.put("winebootStatus",outcome.code);
             plan.put("winebootExit",outcome.exitCode);

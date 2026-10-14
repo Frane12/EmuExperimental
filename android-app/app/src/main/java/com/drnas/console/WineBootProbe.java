@@ -229,7 +229,7 @@ public final class WineBootProbe {
      */
     public static Result run(File protonFolder,JSONObject wineConfig,
                              File template,File originalWindows,File containerRoot,
-                             Consumer<String> report) throws Exception {
+                             File nativeLibraryDir,Consumer<String> report) throws Exception {
         File wine=WineLaunchProbe.selectWine(protonFolder,
                 s -> report.accept("[boot/elf] "+s));
         if(wine==null || !WineLaunchProbe.inspect(wine).runnable)
@@ -312,7 +312,7 @@ public final class WineBootProbe {
                 wineServer,protonFolder,env,report);
         report.accept("Direct wineserver exec A/B="+directStatus);
         WineServerDiagnostics.ManagedServer prestarted=WineServerDiagnostics.prestart(
-                linker,wineServer,protonFolder,env,report);
+                linker,wineServer,protonFolder,nativeLibraryDir,env,report);
         if(prestarted==null) {
             report.accept("Foreground server could not remain alive; skipping Wineboot.");
             return new Result("WINESERVER_PRESTART_FAILED",-1,0);
