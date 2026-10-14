@@ -1,0 +1,31 @@
+DRNAS Console Bionic GUI dependency bundle
+
+Binary source: GameNative imagefs_bionic.txz
+https://downloads.gamenative.app/imagefs_bionic.txz
+SHA256: 368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b
+Packaging recipe: tools/package_gui_runtime.py in Frane12/EmuExperimental.
+Per-library checksums: gui-runtime-v1.zip / manifest.json.
+
+Libraries are unmodified, independently dynamically loaded components. Only
+X.Org X11 clients, XCB/Xau, android-sysvshm, FreeType, Fontconfig, Expat,
+Brotli, bzip2, libpng, zlib and the Vulkan loader are included.
+No GameNative proprietary redirect shim, Microsoft fonts, Wine binary or
+GPU ICD is included in this bundle. Font discovery uses Android /system/fonts.
+
+Portions of this software are copyright (c) The FreeType Project
+(https://www.freetype.org). All rights reserved. FreeType uses the FTL option.
+Full upstream license notices are included in licenses/gui/.
+
+Upstream source locations:
+https://gitlab.freedesktop.org/xorg/lib
+https://gitlab.freedesktop.org/xorg/lib/libxcb
+https://github.com/GameNative/proton-wine/tree/proton_11.0-2/android/android_sysvshm
+https://github.com/pelya/android-shmem
+https://github.com/freetype/freetype
+https://gitlab.freedesktop.org/fontconfig/fontconfig
+https://github.com/libexpat/libexpat
+https://github.com/google/brotli
+https://sourceware.org/bzip2/
+https://github.com/pnggroup/libpng
+https://github.com/madler/zlib
+https://github.com/KhronosGroup/Vulkan-Loader

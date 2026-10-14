@@ -254,6 +254,7 @@ public final class ContainerBootstrap {
                 outcome=WineBootProbe.run(
                         proton.folder,wineConfig,existing(proton.folder,prefixPackPath),
                         winDir,base,new File(ctx.getApplicationInfo().nativeLibraryDir),
+                        WineGuiRuntime.install(ctx,this::log),
                         this::log,raw);
                 log("RAW Wine trace captured="+raw.size()+" bytes, truncated="+
                         raw.wasTruncated()+
@@ -290,3 +291,4 @@ public final class ContainerBootstrap {
         throw new IOException("prefixPack has no drive_c/windows; check Proton template layout");
     }
 }
+

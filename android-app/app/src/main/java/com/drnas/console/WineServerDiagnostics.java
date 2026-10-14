@@ -66,13 +66,17 @@ public final class WineServerDiagnostics {
         Thread reader=new Thread(()->{
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
-                String line;int n=0;
+                String line;int n=0,priority=0;
                 while((line=br.readLine())!=null) {
                     if(raw!=null)raw.write(prefix.startsWith("[server B]")?
                             "wineserver":"server",line);
                     if(n++<limit)
                         log.accept(prefix+line.substring(0,Math.min(line.length(),350)));
-                    else if(n==limit+1) log.accept(prefix+"output limit reached");
+                    else {
+                        if(n==limit+1)log.accept(prefix+"routine trace display limit reached; errors still shown");
+                        if((line.contains(":err:")||line.contains("dlerror")||line.contains("cannot find")||line.contains("Failed to")) && priority++<80)
+                            log.accept(prefix+line.substring(0,Math.min(line.length(),800)));
+                    }
                 }
             } catch(IOException ex) {
                 log.accept(prefix+"pipe closed: "+ex.getClass().getSimpleName());

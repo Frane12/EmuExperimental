@@ -24,7 +24,7 @@ final class WineGuiSession implements AutoCloseable {
     static void displayEnvironment(Map<String,String> env) {
         env.put("DISPLAY","127.0.0.1:12.0");
         env.put("WINEDLLOVERRIDES","winex11.drv=b;wineandroid.drv=d;winewayland.drv=d");
-        env.put("WINEDEBUG","+x11drv,+loaddll,+seh");
+        env.put("WINEDEBUG","-all,+x11drv,+module,+seh");
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
@@ -64,6 +64,8 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        File guiRuntime=WineGuiRuntime.install(context,log);
+        WineGuiRuntime.configure(guiRuntime,prefix,env);
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
@@ -72,6 +74,7 @@ final class WineGuiSession implements AutoCloseable {
         }
         File[] dependencies=lib.listFiles((dir,name)->name.startsWith("libX") || name.contains("xcb") || name.contains("freetype") || name.contains("fontconfig"));
         if(dependencies!=null)for(File f:dependencies)log.accept("GUI runtime library: "+f.getName());
+        WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
         if(stopped)return;
         server=WineServerDiagnostics.prestart(linker,serverElf,proton,nativeDir,env,log,raw);
         if(server==null)throw new IOException("GUI wineserver failed to start");
@@ -109,3 +112,4 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+

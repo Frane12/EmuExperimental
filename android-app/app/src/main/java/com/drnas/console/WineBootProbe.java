@@ -297,7 +297,7 @@ public final class WineBootProbe {
      */
     public static Result run(File protonFolder,JSONObject wineConfig,
                              File template,File originalWindows,File containerRoot,
-                             File nativeLibraryDir,Consumer<String> report,
+                             File nativeLibraryDir,File guiRuntime,Consumer<String> report,
                              RawWineTrace raw) throws Exception {
         File wine=WineLaunchProbe.selectWine(protonFolder,
                 s -> report.accept("[boot/elf] "+s));
@@ -366,6 +366,7 @@ public final class WineBootProbe {
         env.put("TMPDIR",tmp.getAbsolutePath());
         env.put("XDG_RUNTIME_DIR",tmp.getAbsolutePath());
         env.put("LD_LIBRARY_PATH",libs.toString());
+        WineGuiRuntime.configure(guiRuntime,isolated,env);
         // Wine's get_pe_dir() appends /aarch64-windows to each WINEDLLPATH
         // root, so passing aarch64-unix here incorrectly doubles the suffix.
         // GameNative ntdll/unix/loader.c -> set_dll_path().

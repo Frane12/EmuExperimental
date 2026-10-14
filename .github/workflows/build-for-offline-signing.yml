@@ -26,6 +26,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
+        run: |
+          python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
+          mkdir -p android-app/app/src/main/jniLibs/arm64-v8a
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/gui_dependency_probe.c -ldl -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_gui_probe.so
       - name: Unit tests and build (ephemeral CI debug key; DO NOT INSTALL)
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
@@ -39,7 +44,7 @@ jobs:
           sha256sum "$RUNNER_TEMP/signable/"*
       - uses: actions/upload-artifact@v4
         with:
-          name: DRNAS-v0.5.8-UNTRUSTED-TRANSIENT-for-offline-signing
+          name: DRNAS-v0.5.9-UNTRUSTED-TRANSIENT-for-offline-signing
           path: ${{ runner.temp }}/signable/
           if-no-files-found: error
           retention-days: 1

@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.8 Stable Signed
+name: EmuExperimental - Android APK v0.5.9 Stable Signed
 on:
   push:
     branches:
@@ -32,6 +32,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
+        run: |
+          python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
+          mkdir -p android-app/app/src/main/jniLibs/arm64-v8a
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/gui_dependency_probe.c -ldl -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_gui_probe.so
       - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -69,7 +74,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.8-Stable-Signed-debug-apk
+          name: Drnas-Console-v0.5.9-Stable-Signed-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
