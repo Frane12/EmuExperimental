@@ -9,6 +9,9 @@ on:
       - "tools/package_gui_runtime.py"
       - "tools/package_bundled_runtime.py"
       - ".github/workflows/build-android.yml"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 permissions:
   contents: read
