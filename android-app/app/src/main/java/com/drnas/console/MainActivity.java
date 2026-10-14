@@ -95,7 +95,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.17");
+        append("DRNAS EMU · Runtime Core v0.5.17");
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
@@ -262,7 +262,7 @@ public final class MainActivity extends Activity {
         glyph.setPadding(dp(4),0,dp(13),0);
         header.addView(glyph);
         LinearLayout names=column();
-        names.addView(label("DRNAS CONSOLE",20,TEXT,true));
+        names.addView(label("DRNAS EMU",20,TEXT,true));
         names.addView(label("ADAPTIVE GAMING LAB · V0.5.17 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
