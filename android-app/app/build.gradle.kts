@@ -8,8 +8,8 @@ android {
         applicationId = "com.drnas.console"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-fex-bridge"
+        versionCode = 3
+        versionName = "0.2.2-wcp-fix"
     }
     buildTypes {
         release {
@@ -26,4 +26,5 @@ dependencies {
     // Offline inspection of untrusted .wcp TAR+XZ content, never execution.
     implementation("org.tukaani:xz:1.10")
     implementation("org.apache.commons:commons-compress:1.27.1")
+    testImplementation("junit:junit:4.13.2")
 }
