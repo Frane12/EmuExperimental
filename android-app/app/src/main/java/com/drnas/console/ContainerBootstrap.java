@@ -120,11 +120,16 @@ public final class ContainerBootstrap {
         return found;
     }
     private String prepare(boolean runWineboot) throws Exception {
+        // Provision BEFORE attempting vault lookup, even for a manually
+        // pressed Init button. This removes the first-launch APK copy race.
+        // The synchronized installer serializes concurrent first-run requests.
+        log("Ensuring embedded Proton 10, FEX 2609, DXVK and Turnip are ready...");
+        BundledComponents.install(ctx,this::log);
         File vault=new File(ctx.getFilesDir(),"wcp-vault");
-        if(!vault.isDirectory())throw new IOException("No WCP vault. Import FEXCore + Proton + DXVK first.");
+        if(!vault.isDirectory())throw new IOException("Bundled component vault unavailable (check storage space).");
         List<JSONObject> entries=inventory(vault);
         JSONObject bridge=findBridge(entries);
-        if(bridge==null)throw new IOException("FEX 2609 is not verified; import its WCP first");
+        if(bridge==null)throw new IOException("Bundled FEXCore verification incomplete; check [bundle] error above");
         log("FEX PE bridge verified in vault: "+bridge.optString("versionName"));
         File bridgeDir=new File(bridge.getString("stagedAt"));
         for(String dll:FEX_DLLS)existing(bridgeDir,dll);
