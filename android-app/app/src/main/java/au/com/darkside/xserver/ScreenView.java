@@ -853,14 +853,28 @@ public class ScreenView extends View {
      * @param y      New Y coordinate.
      * @param cursor The cursor to draw.
      */
+    private void invalidateGuestRect(int left,int top,int right,int bottom) {
+        if(_guestWidth<=0 || _guestHeight<=0) {
+            postInvalidate(left,top,right,bottom);
+            return;
+        }
+        // Dirty only the area covered by the old/new pointer in Android
+        // physical pixels. Repainting the entire Wine desktop on EVERY cursor
+        // event makes software X11 noticeably sluggish.
+        float scale=guestScale(),offsetX=guestLeft(scale),offsetY=guestTop(scale);
+        postInvalidate((int)Math.floor(offsetX+left*scale)-3,
+                       (int)Math.floor(offsetY+top*scale)-3,
+                       (int)Math.ceil(offsetX+right*scale)+3,
+                       (int)Math.ceil(offsetY+bottom*scale)+3);
+    }
+
     private void movePointer(int x, int y, Cursor cursor) {
         if (_drawnCursor != null) {
             int left = _drawnCursorX - _drawnCursor.getHotspotX();
             int top = _drawnCursorY - _drawnCursor.getHotspotY();
             Bitmap bm = _drawnCursor.getBitmap();
 
-            if (_guestWidth>0) postInvalidate();
-            else postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+            invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
             _drawnCursor = null;
         }
 
@@ -872,8 +886,7 @@ public class ScreenView extends View {
         int top = y - cursor.getHotspotY();
         Bitmap bm = cursor.getBitmap();
 
-        if (_guestWidth>0) postInvalidate();
-        else postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+        invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
     }
 
     /**
