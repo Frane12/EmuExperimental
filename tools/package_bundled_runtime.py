@@ -6,7 +6,6 @@ or extracted on a build runner. Every build records SHA-256 hashes, lengths
 and format markers for mandatory verification before first-use extraction.
 """
 import hashlib
-import io
 import json
 import subprocess
 import sys
@@ -91,7 +90,7 @@ def check_turnip_zip(archive):
             raise ValueError("Invalid Turnip shared library size")
         with z.open(info) as driver:
             header=driver.read(20)
-            if header[:5]!=b"\\x7fELF\\x02" or int.from_bytes(header[18:20],"little")!=183:
+            if header[:5]!=bytes([127,69,76,70,2]) or int.from_bytes(header[18:20],"little")!=183:
                 raise ValueError("Turnip library is not ELF64 AArch64")
         if "meta.json" not in z.namelist():
             raise ValueError("Turnip ZIP missing AdrenoTools meta.json")
@@ -133,7 +132,9 @@ def package(directory):
                     if not block:
                         break
                     hasher.update(block)
-            if component["kind"] == "Turnip":\n                check_turnip_zip(tmp)\n            tmp.replace(archive)
+            if component["kind"] == "Turnip":
+                check_turnip_zip(tmp)
+            tmp.replace(archive)
         finally:
             tmp.unlink(missing_ok=True)
         digest = hasher.hexdigest()
@@ -146,7 +147,8 @@ def package(directory):
                 "compression": component["compression"],
                 "bytes": size,
                 "sha256": digest,
-                **({"gpuTarget":component["gpuTarget"], "source":component["url"]}\n                   if component["kind"]=="Turnip" else {}),
+                **({"gpuTarget":component["gpuTarget"], "source":component["url"]}
+                   if component["kind"]=="Turnip" else {}),
             }
         )
     (output / "runtime-components-v1.json").write_text(json.dumps(manifest, indent=2) + "\n")
