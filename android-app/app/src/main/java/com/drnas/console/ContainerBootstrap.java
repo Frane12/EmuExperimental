@@ -154,10 +154,11 @@ public final class ContainerBootstrap {
             }
         }
         for(String note:unsupported)log("Package skipped: "+note);
-        if(proton==null)throw new IOException("Proton ARM64EC .wcp missing or invalid. Import it in Components.");
-        if(dxvk==null)throw new IOException("DXVK 1.10.3 .wcp missing or invalid. Import it in Components.");
-        if(turnip==null)throw new IOException("Turnip driver .zip missing or invalid. Import our .zip in Components.");
-        log("Selected Proton "+proton.version+", DXVK "+dxvk.version+", "+turnip.version);
+        if(proton==null)throw new IOException("Bundled Proton ARM64EC WCP missing or invalid.");
+        if(dxvk==null)throw new IOException("Bundled DXVK WCP missing or invalid.");
+        if(turnip==null)log("No custom Turnip ZIP: keep system Vulkan driver; Turnip can be imported later.");
+        log("Selected Proton "+proton.version+", DXVK "+dxvk.version+
+                (turnip==null?", system Vulkan only":", "+turnip.version));
 
         File base=new File(ctx.getFilesDir(),"containers/default");
         if(!base.isDirectory()&&!base.mkdirs())throw new IOException("Cannot allocate sandbox");
@@ -210,7 +211,8 @@ public final class ContainerBootstrap {
         plan.put("proton",proton.version).put("protonRoot",proton.folder.getAbsolutePath())
             .put("protonLibPath",wineConfig.getString("libPath")).put("protonWine",wine.getAbsolutePath())
             .put("fexCore",bridge.getString("versionName")).put("dxvk",dxvk.version)
-            .put("turnipArchive",turnip.version).put("turnipStore",turnip.folder.getAbsolutePath())
+            .put("turnipArchive",turnip==null?JSONObject.NULL:turnip.version)
+            .put("turnipStore",turnip==null?JSONObject.NULL:turnip.folder.getAbsolutePath())
             .put("prefix",prefix.getAbsolutePath()).put("hostApi",Build.VERSION.SDK_INT)
             .put("guestExecutableStarted",false)
             .put("nativeBionicHostAvailable",NativeHost.available())
