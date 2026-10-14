@@ -66,8 +66,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.4.0");
-        append("ARM64 Bionic NDK host added; Proton/guest launcher still not connected.");
+        append("DRNAS CONSOLE · Runtime Core v0.4.1");
+        append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
     @Override public void onConfigurationChanged(Configuration cfg) {
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.4 NDK EXPERIMENTAL",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.4.1 BIONIC WINE PROBE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -183,7 +183,7 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("EXPERIMENTAL BOOT · GUEST LAUNCH NOT YET CONNECTED",10,MUTED,true),pad(6,0));
+        content.addView(label("EXPERIMENTAL WINE CLI TEST · NO GAME EXECUTION",10,MUTED,true),pad(6,0));
     }
 
     private void showConsole() {
@@ -207,13 +207,13 @@ public final class MainActivity extends Activity {
         horizontal.addView(row);
         game.addView(horizontal,pad(0,6));
         game.addView(label("Proton 11 ARM64EC · FEXCore 2609 · DXVK 1.10.3",12,MUTED,false),pad(9,5));
-        note(game,"Game launch requires a glibc guest loader, an X server and graphics/audio connections. Profiles are not launched yet.");
+        note(game,"Game launch still requires a working Wine process, X11 and graphics/audio bridges. This build only probes wine --version.");
 
         LinearLayout bootPanel=card();
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (experimental)",true,v->startContainer());
-        note(bootPanel,"Native ARM64 NDK host probes Wine ELF and Vulkan on-device. Real Proton execution still requires a compatible glibc guest loader, X server and graphics/audio wiring.");
+        note(bootPanel,"Bionic Proton 11: test wine --version via system linker64 with 12-second watchdog. No game or Wine desktop launch. Errors and ELF magic are logged.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));

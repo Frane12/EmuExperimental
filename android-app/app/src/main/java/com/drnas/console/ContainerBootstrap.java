@@ -46,8 +46,7 @@ public final class ContainerBootstrap {
         new Thread(()->{
             String result="BOOT BLOCKED";boolean guestStarted=false;
             try {
-                prepare();
-                result="NDK HOST READY / GLIBC GUEST LOADER MISSING";
+                result=prepare();
             } catch(Throwable failure) {
                 result="BOOT BLOCKED: "+failure.getClass().getSimpleName()+": "+failure.getMessage();
                 log(result);
@@ -118,7 +117,7 @@ public final class ContainerBootstrap {
         }
         return found;
     }
-    private void prepare() throws Exception {
+    private String prepare() throws Exception {
         File vault=new File(ctx.getFilesDir(),"wcp-vault");
         if(!vault.isDirectory())throw new IOException("No WCP vault. Import FEXCore + Proton + DXVK first.");
         List<JSONObject> entries=inventory(vault);
@@ -225,9 +224,24 @@ public final class ContainerBootstrap {
         // Never pass untrusted Wine/Proton executables to ProcessBuilder:
         // dynamic glibc/PT_INTERP, executable storage and X11 must be solved.
         log("[ndk] Actual Bionic ARM64 native library executed successfully.");
-        log("BOOT WAITING: glibc userland/ELF interpreter, X11 display, audio and Turnip ICD activation.");
-        log("Wine guest process NOT STARTED; FEX DLL files are bridges, not an executable CPU emulator.");
-        log("Use the Wine ELF/PT_INTERP diagnostic above to select a compatible runtime adapter.");
+        log("GameNative Proton 11 is Android/Bionic-targeted; glibc should NOT be assumed.");
+        log("Beginning controlled Wine CLI --version attempt; no Windows guest/game.");
+        WineLaunchProbe.Result probe=WineLaunchProbe.run(proton.folder,wineConfig,prefix,this::log);
+        plan.put("wineCliProbeStatus",probe.status);
+        plan.put("wineCliEntrypoint",probe.candidate);
+        plan.put("wineCliVersionVerified",probe.versionPassed);
+        // A working wine --version would not establish initialized Wine prefix,
+        // FEX compatibility, graphics, X server, or an actual Windows process.
+        plan.put("wineLoaderConnected",probe.versionPassed);
+        WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
+        if(probe.versionPassed) {
+            log("WINE --version exited 0! Wine CLI reached (wineboot not attempted).");
+            log("Next: bounded wineboot --init; graphical and FEX paths are still untested.");
+            return "WINE CLI VERIFIED / WINEBOOT NOT INITIALIZED";
+        }
+        log("Wine CLI did not start successfully: "+probe.status);
+        log("X11/audio/Turnip Vulkan ICD are also NOT connected.");
+        return "NDK HOST READY / "+probe.status;
     }
     private static File findWindowsDir(File prefix) throws IOException {
         File[] roots={
