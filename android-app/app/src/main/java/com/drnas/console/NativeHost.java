@@ -24,6 +24,14 @@ public final class NativeHost {
     public static String probeFile(String path){
         return available()?nativeProbeFile(path):"Native ELF probe unavailable: "+ERROR;
     }
+    public static String cpuAssistProbe(){
+        return available()?nativeCpuAssistProbe():"CPU Assist unavailable: "+ERROR;
+    }
+    public static String cpuAssistBaseline(){
+        return available()?nativeCpuAssistBaseline():"CPU Assist unavailable: "+ERROR;
+    }
+    private static native String nativeCpuAssistProbe();
+    private static native String nativeCpuAssistBaseline();
     private static native String nativeHostInfo();
     private static native String nativeVulkanInfo();
     private static native String nativeProbeFile(String path);
