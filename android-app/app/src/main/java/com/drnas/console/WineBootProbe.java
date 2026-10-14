@@ -324,17 +324,37 @@ public final class WineBootProbe {
             throw new IOException("Invalid wineboot sandbox");
         if(Files.isSymbolicLink(probeRoot.toPath()))
             throw new IOException("Refuse symlinked wineboot sandbox");
-        // This is a dedicated test-only sandbox; never delete the live prefix.
+        // Preserve all user data, registry changes and installed runtimes across boots.
+        // An old verified prefix is reused only with the same staged Wine package.
+        File marker=new File(probeRoot,"drnas-wineboot-verified.txt");
+        String runtimeId=protonFolder.getCanonicalPath()+"\\n"+
+                template.getCanonicalPath()+"\\n"+template.length()+"\\n"+template.lastModified();
+        File templateRoot=new File(probeRoot,"template");
+        if(Files.isSymbolicLink(marker.toPath()))
+            throw new IOException("Invalid Wine prefix marker link");
+        if(marker.isFile()) {
+            File current=winePrefix(templateRoot);
+            String recorded=new String(Files.readAllBytes(marker.toPath()),StandardCharsets.UTF_8);
+            if(!runtimeId.equals(recorded))
+                return new Result("PREFIX_RUNTIME_CHANGED_BACKUP_REQUIRED",-1,0);
+            if(!validRegistry(new File(current,"user.reg")) ||
+                    !validRegistry(new File(current,"system.reg")))
+                return new Result("PREFIX_REGISTRY_REPAIR_REQUIRED",-1,0);
+            WinePrefixLayout.ensure(current,report);
+            report.accept("Reusing verified Wine prefix. Saved games and Mono/VC installs are preserved.");
+            return new Result("WINEBOOT_COMPLETED_GUEST_VERIFIED",0,0);
+        }
+        // Discard only an UNVERIFIED test prefix. Never delete a verified prefix.
         if(probeRoot.exists()) {
-            report.accept("Resetting previous disposable wineboot test sandbox");
+            report.accept("Resetting incomplete, unverified wineboot test sandbox");
             removeWithoutFollowingLinks(probeRoot);
         }
         if(!probeRoot.mkdirs())throw new IOException("Cannot make wineboot probe root");
-        File templateRoot=new File(probeRoot,"template");
-        report.accept("Unpacking disposable Wine prefix template. Existing prefix untouched.");
+        report.accept("Unpacking initial Wine prefix template.");
         WcpRuntimeStager.unpackPrefixPack(template,templateRoot,
                 msg->report.accept("[boot/prefix] "+msg));
         File isolated=winePrefix(templateRoot);
+        WinePrefixLayout.ensure(isolated,report);
         File sys32=new File(isolated,"drive_c/windows/system32");
         for(String dll:new String[]{"libarm64ecfex.dll","libwow64fex.dll"}) {
             File from=new File(originalWindows,"system32/"+dll);
@@ -533,8 +553,16 @@ public final class WineBootProbe {
         if(!ended)return new Result("WINEBOOT_TIMEOUT",-1,changed?1:0);
         int exit=child.exitValue();
         report.accept("Wineboot launcher exit="+exit);
-        return new Result(WineBootEvidence.classify(true,exit,complete,
-                guestVerified,count,changed),exit,changed?1:0);
+        String outcome=WineBootEvidence.classify(true,exit,complete,
+                guestVerified,count,changed);
+        if("WINEBOOT_COMPLETED_GUEST_VERIFIED".equals(outcome) ||
+                "WINEBOOT_PREFIX_INITIALIZED".equals(outcome)) {
+            if(Files.isSymbolicLink(marker.toPath()))
+                throw new IOException("Unsafe Wine prefix marker");
+            Files.write(marker.toPath(),runtimeId.getBytes(StandardCharsets.UTF_8));
+            report.accept("Verified Wine prefix preserved for subsequent sessions.");
+        }
+        return new Result(outcome,exit,changed?1:0);
         } finally {
             prestarted.close();
         }
