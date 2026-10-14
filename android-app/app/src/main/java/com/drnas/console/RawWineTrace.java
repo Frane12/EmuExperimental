@@ -20,6 +20,7 @@ final class RawWineTrace implements AutoCloseable {
     static final long MAX_BYTES=24L*1024*1024;
     static final String LATEST="latest-wineboot-raw.txt";
     private final BufferedOutputStream out;
+    private final File file;
     private long bytes;
     private boolean truncated;
     private boolean closed;
@@ -27,9 +28,14 @@ final class RawWineTrace implements AutoCloseable {
     private String issue;
 
     RawWineTrace(File directory) throws IOException {
+        this(directory,LATEST);
+    }
+    RawWineTrace(File directory,String name) throws IOException {
+        if(!name.matches("[a-z0-9-]+\\.txt"))throw new IOException("Invalid trace name");
         if(!directory.isDirectory()&&!directory.mkdirs())
             throw new IOException("Could not create private RAW logs directory");
-        File f=new File(directory,LATEST);
+        File f=new File(directory,name);
+        file=f;
         if(java.nio.file.Files.isSymbolicLink(f.toPath()))
             throw new IOException("Refuse symlinked RAW log target");
         out=new BufferedOutputStream(new FileOutputStream(f,false),65536);
@@ -60,6 +66,13 @@ final class RawWineTrace implements AutoCloseable {
     synchronized long size(){return bytes;}
     synchronized boolean wasTruncated(){return truncated;}
     synchronized String issue(){return issue;}
+    synchronized void copyTo(OutputStream target) throws IOException {
+        if(!closed)out.flush();
+        try(java.io.FileInputStream input=new java.io.FileInputStream(file)) {
+            byte[] buffer=new byte[65536];int n;
+            while((n=input.read(buffer))!=-1)target.write(buffer,0,n);
+        }
+    }
 
     @Override public synchronized void close() throws IOException {
         if(closed)return;

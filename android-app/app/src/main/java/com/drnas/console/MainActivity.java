@@ -82,7 +82,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.5");
+        append("DRNAS CONSOLE · Runtime Core v0.5.6");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
@@ -179,7 +179,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.5 RAW TRACE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.6 RAW TRACE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -232,6 +232,7 @@ public final class MainActivity extends Activity {
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
+        addButton(bootPanel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
         addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
         addButton(bootPanel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
@@ -289,6 +290,7 @@ public final class MainActivity extends Activity {
         note(panel,"Full session TXT includes all console messages. RAW Wine TXT separately captures unfiltered Wine/wineserver output (up to 24 MiB per wineboot test). Save it after the test finishes.");
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
+        addButton(panel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
         addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
         });
@@ -426,6 +428,10 @@ public final class MainActivity extends Activity {
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
         else { append("Wine CLI requested; check live Diagnostics"); showSection("Diagnostics"); }
+    }
+    private void openWineGui() {
+        if(container.isBusy()){append("Wait until container initialization finishes.");return;}
+        startActivity(new Intent(this,WineGuiActivity.class));
     }
     private void startWineboot() {
         if(!container.startWineboot()) append("Container bootstrap already in progress");

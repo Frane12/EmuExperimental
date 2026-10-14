@@ -207,7 +207,8 @@ public final class ContainerBootstrap {
         log("[ndk] "+NativeHost.probeFile(wine.getAbsolutePath()));
         log("[ndk] "+NativeHost.vulkanInfo());
         JSONObject plan=new JSONObject();
-        plan.put("proton",proton.version).put("protonWine",wine.getAbsolutePath())
+        plan.put("proton",proton.version).put("protonRoot",proton.folder.getAbsolutePath())
+            .put("protonLibPath",wineConfig.getString("libPath")).put("protonWine",wine.getAbsolutePath())
             .put("fexCore",bridge.getString("versionName")).put("dxvk",dxvk.version)
             .put("turnipArchive",turnip.version).put("turnipStore",turnip.folder.getAbsolutePath())
             .put("prefix",prefix.getAbsolutePath()).put("hostApi",Build.VERSION.SDK_INT)
