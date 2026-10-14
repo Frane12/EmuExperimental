@@ -86,11 +86,14 @@ public final class WineServerDiagnostics {
         final Process process;
         final Thread output;
         final Consumer<String> log;
+        private boolean closed;
         ManagedServer(Process process,Thread output,Consumer<String> log) {
             this.process=process;this.output=output;this.log=log;
         }
         public boolean alive(){return process.isAlive();}
-        @Override public void close() {
+        @Override public synchronized void close() {
+            if(closed)return;
+            closed=true;
             process.destroy();
             try {
                 if(!process.waitFor(2,TimeUnit.SECONDS)) {

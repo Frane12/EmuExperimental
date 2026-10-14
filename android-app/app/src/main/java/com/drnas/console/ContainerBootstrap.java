@@ -262,13 +262,14 @@ public final class ContainerBootstrap {
             plan.put("winebootStatus",outcome.code);
             plan.put("winebootExit",outcome.exitCode);
             plan.put("winebootRegistryEvidenceCount",outcome.changedRegistries);
-            boolean verified="WINEBOOT_PREFIX_INITIALIZED".equals(outcome.code);
+            boolean verified="WINEBOOT_PREFIX_INITIALIZED".equals(outcome.code) ||
+                    "WINEBOOT_COMPLETED_GUEST_VERIFIED".equals(outcome.code);
             plan.put("winebootGuestVerified",verified);
             WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
             if(verified) {
-                log("Wineboot exit 0 + registry mutation confirmed in disposable prefix!");
+                log("Wineboot completion + independent Windows CMD execution confirmed in disposable prefix!");
                 log("No graphical display or game; X11/audio/Turnip still not connected.");
-                return "WINEBOOT PREFIX INITIALIZED / GUI UNAVAILABLE";
+                return outcome.code+" / GUI UNAVAILABLE";
             }
             log("Wineboot test did not establish successful initialization: "+outcome.code);
             return "WINE CLI VERIFIED / "+outcome.code;

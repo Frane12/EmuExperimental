@@ -69,6 +69,52 @@ public final class WineBootProbe {
         return result;
     }
 
+    static List<String> guestCommand(File linker,File wine,String marker) {
+        if(!marker.matches("DRNAS_GUEST_[A-Fa-f0-9]{32}"))
+            throw new IllegalArgumentException("Invalid guest marker");
+        List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        args.set(args.size()-1,"cmd.exe");
+        args.add("/d"); args.add("/c"); args.add("echo "+marker);
+        return args;
+    }
+
+    private static boolean verifyGuest(File linker,File wine,File cwd,
+                                       Map<String,String> env,Consumer<String> report,
+                                       RawWineTrace raw) throws Exception {
+        String marker="DRNAS_GUEST_"+java.util.UUID.randomUUID().toString().replace("-","");
+        ProcessBuilder pb=new ProcessBuilder(guestCommand(linker,wine,marker));
+        pb.directory(cwd).redirectErrorStream(true);
+        pb.environment().clear(); pb.environment().putAll(env);
+        report.accept("Windows CMD execution probe (12s); requires exact unique stdout marker + exit 0.");
+        Process p=pb.start();
+        java.util.concurrent.atomic.AtomicBoolean seen=new java.util.concurrent.atomic.AtomicBoolean();
+        Thread reader=new Thread(()->{
+            try(BufferedReader lines=new BufferedReader(new InputStreamReader(
+                    p.getInputStream(),StandardCharsets.UTF_8))) {
+                String line;
+                while((line=lines.readLine())!=null) {
+                    raw.write("guest-cmd",line);
+                    // Trace lines containing the command do not count as execution.
+                    if(line.trim().equals(marker))seen.set(true);
+                }
+            } catch(IOException ex){report.accept("CMD output: "+ex.getClass().getSimpleName());}
+        },"drnas-cmd-proof");
+        reader.setDaemon(true);reader.start();
+        boolean ended=false;
+        try {
+            ended=p.waitFor(12,TimeUnit.SECONDS);
+            if(!ended){p.destroyForcibly();p.waitFor(2,TimeUnit.SECONDS);}
+            reader.join(1500);
+            boolean verified=ended && p.exitValue()==0 && seen.get() && !reader.isAlive();
+            report.accept("Windows CMD verified="+verified+", marker="+seen.get()+
+                    ", exit="+(ended?p.exitValue():"timeout"));
+            return verified;
+        } finally {
+            if(p.isAlive())p.destroyForcibly();
+            p.getInputStream().close();
+        }
+    }
+
     /**
      * Wine's ntdll/unix/loader.c -> __wine_main() checks
      * WINELOADERNOEXEC before check_command_line(). Wine's ordinary
@@ -285,6 +331,16 @@ public final class WineBootProbe {
         report.accept("Applied FEX bridge DLL pair inside disposable wineboot prefix");
         String before=registryFingerprint(isolated);
         report.accept("Baseline registries: "+registrySummary(isolated));
+        File updateStamp=new File(isolated,".update-timestamp");
+        if(updateStamp.isFile() && !Files.isSymbolicLink(updateStamp.toPath()) &&
+                updateStamp.length()<=128) {
+            String stamp=new String(Files.readAllBytes(updateStamp.toPath()),StandardCharsets.US_ASCII).trim();
+            report.accept("Template update timestamp="+stamp);
+            // Wineboot skips wine.inf initialization when this starts with disable,
+            // or matches wine.inf's mtime. Reset ONLY our disposable copy.
+            Files.delete(updateStamp.toPath());
+            report.accept("Reset disposable update timestamp to request wine.inf initialization.");
+        }
 
         File libdir=new File(protonFolder,
                 WcpRuntimeStager.clean(wineConfig.getString("libPath"),false));
@@ -319,7 +375,7 @@ public final class WineBootProbe {
         if(wineServer.isFile() && WineLaunchProbe.inspect(wineServer).runnable)
             env.put("WINESERVER",wineServer.getAbsolutePath());
         env.put("LC_ALL","C");
-        env.put("WINEDEBUG","+process,+module,+loaddll"); // focus on PE/DLL module resolution
+        env.put("WINEDEBUG","+process,+module,+loaddll,+wineboot,+seh");
         env.put("PROTON_NO_NTSYNC","1");
         // Wine's dlls/ntdll/loader.c checks WINEBOOTSTRAPMODE before allowing
         // built-in kernel32/kernelbase lookup when prefix/system32 is empty.
@@ -372,6 +428,7 @@ public final class WineBootProbe {
             report.accept("Wineboot ProcessBuilder rejected: "+ex.getMessage());
             return new Result("WINEBOOT_LINKER_DENIED",-1,0);
         }
+        WineBootEvidence evidence=new WineBootEvidence();
         Thread output=new Thread(()->{
             int count=0,emitted=0,highlights=0;
             try(BufferedReader lines=new BufferedReader(new InputStreamReader(
@@ -382,6 +439,7 @@ public final class WineBootProbe {
                     // The file receives *all* stdout/stderr lines, including
                     // the 23k+ lines hidden by the UI highlight limit.
                     raw.write("wineboot",line);
+                    evidence.observe(line);
                     String lower=line.toLowerCase(java.util.Locale.ROOT);
                     boolean important=lower.contains("kernel32") ||
                             lower.contains("kernelbase") ||lower.contains("ntdll")||
@@ -424,6 +482,17 @@ public final class WineBootProbe {
             report.accept("A wineserver child may remain; do not reuse this test prefix.");
         }
         output.join(1500);
+        boolean complete=evidence.completed() && !output.isAlive();
+        report.accept("Wineboot completion marker="+complete+", error/exception lines="+evidence.errors());
+        for(String line:evidence.tail())report.accept("[wineboot tail] "+line);
+        boolean guestVerified=false;
+        if(ended && child.exitValue()==0 && complete && prestarted.alive()) {
+            try {guestVerified=verifyGuest(linker,wine,protonFolder,env,report,raw);}
+            catch(IOException error){report.accept("Windows CMD could not start: "+error.getMessage());}
+        }
+        // Registry snapshots while the persistent server is alive can predate
+        // its final flush. Close our server BEFORE inspecting persisted files.
+        prestarted.close();
         String after=registryFingerprint(isolated);
         boolean changed=!before.equals(after);
         int count=0;
@@ -434,17 +503,8 @@ public final class WineBootProbe {
         if(!ended)return new Result("WINEBOOT_TIMEOUT",-1,changed?1:0);
         int exit=child.exitValue();
         report.accept("Wineboot launcher exit="+exit);
-        if(exit!=0) {
-            if(exit==127) {
-                report.accept("EXIT 127 despite prestarted wineserver (if server remained alive).");
-                report.accept("This narrows but does NOT prove the failing Wine startup stage.");
-                return new Result("WINEBOOT_EARLY_EXIT_127",exit,changed?1:0);
-            }
-            return new Result("WINEBOOT_EXIT_"+exit,exit,changed?1:0);
-        }
-        if(count<2)return new Result("WINEBOOT_EXIT_0_REGISTRY_INCOMPLETE",0,changed?1:0);
-        if(!changed)return new Result("WINEBOOT_EXIT_0_REGISTRY_UNCHANGED",0,0);
-        return new Result("WINEBOOT_PREFIX_INITIALIZED",0,count);
+        return new Result(WineBootEvidence.classify(true,exit,complete,
+                guestVerified,count,changed),exit,changed?1:0);
         } finally {
             prestarted.close();
         }

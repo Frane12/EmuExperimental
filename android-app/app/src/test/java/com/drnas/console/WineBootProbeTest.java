@@ -10,6 +10,15 @@ import java.util.List;
 
 /** Synthetic sandbox tests only; never execute a real guest binary in CI. */
 public class WineBootProbeTest {
+    @Test public void guestProofUsesWindowsCmdAndRejectsInjectedMarkers() {
+        File linker=new File("/system/bin/linker64"),wine=new File("/data/verified/wine");
+        String marker="DRNAS_GUEST_0123456789abcdef0123456789abcdef";
+        List<String> args=WineBootProbe.guestCommand(linker,wine,marker);
+        assertEquals("cmd.exe",args.get(2));
+        assertEquals("echo "+marker,args.get(5));
+        assertThrows(IllegalArgumentException.class,()->
+                WineBootProbe.guestCommand(linker,wine,marker+" & del C:\\*"));
+    }
     @Test public void launchesWineNotWineserverWithBoundedInitCommand() {
         List<String> args=WineBootProbe.command(new File("/system/bin/linker64"),
                 new File("/data/user/0/com.drnas.console/files/proton/lib/wine/aarch64-unix/wine"));
