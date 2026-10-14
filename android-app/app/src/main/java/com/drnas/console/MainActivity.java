@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.4.3");
+        append("DRNAS CONSOLE · Runtime Core v0.4.4");
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.4.3 LINKER ARG FIX",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.4.4 WINEBOOT LAB",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -183,7 +183,7 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("EXPERIMENTAL WINE CLI TEST · NO GAME EXECUTION",10,MUTED,true),pad(6,0));
+        content.addView(label("EXPERIMENTAL WINEBOOT TEST · NO GRAPHICS OR GAME EXECUTION",10,MUTED,true),pad(6,0));
     }
 
     private void showConsole() {
@@ -212,8 +212,9 @@ public final class MainActivity extends Activity {
         LinearLayout bootPanel=card();
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
-        addButton(bootPanel,"▶ Start container (experimental)",true,v->startContainer());
-        note(bootPanel,"Try real Bionic Wine --version with corrected Android linker64 argv and LD_LIBRARY_PATH. This may reveal Android execution policy or missing libs. No games or Wine desktop yet.");
+        addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
+        addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
+        note(bootPanel,"Native Bionic Wine --version is verified. Optional Wineboot --init experiment creates a separate disposable prefix, with a 50-second watchdog and registry checks. No X11 or games yet.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));
@@ -263,7 +264,8 @@ public final class MainActivity extends Activity {
         liveLog.setPadding(dp(12),dp(11),dp(12),dp(11));
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
         panel.addView(liveLog,pad(0,10));
-        addButton(panel,"▶ Start container (experimental)",true,v->startContainer());
+        addButton(panel,"▶ Start container (Wine CLI)",true,v->startContainer());
+        addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
         });
@@ -282,7 +284,14 @@ public final class MainActivity extends Activity {
     }
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
-        else { append("Container boot requested; check live Diagnostics"); showSection("Diagnostics"); }
+        else { append("Wine CLI requested; check live Diagnostics"); showSection("Diagnostics"); }
+    }
+    private void startWineboot() {
+        if(!container.startWineboot()) append("Container bootstrap already in progress");
+        else {
+            append("Wineboot init test requested in an isolated disposable prefix (50s watchdog)");
+            showSection("Diagnostics");
+        }
     }
     private void selectWcp() {
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);

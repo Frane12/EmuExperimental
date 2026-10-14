@@ -27,9 +27,9 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.4.3: corrected Android linker64 argv; Bionic Wine CLI test, ARM64 JNI. " +
+        return "EXPERIMENTAL v0.4.4: verified Bionic Wine CLI + opt-in isolated wineboot init test. " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
-                "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. X11, audio, Turnip ICD, Wine prefix init and Windows/game execution are not implemented.";
+                "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. Opt-in wineboot attempts disposable prefix initialization; real success needs exit 0 and registry changes. X11/audio/Turnip ICD and games are not connected.";
     }
     private RuntimeProbe() {}
 }

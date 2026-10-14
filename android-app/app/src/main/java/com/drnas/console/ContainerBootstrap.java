@@ -40,13 +40,15 @@ public final class ContainerBootstrap {
         ctx=context.getApplicationContext();this.callback=callback;
     }
     public synchronized boolean isBusy() {return busy;}
-    public synchronized boolean start() {
+    public boolean start() {return start(false);}
+    public boolean startWineboot() {return start(true);}
+    private synchronized boolean start(boolean runWineboot) {
         if(busy)return false;
         busy=true;
         new Thread(()->{
             String result="BOOT BLOCKED";boolean guestStarted=false;
             try {
-                result=prepare();
+                result=prepare(runWineboot);
             } catch(Throwable failure) {
                 result="BOOT BLOCKED: "+failure.getClass().getSimpleName()+": "+failure.getMessage();
                 log(result);
@@ -117,7 +119,7 @@ public final class ContainerBootstrap {
         }
         return found;
     }
-    private String prepare() throws Exception {
+    private String prepare(boolean runWineboot) throws Exception {
         File vault=new File(ctx.getFilesDir(),"wcp-vault");
         if(!vault.isDirectory())throw new IOException("No WCP vault. Import FEXCore + Proton + DXVK first.");
         List<JSONObject> entries=inventory(vault);
@@ -235,9 +237,29 @@ public final class ContainerBootstrap {
         plan.put("wineLoaderConnected",probe.versionPassed);
         WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
         if(probe.versionPassed) {
-            log("WINE --version exited 0! Wine CLI reached (wineboot not attempted).");
-            log("Next: bounded wineboot --init; graphical and FEX paths are still untested.");
-            return "WINE CLI VERIFIED / WINEBOOT NOT INITIALIZED";
+            log("WINE --version exited 0! Wine CLI verified.");
+            if(!runWineboot) {
+                log("Wineboot not attempted. Use dedicated Wineboot button to run isolated init test.");
+                return "WINE CLI VERIFIED / WINEBOOT NOT INITIALIZED";
+            }
+            log("Starting isolated wineboot --init experiment. Regular prefix will NOT be modified.");
+            WineBootProbe.Result outcome=WineBootProbe.run(
+                    proton.folder,wineConfig,existing(proton.folder,prefixPackPath),
+                    winDir,base,this::log);
+            plan.put("winebootAttempted",true);
+            plan.put("winebootStatus",outcome.code);
+            plan.put("winebootExit",outcome.exitCode);
+            plan.put("winebootRegistryEvidenceCount",outcome.changedRegistries);
+            boolean verified="WINEBOOT_PREFIX_INITIALIZED".equals(outcome.code);
+            plan.put("winebootGuestVerified",verified);
+            WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
+            if(verified) {
+                log("Wineboot exit 0 + registry mutation confirmed in disposable prefix!");
+                log("No graphical display or game; X11/audio/Turnip still not connected.");
+                return "WINEBOOT PREFIX INITIALIZED / GUI UNAVAILABLE";
+            }
+            log("Wineboot test did not establish successful initialization: "+outcome.code);
+            return "WINE CLI VERIFIED / "+outcome.code;
         }
         log("Wine CLI did not start successfully: "+probe.status);
         log("X11/audio/Turnip Vulkan ICD are also NOT connected.");
