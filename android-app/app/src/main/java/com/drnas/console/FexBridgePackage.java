@@ -117,22 +117,13 @@ public final class FexBridgePackage {
             String version = profile.optString("versionName");
             if (!version.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,80}"))
                 throw new IOException("Invalid FEXCore version label");
+            // GameNative FEX 2609 has FOUR mappings: 2 PE DLLs plus 2
+            // AArch64 Unix bridge libraries. Earlier O3 WCPs had only 2.
+            // Both forms are accepted, but destinations are strictly fixed.
             JSONArray mappings = profile.optJSONArray("files");
-            if (mappings == null || mappings.length() != 2)
-                throw new IOException("FEXCore bridge requires exactly 2 DLL mappings");
-            Set<String> required = new HashSet<>();
-            for (int i=0; i<mappings.length(); i++) {
-                JSONObject mapping = mappings.getJSONObject(i);
-                String src = normalize(mapping.getString("source"));
-                String dest = mapping.getString("target");
-                String expected = "${system32}/" + src.substring(src.lastIndexOf('/') + 1);
-                if ((!ARM64EC.equals(src) && !WOW64.equals(src)) || !expected.equals(dest))
-                    throw new IOException("Untrusted FEXCore bridge mapping");
-                required.add(src);
-            }
-            if (!required.contains(ARM64EC) || !required.contains(WOW64)
-                    || ecMachine < 0 || wowMachine < 0)
-                throw new IOException("Missing required FEXCore bridge pair");
+            boolean unixBridges = validateMappings(mappings);
+            if (ecMachine < 0 || wowMachine < 0)
+                throw new IOException("Missing required FEXCore PE bridge pair");
             // AMD64 + ARM64EC hybrids may carry 0x8664, ARM64 0xaa64.
             // We record machine IDs but do not claim Proton ABI compatibility.
             JSONObject summary = new JSONObject();
@@ -143,6 +134,7 @@ public final class FexBridgePackage {
             summary.put("wow64BridgeSha256",wowHash);
             summary.put("arm64ecPEMachine","0x"+Integer.toHexString(ecMachine));
             summary.put("wow64PEMachine","0x"+Integer.toHexString(wowMachine));
+            summary.put("unixBridgesInArchive",unixBridges);
             summary.put("status","fex_bridge_pair_verified_not_activated");
             summary.put("runtimeCompatibility","NOT_TESTED");
             File destDir = new File(vault, "fexcore/" + version + "-" + sha256.substring(0,12));
@@ -165,6 +157,39 @@ public final class FexBridgePackage {
         } finally {
             if (!committed) removeTree(tmp);
         }
+    }
+
+    /**
+     * Verify the manifest before using any extracted PE modules. WCPs from
+     * GameNative currently ship 4 explicit mappings; older variants ship 2.
+     * Nothing in a profile is allowed to escape the approved target folders.
+     */
+    static boolean validateMappings(JSONArray mappings) throws Exception {
+        if (mappings == null || (mappings.length()!=2 && mappings.length()!=4))
+            throw new IOException("FEXCore requires exactly 2 PE or 2 PE + 2 Unix mappings");
+        Set<String> found=new HashSet<>();
+        for(int i=0;i<mappings.length();i++) {
+            JSONObject mapping=mappings.getJSONObject(i);
+            String source=normalize(mapping.getString("source"));
+            String target=mapping.getString("target");
+            final String expected;
+            if (source.equals(ARM64EC) || source.equals(WOW64))
+                expected="${system32}/"+source.substring(source.lastIndexOf('/')+1);
+            else if(source.equals("aarch64-unix/libarm64ecfex.so") ||
+                    source.equals("aarch64-unix/libwow64fex.so"))
+                expected="${libdir}/wine/aarch64-unix/"+
+                        source.substring(source.lastIndexOf('/')+1);
+            else throw new IOException("Unexpected FEXCore library mapping: "+source);
+            if(!expected.equals(target) || !found.add(source))
+                throw new IOException("Untrusted or duplicated FEXCore mapping: "+source);
+        }
+        if(!found.contains(ARM64EC) || !found.contains(WOW64))
+            throw new IOException("Missing FEXCore PE pair");
+        boolean unix1=found.contains("aarch64-unix/libarm64ecfex.so");
+        boolean unix2=found.contains("aarch64-unix/libwow64fex.so");
+        if(unix1!=unix2 || (mappings.length()==4 && !unix1))
+            throw new IOException("Incomplete FEXCore AArch64 Unix pair");
+        return unix1;
     }
 
     private static void transferExact(TarArchiveInputStream src, ByteArrayOutputStream out,
