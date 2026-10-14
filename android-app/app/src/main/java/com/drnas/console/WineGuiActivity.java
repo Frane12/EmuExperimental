@@ -36,7 +36,7 @@ public final class WineGuiActivity extends Activity {
         toolbar.setHorizontalScrollBarEnabled(false);toolbar.addView(bar);layout.addView(toolbar);
         status=new TextView(this);status.setTextColor(Color.WHITE);
         status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setText("DRNAS 0.5.9 · Starting X11 / Wine GUI test");
+        status.setText("DRNAS 0.5.10 · Starting X11 / Wine GUI test");
         layout.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
         logView=new StableLogView(this,0xff7be4c3);
         layout.addView(logView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));

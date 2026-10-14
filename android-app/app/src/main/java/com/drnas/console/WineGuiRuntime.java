@@ -44,8 +44,37 @@ final class WineGuiRuntime {
             Files.move(part.toPath(),dest.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             repaired++;
         }
-        log.accept("GUI runtime verified: "+hashes.length()+" Bionic libraries; installed/repaired="+repaired);
+        List<String> names=new ArrayList<>();
+        for(Iterator<String> it=hashes.keys();it.hasNext();)names.add(it.next());
+        int aliases=installAliases(new File(root,"lib"),names);
+        log.accept("GUI runtime verified: "+hashes.length()+" Bionic libraries; installed/repaired="+repaired+"; linker aliases="+aliases);
         return root;
+    }
+    static String aliasFor(String name) throws IOException {
+        if(!name.matches("lib[A-Za-z0-9_+-]+\\.so(?:\\.[A-Za-z0-9_.+-]+)?"))
+            throw new IOException("Invalid GUI library name");
+        // Keep Android's own unversioned Vulkan loader as the platform default.
+        // Wine's explicitly versioned libvulkan.so.1 remains available.
+        if(name.startsWith("libvulkan.so") || name.endsWith(".so"))return null;
+        return name.substring(0,name.indexOf(".so")+3);
+    }
+    static int installAliases(File lib,Collection<String> names) throws IOException {
+        Map<String,String> aliases=new LinkedHashMap<>();
+        for(String name:names) {
+            String alias=aliasFor(name);if(alias==null)continue;
+            String previous=aliases.put(alias,name);
+            if(previous!=null&&!previous.equals(name))throw new IOException("Ambiguous GUI alias: "+alias);
+        }
+        for(Map.Entry<String,String> entry:aliases.entrySet()) {
+            File target=new File(lib,entry.getValue());
+            if(!target.isFile() || Files.isSymbolicLink(target.toPath()))throw new IOException("GUI alias target missing: "+entry.getValue());
+            java.nio.file.Path alias=new File(lib,entry.getKey()).toPath();
+            java.nio.file.Path expected=java.nio.file.Paths.get(entry.getValue());
+            if(Files.isSymbolicLink(alias)&&Files.readSymbolicLink(alias).equals(expected))continue;
+            // Only APK-owned aliases in gui-runtime/v1/lib are changed.
+            Files.deleteIfExists(alias);Files.createSymbolicLink(alias,expected);
+        }
+        return aliases.size();
     }
     private static String sha(byte[] data) throws Exception {
         byte[] digest=MessageDigest.getInstance("SHA-256").digest(data);StringBuilder s=new StringBuilder();

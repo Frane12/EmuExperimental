@@ -17,8 +17,8 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 24
-        versionName = "0.5.9-x11-runtime-follow"
+        versionCode = 25
+        versionName = "0.5.10-x11-linker-aliases"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
