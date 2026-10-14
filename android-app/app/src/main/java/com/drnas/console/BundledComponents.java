@@ -149,7 +149,13 @@ final class BundledComponents {
                 !kinds.contains("DXVK")) throw new IOException("Required bundled component missing");
     }
 
-    private static String sniff(byte[] a) {
+    static String sniff(byte[] a) {
+        // Turnip packages are ZIP. Check their magic separately from WCP formats;
+        // otherwise every valid bundled Turnip ZIP is rejected on first boot.
+        if (a != null && a.length >= 4 && (a[0]&255) == 0x50 &&
+                (a[1]&255) == 0x4b && (a[2]&255) == 0x03 && (a[3]&255) == 0x04)
+            return "ZIP";
+        if (a == null || a.length < 6) return "unknown";
         if ((a[0]&255) == 0x28 && (a[1]&255) == 0xb5 && (a[2]&255) == 0x2f &&
                 (a[3]&255) == 0xfd) return "ZSTD";
         if ((a[0]&255) == 0xfd && (a[1]&255) == 0x37 && (a[2]&255) == 0x7a &&

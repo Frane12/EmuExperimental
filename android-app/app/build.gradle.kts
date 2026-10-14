@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 27
-        versionName = "0.5.12-fex-four-mappings-autostart"
+        versionCode = 28
+        versionName = "0.5.13-turnip-zip-magic-fix"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
