@@ -139,6 +139,19 @@ public final class WineLaunchProbe {
         return command;
     }
 
+    /**
+     * Android linker64 remains /proc/self/exe for a Wine ELF started as
+     * linker64 <wine>. Wine's bin/wine loader consequently derives an invalid
+     * /apex/.../../lib/wine/aarch64-unix/ntdll.so default path. Wine 10's
+     * load_ntdll() also searches WINEDLLPATH, so point it at this package's
+     * own lib/wine root (NOT the architecture suffix). WINELOADER is used
+     * later for child launching. No global library paths are modified.
+     */
+    static void configureWineDllLookup(Map<String,String> env,File libdir,File wine) {
+        env.put("WINEDLLPATH",new File(libdir,"wine").getAbsolutePath());
+        env.put("WINELOADER",wine.getAbsolutePath());
+    }
+
     private static File prefixRoot(File prefix) {
         File nested=new File(prefix,".wine");
         return new File(nested,"drive_c").isDirectory()?nested:prefix;
@@ -231,6 +244,11 @@ public final class WineLaunchProbe {
         // Bionic parses LD_LIBRARY_PATH when dynamically loading guest ELF.
         // Passing --library-path on the linker command line is invalid.
         env.put("LD_LIBRARY_PATH",libPath.toString());
+        configureWineDllLookup(env,libdir,target);
+        File unixNtdll=new File(libdir,"wine/aarch64-unix/ntdll.so");
+        report.accept("Wine UNIX ntdll.so at staged Proton path: "+
+                (unixNtdll.isFile()?"present":"MISSING")+
+                " | WINEDLLPATH="+env.get("WINEDLLPATH"));
         env.put("LC_ALL","C");
         env.put("WINEDEBUG","-all");
         env.put("PROTON_NO_NTSYNC","1"); // deterministic first test
