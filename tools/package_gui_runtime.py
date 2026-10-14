@@ -10,7 +10,7 @@ SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
 ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        'libXcursor.so.1','libXi.so.6','libXinerama.so.1','libXfixes.so.3',
        'libXcomposite.so.1','libXxf86vm.so.1','libfreetype.so.6','libfontconfig.so.1',
-       'libvulkan.so.1']
+       'libvulkan.so.1','libpulse.so.0']
 SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so'}
 def package(archive,output):
     archive=Path(archive)
@@ -68,3 +68,4 @@ def package(archive,output):
             z.writestr('manifest.json',json.dumps({'source':URL,'source_sha256':SHA256,'files':manifest},indent=2))
         print('GUI runtime: '+str(len(libs))+' ARM64 libraries, '+str(output.stat().st_size)+' bytes')
 if __name__=='__main__':package(sys.argv[1],sys.argv[2])
+

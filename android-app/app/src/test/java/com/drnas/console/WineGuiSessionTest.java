@@ -12,7 +12,7 @@ public class WineGuiSessionTest {
         assertEquals(1280,WineGuiSession.DESKTOP_WIDTH);
         assertEquals(720,WineGuiSession.DESKTOP_HEIGHT);
         assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
-                "explorer.exe","/desktop=shell,1280x720"),
+                "explorer.exe","/desktop=shell,1280x720","winefile.exe"),
                 WineGuiSession.command(LINKER,WINE));
     }
     @Test public void oldWinecfgAndWinefileRemainExplicitOnly() {
@@ -36,3 +36,4 @@ public class WineGuiSessionTest {
         assertEquals("-all",env.get("WINEDEBUG"));
     }
 }
+

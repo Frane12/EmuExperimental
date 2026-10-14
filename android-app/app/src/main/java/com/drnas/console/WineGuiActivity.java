@@ -75,9 +75,18 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Exit desktop"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Reset Wine","Exit desktop"},(dialog,which)->{
                     if(which==0)showKeyboard();
-                    else finish();
+                    else if(which==1) {
+                        Intent restart=new Intent(this,WineGuiActivity.class);
+                        new Thread(()->{
+                            try {
+                                WineGuiSession.stopActive();
+                                if(xserver!=null)xserver.stop();
+                                runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
+                            } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
+                        },"drnas-desktop-reset").start();
+                    } else finish();
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
@@ -186,8 +195,9 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onDestroy() {
         destroyed=true;
-        if(xserver!=null)xserver.stop();
-        if(session!=null)new Thread(session::close,"drnas-desktop-stop").start();
+        if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
+        else if(xserver!=null)xserver.stop();
         super.onDestroy();
     }
 }
+

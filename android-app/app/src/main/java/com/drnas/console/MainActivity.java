@@ -74,6 +74,7 @@ public final class MainActivity extends Activity {
     private View winePowerLed;
     private Button windowsExplorerButton;
     private Button turnOnWindowsButton;
+    private Button resetWineButton;
     private ProgressBar wineStartupBar;
     private TextView wineStartupText;
 
@@ -117,7 +118,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS EMU · Runtime Core v0.5.18");
+        append("DRNAS EMU · Runtime Core v0.5.19");
         wineReady=readyForDesktop();
         if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
@@ -332,6 +333,7 @@ public final class MainActivity extends Activity {
         }
         if(turnOnWindowsButton!=null)turnOnWindowsButton.setEnabled(!wineBooting && !ready);
         if(windowsExplorerButton!=null)windowsExplorerButton.setEnabled(ready);
+        if(resetWineButton!=null)resetWineButton.setEnabled(!wineBooting && !container.isBusy() && readyForDesktop());
         if(wineStartupBar!=null) {
             wineStartupBar.setVisibility(wineBooting || bootProgress.percent()>0?
                     View.VISIBLE:View.GONE);
@@ -357,6 +359,8 @@ public final class MainActivity extends Activity {
         ledParams.leftMargin=dp(15);
         power.addView(winePowerLed,ledParams);
         desktop.addView(power,pad(0,8));
+        resetWineButton=button("RESET WINE",false,v->resetWine());
+        desktop.addView(resetWineButton,pad(4,6));
 
         windowsExplorerButton=button("WINDOWS EXPLORER",false,v->openWineGui());
         desktop.addView(windowsExplorerButton,pad(10,12));
@@ -615,6 +619,23 @@ public final class MainActivity extends Activity {
         if(container.isBusy()){append("Wait until container initialization finishes.");return;}
         startActivity(new Intent(this,WineGuiActivity.class).putExtra("DRNAS_GUI_APP","files"));
     }
+    private void resetWine() {
+        if(wineBooting || container.isBusy() || !readyForDesktop())return;
+        wineBooting=true;wineReady=false;bootProgress.begin();refreshPowerPanel();
+        new Thread(()->{
+            Exception failure=null;
+            try {WineGuiSession.stopActive();}
+            catch(Exception e){failure=e;}
+            final Exception error=failure;
+            runOnUiThread(()->{
+                wineBooting=false;wineReady=error==null && readyForDesktop();
+                bootProgress.finish(wineReady);refreshPowerPanel();
+                if(error!=null)Toast.makeText(this,"Wine reset failed: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                else if(!isFinishing())openWineGui();
+            });
+        },"drnas-reset-wine").start();
+    }
+
     private void startWineboot() {
         if(wineBooting || container.isBusy()) {
             Toast.makeText(this,"Wine initialization is already running.",Toast.LENGTH_SHORT).show();
@@ -690,4 +711,5 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+
 

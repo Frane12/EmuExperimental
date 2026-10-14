@@ -643,7 +643,7 @@ public class ScreenView extends View {
         if (_isBlanked == flag) return;
 
         _isBlanked = flag;
-        postInvalidate();
+        postInvalidateOnAnimation();
 
         if (!_isBlanked) _xServer.resetScreenSaver();
     }
@@ -788,7 +788,7 @@ public class ScreenView extends View {
 
         // Android insets / keyboard can resize the physical View. Do not
         // destroy X11 root resources while Explorer has active client windows.
-        if (_rootWindow != null) { postInvalidate(); return; }
+        if (_rootWindow != null) { postInvalidateOnAnimation(); return; }
         int rootWidth=getGuestWidth(),rootHeight=getGuestHeight();
         _rootWindow = new Window(_rootId, _xServer, null, this, null, 0, 0, rootWidth, rootHeight, 0, false, true);
         _sharedClipboardWindow = new Window(_xServer.nextFreeResourceId()+1, _xServer, null, this, _rootWindow, -1, -1, 1, 1, 0, true, false); // hidden window managing android <-> xServer clipboard
@@ -853,16 +853,16 @@ public class ScreenView extends View {
      * @param y      New Y coordinate.
      * @param cursor The cursor to draw.
      */
-    private void invalidateGuestRect(int left,int top,int right,int bottom) {
+    public void invalidateGuestRect(int left,int top,int right,int bottom) {
         if(_guestWidth<=0 || _guestHeight<=0) {
-            postInvalidate(left,top,right,bottom);
+            postInvalidateOnAnimation(left,top,right,bottom);
             return;
         }
         // Dirty only the area covered by the old/new pointer in Android
         // physical pixels. Repainting the entire Wine desktop on EVERY cursor
         // event makes software X11 noticeably sluggish.
         float scale=guestScale(),offsetX=guestLeft(scale),offsetY=guestTop(scale);
-        postInvalidate((int)Math.floor(offsetX+left*scale)-3,
+        postInvalidateOnAnimation((int)Math.floor(offsetX+left*scale)-3,
                        (int)Math.floor(offsetY+top*scale)-3,
                        (int)Math.ceil(offsetX+right*scale)+3,
                        (int)Math.ceil(offsetY+bottom*scale)+3);

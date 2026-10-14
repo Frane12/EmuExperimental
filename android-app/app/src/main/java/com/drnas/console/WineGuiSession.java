@@ -11,7 +11,19 @@ import java.util.function.Consumer;
 
 /** A bounded GUI session on the already verified disposable Wineboot prefix. */
 final class WineGuiSession implements AutoCloseable {
+    private static WineGuiSession active;
+    private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
+    private volatile PulseAudioRuntime audio;
+
+    static void stopActive() throws Exception {
+        WineGuiSession current;
+        synchronized(WineGuiSession.class){current=active;}
+        if(current!=null){
+            current.close();
+            if(!current.finished.await(10,TimeUnit.SECONDS))throw new IOException("Previous Wine session is still stopping");
+        }
+    }
     private volatile Process launcher;
     private volatile WineServerDiagnostics.ManagedServer server;
 
@@ -28,7 +40,7 @@ final class WineGuiSession implements AutoCloseable {
         // Wine's special desktop name "shell" enables its built-in taskbar
         // and Start menu; "DRNAS" used in v0.5.17 intentionally did not.
         args.add("/desktop=shell,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
-        if ("files".equals(app)) args.add("winefile.exe");
+        if ("files".equals(app) || "desktop".equals(app)) args.add("winefile.exe");
         else if ("config".equals(app)) args.add("winecfg.exe");
         else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
@@ -45,6 +57,18 @@ final class WineGuiSession implements AutoCloseable {
         run(context,log,raw,"desktop");
     }
     void run(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
+        synchronized(WineGuiSession.class) {
+            if(active!=null)throw new IOException("A previous desktop is still stopping; retry shortly");
+            active=this;
+        }
+        try { runOwned(context,log,raw,app); }
+        finally {
+            close();
+            synchronized(WineGuiSession.class){if(active==this)active=null;}
+            finished.countDown();
+        }
+    }
+    private void runOwned(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(
                 new File(base,"boot-plan.json").toPath()),StandardCharsets.UTF_8));
@@ -85,6 +109,11 @@ final class WineGuiSession implements AutoCloseable {
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
         TurnipRuntime.configureWine(context,plan,env,log);
+        TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
+        if(stopped)return;
+        audio=new PulseAudioRuntime();
+        try {audio.start(context,env,log,raw);}
+        catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+"; desktop remains available.");}
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
@@ -104,7 +133,7 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
-                     "config".equals(app)?" with winecfg.exe":" as default desktop")+
+                     "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
                     "; embedded software X11 renderer.");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
@@ -131,8 +160,10 @@ final class WineGuiSession implements AutoCloseable {
     }
     @Override public void close() {
         stopped=true;
+        PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 

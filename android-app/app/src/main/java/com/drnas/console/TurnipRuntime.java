@@ -98,5 +98,26 @@ final class TurnipRuntime {
                 "Android's system Vulkan loader may ignore ICD env vars without AdrenoTools.");
     }
 
+    static void probeWine(Context context,File gui,Map<String,String> env,
+                          Consumer<String> log,RawWineTrace raw) {
+        if(!env.containsKey("VK_DRIVER_FILES"))return;
+        Process p=null;
+        try {
+            File nativeDir=new File(context.getApplicationInfo().nativeLibraryDir);
+            File loader=new File(gui,"lib/libvulkan.so.1");
+            ProcessBuilder pb=new ProcessBuilder("/system/bin/linker64",
+                    new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath()).redirectErrorStream(true);
+            pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
+            p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
+            boolean ended=p.waitFor(8,java.util.concurrent.TimeUnit.SECONDS);
+            if(!ended)p.destroyForcibly();
+            output.join(1000);
+            if(ended && p.exitValue()==0)log.accept("Turnip physical device verified with Wine's Bionic loader. X11 Vulkan presentation is not verified by this probe.");
+            else log.accept("Turnip activation not verified; device test required. Wine desktop can still use software X11.");
+        } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
+        finally {if(p!=null && p.isAlive())p.destroyForcibly();}
+    }
+
     private TurnipRuntime(){}
 }
+
