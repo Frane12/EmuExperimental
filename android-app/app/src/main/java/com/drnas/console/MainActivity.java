@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.4.5");
+        append("DRNAS CONSOLE · Runtime Core v0.4.7 (CPU Assist Lab)");
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -259,8 +259,8 @@ public final class MainActivity extends Activity {
 
         LinearLayout assist = card();
         assist.addView(label("CPU ASSIST / HEXAGON LAB",12,ACCENT,true),pad(0,8));
-        assist.addView(label("CPU baseline and FastRPC library visibility only. Hexagon NPU is NOT executing jobs in v0.1.",12,MUTED,false),pad(0,9));
-        addButton(assist,"▶ Test CPU Assist (no NPU)",false,v->testCpuAssist());
+        assist.addView(label("Optimized CPU baseline plus NNAPI device enumeration, FastRPC and QNN loader probes. NPU execution NOT enabled.",12,MUTED,false),pad(0,9));
+        addButton(assist,"▶ Test CPU + NPU access (no execution)",false,v->testCpuAssist());
 
         LinearLayout panel=card();
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
