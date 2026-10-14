@@ -5,6 +5,7 @@ No Wine, Microsoft fonts, GPU drivers or redirect shims are copied.
 import hashlib,json,re,subprocess,sys,tarfile,tempfile,urllib.request,zipfile
 from pathlib import Path
 URL='https://downloads.gamenative.app/imagefs_bionic.txz'
+FALLBACK_URL='https://pub-9fcd5294bd0d4b85a9d73615bf98f3b5.r2.dev/imagefs_bionic.txz'
 SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
 ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        'libXcursor.so.1','libXi.so.6','libXinerama.so.1','libXfixes.so.3',
@@ -13,7 +14,14 @@ ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
 SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so'}
 def package(archive,output):
     archive=Path(archive)
-    if not archive.exists():urllib.request.urlretrieve(URL,archive)
+    if not archive.exists():
+        part=archive.with_suffix('.download')
+        for url in (URL,FALLBACK_URL):
+            result=subprocess.run(['curl','--fail','--location','--retry','2','--max-time','180','--user-agent','DRNAS-Console-build/0.5.9','--output',str(part),url])
+            if result.returncode==0 and hashlib.sha256(part.read_bytes()).hexdigest()==SHA256:
+                part.replace(archive);break
+            part.unlink(missing_ok=True)
+        else:raise RuntimeError('Neither public upstream mirror supplied the pinned rootfs')
     if hashlib.sha256(archive.read_bytes()).hexdigest()!=SHA256:
         raise RuntimeError('Bionic rootfs checksum changed: refuse unreviewed runtime')
     with tempfile.TemporaryDirectory() as temp,tarfile.open(archive,'r:xz') as tf:

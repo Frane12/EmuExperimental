@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - "android-app/**"
+      - "tools/package_gui_runtime.py"
       - ".github/workflows/build-android.yml"
   workflow_dispatch:
 permissions:

@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/build-for-offline-signing.yml"
       - "android-app/**"
+      - "tools/package_gui_runtime.py"
   workflow_dispatch:
 permissions:
   contents: read
