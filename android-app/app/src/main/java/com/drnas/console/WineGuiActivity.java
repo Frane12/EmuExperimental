@@ -52,6 +52,7 @@ public final class WineGuiActivity extends Activity {
         xserver=new XServer(this,6012,null);
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+        xserver.getScreen().setRelativeTouchMode(true);
         xserver.getScreen().setLayerType(View.LAYER_TYPE_SOFTWARE,null);
         xserver.getScreen().setFocusableInTouchMode(true);
         layout.addView(xserver.getScreen(),new FrameLayout.LayoutParams(
