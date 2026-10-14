@@ -17,6 +17,8 @@ public final class WineGuiActivity extends Activity {
     private WineGuiSession session;
     private RawWineTrace raw;
     private TextView status;
+    private StableLogView logView;
+    private final StringBuilder visibleLog=new StringBuilder();
     private boolean started;
     private volatile boolean destroyed;
     private int notices;
@@ -30,8 +32,13 @@ public final class WineGuiActivity extends Activity {
         Button back=new Button(this);back.setText("Stop / Back");
         bar.addView(keyboard);bar.addView(export);bar.addView(back);layout.addView(bar);
         status=new TextView(this);status.setTextColor(Color.WHITE);
+        status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setText("Starting embedded X11 · software Canvas · Wine GUI test");
-        layout.addView(status);
+        layout.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
+        logView=new StableLogView(this,0xff7be4c3);
+        layout.addView(logView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));
+        Button latest=new Button(this);latest.setText("Latest log");bar.addView(latest);
+        latest.setOnClickListener(v->logView.showLatest());
         try {raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");}
         catch(IOException e){status.setText("GUI logging unavailable: "+e.getMessage());setContentView(layout);return;}
         session=new WineGuiSession();
@@ -73,11 +80,17 @@ public final class WineGuiActivity extends Activity {
     }
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
+        runOnUiThread(()->{
+            if(destroyed)return;
+            if(visibleLog.length()>30000)visibleLog.delete(0,Math.min(12000,visibleLog.length()));
+            visibleLog.append(line).append('\n');logView.setSnapshot(visibleLog.toString());
+        });
         // Full trace stays on disk; update status only for milestones/errors.
         if(line.contains("mapped window") || line.contains("Canvas drew") || line.contains("BLOCKED") || line.contains("VERIFIED") ||
                 line.contains("ended") || line.contains("No Wine window") || notices++<3)
             runOnUiThread(()->{if(!destroyed)status.setText(line);});
     }
+    private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(request!=601 || result!=RESULT_OK || data==null || data.getData()==null)return;

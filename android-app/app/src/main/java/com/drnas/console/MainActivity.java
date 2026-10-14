@@ -45,7 +45,10 @@ public final class MainActivity extends Activity {
     private static final int WARM = 0xFFFFC476;
 
     private LinearLayout content;
-    private TextView liveLog;
+    private StableLogView liveLog;
+    private ScrollView pageScroll;
+    private String renderedSection;
+    private int logPosition;
     private TextView stateBadge;
     private final StringBuilder log = new StringBuilder();
     private SessionLogStore completeLog;
@@ -71,18 +74,17 @@ public final class MainActivity extends Activity {
             @Override public void onComplete(boolean guestStarted,String status) {
                 runOnUiThread(()->{
                     append("Container status: "+status);
-                    if("Diagnostics".equals(section))render();
                 });
             }
         });
         sessions = new SessionManager(new SessionManager.Listener() {
             @Override public void onStateChanged(SessionManager.State status) {
                 append("Session state: " + status);
-                render();
+                if(stateBadge!=null)stateBadge.setText("State: "+status);
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.6");
+        append("DRNAS CONSOLE · Runtime Core v0.5.7");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
@@ -166,7 +168,12 @@ public final class MainActivity extends Activity {
     }
     private void showSection(String s) { section=s; render(); }
     private void render() {
+        boolean sameSection=section.equals(renderedSection);
+        int pageY=sameSection && pageScroll!=null?pageScroll.getScrollY():0;
+        if(liveLog!=null)logPosition=liveLog.getScrollY();
+        liveLog=null;stateBadge=null;
         ScrollView scroll = new ScrollView(this);
+        pageScroll=scroll;renderedSection=section;
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BACK);
         content=column();
@@ -179,7 +186,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.6 RAW TRACE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.7 RAW TRACE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -202,6 +209,7 @@ public final class MainActivity extends Activity {
             default: showConsole();
         }
         content.addView(label("EXPERIMENTAL WINEBOOT TEST · NO GRAPHICS OR GAME EXECUTION",10,MUTED,true),pad(6,0));
+        scroll.post(()->scroll.scrollTo(0,pageY));
     }
 
     private void showConsole() {
@@ -281,12 +289,12 @@ public final class MainActivity extends Activity {
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
         addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
         addButton(panel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
-        liveLog=label(log.toString(),12,ACCENT,false);
-        liveLog.setTypeface(Typeface.MONOSPACE);
-        liveLog.setTextIsSelectable(true);
-        liveLog.setPadding(dp(12),dp(11),dp(12),dp(11));
+        liveLog=new StableLogView(this,ACCENT);
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
-        panel.addView(liveLog,pad(0,10));
+        panel.addView(liveLog,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(220)));
+        liveLog.setSnapshot(log.toString());liveLog.restorePosition(logPosition);
+        addButton(panel,"↓ Latest log (manual)",false,v->{if(liveLog!=null)liveLog.showLatest();});
         note(panel,"Full session TXT includes all console messages. RAW Wine TXT separately captures unfiltered Wine/wineserver output (up to 24 MiB per wineboot test). Save it after the test finishes.");
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
@@ -297,6 +305,7 @@ public final class MainActivity extends Activity {
         addButton(panel,"■ Stop process",false,v->sessions.stop());
         addButton(panel,"Clear visible log",false,v->{
             log.setLength(0);
+            if(liveLog!=null)liveLog.setSnapshot("");
             append("Log reset");
         });
     }
@@ -318,7 +327,7 @@ public final class MainActivity extends Activity {
         }
         if(log.length()>30000)log.delete(0,Math.min(12000,log.length()));
         log.append(msg);
-        if(liveLog!=null)liveLog.setText(log.toString());
+        if(liveLog!=null)liveLog.setSnapshot(log.toString());
     }
 
     private void exportSessionLog() {
