@@ -5,7 +5,7 @@ android {
     namespace = "com.drnas.console"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.drnas.console"
+        applicationId = "com.drnas.console.cpuassist"
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
