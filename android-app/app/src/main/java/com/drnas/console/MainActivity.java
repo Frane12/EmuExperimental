@@ -92,11 +92,29 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.10");
+        append("DRNAS CONSOLE · Runtime Core v0.5.11");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
+        autoInstallAndBoot();
+    }
+    /** Offline bundle install is performed on a worker: no document picker or tap. */
+    private void autoInstallAndBoot() {
+        append("Checking embedded Proton 10 + FEX 2609 + DXVK 1.10.3; automatic boot enabled.");
+        new Thread(()->{
+            try {
+                BundledComponents.install(this,this::append);
+                runOnUiThread(()->{
+                    append("All bundled archives installed. Starting isolated Wine initialization automatically.");
+                    startWineboot();
+                });
+            } catch(Exception error) {
+                append("Automatic runtime installation FAILED: "+error.getClass().getSimpleName()+
+                        ": "+error.getMessage());
+                append("No automatic boot attempted. Existing manual component import remains available.");
+            }
+        },"drnas-offline-bundle-first-run").start();
     }
     @Override public void onConfigurationChanged(Configuration cfg) {
         super.onConfigurationChanged(cfg);
@@ -205,7 +223,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.10 RAW TRACE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.11 OFFLINE AUTOBOOT",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -227,15 +245,14 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("EXPERIMENTAL WINEBOOT TEST · NO GRAPHICS OR GAME EXECUTION",10,MUTED,true),pad(6,0));
+        content.addView(label("EXPERIMENTAL WINDOWS RUNTIME · GAME EXECUTION NOT YET VALIDATED",10,MUTED,true),pad(6,0));
         scroll.post(()->scroll.scrollTo(0,pageY));
     }
 
     private void showConsole() {
         content.addView(label("SESSION LAB / ANDROID",11,ACCENT,true),pad(0,6));
         heading("PC gaming, your rules.");
-        content.addView(label("Proof of Android process lifecycle first. " +
-                "Proton 11, FEXCore 2609, DXVK 1.10.3 and Turnip remain modular.",14,MUTED,false),pad(0,20));
+        content.addView(label("Proton 10 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are shipped inside this APK. They install automatically on first launch; Turnip remains optional.",14,MUTED,false),pad(0,20));
         LinearLayout game = card();
         game.addView(label("SELECTED GAME PROFILE",10,ACCENT,true),pad(0,8));
         game.addView(label(currentGame,23,TEXT,true),pad(0,9));
@@ -256,7 +273,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout bootPanel=card();
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
-        bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
+        bootPanel.addView(label("Auto-installs bundled Proton 10, FEX 2609 and DXVK 1.10.3, then initializes Wine without requiring a component picker. Custom Turnip ZIP can still be imported separately.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(bootPanel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
@@ -279,7 +296,7 @@ public final class MainActivity extends Activity {
     private void showComponents() {
         content.addView(label("VERSIONED COMPONENT VAULT",11,ACCENT,true),pad(0,6));
         heading("Your engine parts.");
-        content.addView(label("Import Proton ARM64EC WCP, FEXCore 2609 WCP, DXVK WCP and your Turnip .zip. Start container extracts them into an isolated sandbox.",13,MUTED,false),pad(0,18));
+        content.addView(label("Proton 10 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are included and provisioned automatically. Optional import is for alternative WCPs and Turnip ZIP.",13,MUTED,false),pad(0,18));
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
@@ -290,8 +307,7 @@ public final class MainActivity extends Activity {
         List<String> items=vault.list();
         if(items.isEmpty()) installed.addView(label("No components staged on this phone.",13,MUTED,false),pad(0,6));
         for(String item:items) installed.addView(label("◉ "+item,12,TEXT,false),pad(3,12));
-        installed.addView(label("Our example backend inventory (not installed here):\n" +
-                "Proton 10 ARM64EC • FEXCore 2609 O3 • DXVK 1.10.3 • Turnip A840",12,MUTED,false),pad(7,0));
+        installed.addView(label("Default APK bundle: Proton 10 ARM64EC • FEXCore 2609 • DXVK 1.10.3. Optional: your own Turnip ZIP",12,MUTED,false),pad(7,0));
     }
 
     private void showDiagnostics() {
