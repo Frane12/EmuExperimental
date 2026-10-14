@@ -21,7 +21,7 @@ final class BundledComponents {
     private static final long LIMIT = 768L * 1024 * 1024;
     private static final String MANIFEST = "runtime-components-v1.json";
 
-    static void install(Context context, Consumer<String> log) throws Exception {
+    static synchronized void install(Context context, Consumer<String> log) throws Exception {
         JSONObject manifest;
         try (InputStream in = context.getAssets().open(MANIFEST)) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
