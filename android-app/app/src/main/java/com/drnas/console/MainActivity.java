@@ -17,6 +17,10 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ProgressBar;
+import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.drawable.GradientDrawable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -64,6 +68,14 @@ public final class MainActivity extends Activity {
     private boolean resumed;
     private boolean autoGuiPending;
     private boolean startupWaitingForFolder;
+    private final WineBootProgress bootProgress=new WineBootProgress();
+    private boolean wineBooting;
+    private boolean wineReady;
+    private View winePowerLed;
+    private Button windowsExplorerButton;
+    private Button turnOnWindowsButton;
+    private ProgressBar wineStartupBar;
+    private TextView wineStartupText;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -76,15 +88,25 @@ public final class MainActivity extends Activity {
         }
         vault = new ComponentStore(this);
         container = new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
-            @Override public void onLog(String msg) { runOnUiThread(()->append(msg)); }
+            @Override public void onLog(String msg) {
+                runOnUiThread(()->{
+                    append(msg);
+                    if(wineBooting && bootProgress.advance(msg))refreshPowerPanel();
+                });
+            }
             @Override public void onComplete(boolean guestStarted,String status) {
                 runOnUiThread(()->{
                     append("Container status: "+status);
-                    if(status.startsWith("WINEBOOT_PREFIX_INITIALIZED") ||
-                            status.startsWith("WINEBOOT_COMPLETED_GUEST_VERIFIED")) {
-                        autoGuiPending=true;
-                        launchPendingGui();
-                    }
+                    boolean verified=(status.startsWith("WINEBOOT_PREFIX_INITIALIZED") ||
+                            status.startsWith("WINEBOOT_COMPLETED_GUEST_VERIFIED")) &&
+                            readyForDesktop();
+                    wineBooting=false;
+                    wineReady=verified;
+                    bootProgress.finish(verified);
+                    // The user turns Wine on first, then explicitly opens
+                    // Windows Explorer. Never launch the GUI automatically.
+                    autoGuiPending=false;
+                    refreshPowerPanel();
                 });
             }
         });
@@ -95,12 +117,15 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS EMU · Runtime Core v0.5.17");
+        append("DRNAS EMU · Runtime Core v0.5.18");
+        wineReady=readyForDesktop();
+        if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
-        offerSharedFolderOnFirstLaunch();
+        // No automatic initialization on Activity launch: TURN ON WINDOWS is explicit.
+        // SAF shared-folder selection remains available under Android files.
     }
     /** Android SAF cannot grant the Downloads ROOT; choose Download/DRNAS or Documents. */
     private void offerSharedFolderOnFirstLaunch() {
@@ -248,6 +273,8 @@ public final class MainActivity extends Activity {
         int pageY=sameSection && pageScroll!=null?pageScroll.getScrollY():0;
         if(liveLog!=null){logPosition=liveLog.getScrollY();logFollowing=liveLog.isFollowing();}
         liveLog=null;stateBadge=null;
+        winePowerLed=null;windowsExplorerButton=null;turnOnWindowsButton=null;
+        wineStartupBar=null;wineStartupText=null;
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;renderedSection=section;
         SystemBarInsets.apply(scroll);
@@ -263,7 +290,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS EMU",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.17 · 1280 × 720",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.18 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -290,20 +317,65 @@ public final class MainActivity extends Activity {
     }
 
     /** Friendly launchpad; RAW boot and Wine logs stay on disk, not on screen. */
+    private GradientDrawable powerLight(boolean ready) {
+        GradientDrawable light=new GradientDrawable();
+        light.setShape(GradientDrawable.OVAL);
+        light.setColor(ready ? 0xff32db82 : 0xffee5555);
+        light.setStroke(dp(2),ready?0xffa4ffcd:0xffffabab);
+        return light;
+    }
+    private void refreshPowerPanel() {
+        boolean ready=wineReady && !wineBooting;
+        if(winePowerLed!=null) {
+            winePowerLed.setBackground(powerLight(ready));
+            winePowerLed.setContentDescription(ready?"Wine ready":"Wine not ready");
+        }
+        if(turnOnWindowsButton!=null)turnOnWindowsButton.setEnabled(!wineBooting && !ready);
+        if(windowsExplorerButton!=null)windowsExplorerButton.setEnabled(ready);
+        if(wineStartupBar!=null) {
+            wineStartupBar.setVisibility(wineBooting || bootProgress.percent()>0?
+                    View.VISIBLE:View.GONE);
+            wineStartupBar.setProgress(bootProgress.percent());
+        }
+        if(wineStartupText!=null) {
+            wineStartupText.setText(bootProgress.phase()+
+                    (wineBooting ? "  •  korak "+bootProgress.percent()+"%" : ""));
+            wineStartupText.setTextColor(ready?ACCENT:wineBooting?WARM:MUTED);
+        }
+    }
+
+    /** Two-step power + Explorer UI; logs exist only in private files. */
     private void showConsole() {
-        heading("Windows desktop");
-        content.addView(label("1280 × 720  ·  Proton 11 ARM64EC  ·  X11",14,MUTED,false),pad(0,16));
+        heading("DRNAS Windows");
         LinearLayout desktop=card();
-        desktop.addView(label("DRNAS EMU",15,ACCENT,true),pad(0,12));
-        addButton(desktop,"▶ Open Windows desktop",true,v->startDesktop());
-        addButton(desktop,"Open file manager (R:)",false,v->startFiles());
-        addButton(desktop,"Wine configuration",false,v->startConfig());
-        content.addView(label("Windows files can be shared through the Android R: folder.",
-                13,MUTED,false),pad(9,4));
+        LinearLayout power=horizontal();
+        turnOnWindowsButton=button("TURN ON WINDOWS",true,v->startWineboot());
+        LinearLayout.LayoutParams onParams=new LinearLayout.LayoutParams(0,dp(52),1);
+        power.addView(turnOnWindowsButton,onParams);
+        winePowerLed=new View(this);
+        LinearLayout.LayoutParams ledParams=new LinearLayout.LayoutParams(dp(23),dp(23));
+        ledParams.leftMargin=dp(15);
+        power.addView(winePowerLed,ledParams);
+        desktop.addView(power,pad(0,8));
+
+        windowsExplorerButton=button("WINDOWS EXPLORER",false,v->openWineGui());
+        desktop.addView(windowsExplorerButton,pad(10,12));
+        wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        wineStartupBar.setMax(100);
+        wineStartupBar.setIndeterminate(false);
+        wineStartupBar.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT));
+        desktop.addView(wineStartupBar,pad(10,3));
+        wineStartupText=label("",12,MUTED,false);
+        desktop.addView(wineStartupText,pad(7,6));
+        refreshPowerPanel();
+
+        content.addView(label("1280 × 720 · Proton 11 ARM64EC · Wine Start + taskbar",
+                13,MUTED,false),pad(8,12));
         LinearLayout folder=card();
         folder.addView(label("ANDROID FILES",12,ACCENT,true),pad(0,8));
         addButton(folder,"Select Android folder for R:",false,v->requestSharedFolder());
         addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
+        addButton(folder,"Wine configuration",false,v->startConfig());
     }
 
     private void showComponents() {
@@ -531,7 +603,12 @@ public final class MainActivity extends Activity {
         else { append("Wine CLI requested; output retained in private logs."); }
     }
     private void openWineGui() {
-        if(container.isBusy()){append("Wait until container initialization finishes.");return;}
+        if(container.isBusy() || wineBooting || !wineReady || !readyForDesktop()) {
+            wineReady=false;
+            refreshPowerPanel();
+            Toast.makeText(this,"Turn on Windows first.",Toast.LENGTH_SHORT).show();
+            return;
+        }
         startActivity(new Intent(this,WineGuiActivity.class));
     }
     private void openWineFiles() {
@@ -539,10 +616,24 @@ public final class MainActivity extends Activity {
         startActivity(new Intent(this,WineGuiActivity.class).putExtra("DRNAS_GUI_APP","files"));
     }
     private void startWineboot() {
-        if(!container.startWineboot()) append("Container bootstrap already in progress");
-        else {
-            append("Bundled runtime verification + Wineboot requested; please wait for status before opening GUI.");
+        if(wineBooting || container.isBusy()) {
+            Toast.makeText(this,"Wine initialization is already running.",Toast.LENGTH_SHORT).show();
+            return;
         }
+        if(wineReady && readyForDesktop()) {
+            Toast.makeText(this,"Windows is ready. Open Windows Explorer.",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        wineBooting=true;
+        wineReady=false;
+        bootProgress.begin();
+        refreshPowerPanel();
+        if(!container.startWineboot()) {
+            wineBooting=false;
+            bootProgress.finish(false);
+            refreshPowerPanel();
+            Toast.makeText(this,"Could not start Wine initialization.",Toast.LENGTH_LONG).show();
+        } else append("User started Wine initialization; phase progress enabled.");
     }
     private void selectWcp() {
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
