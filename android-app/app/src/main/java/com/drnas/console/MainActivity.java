@@ -273,6 +273,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout panel=card();
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
+        addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
         liveLog=label(log.toString(),12,ACCENT,false);
         liveLog.setTypeface(Typeface.MONOSPACE);
         liveLog.setTextIsSelectable(true);
@@ -280,7 +281,6 @@ public final class MainActivity extends Activity {
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
         panel.addView(liveLog,pad(0,10));
         note(panel,"Old on-screen lines may be trimmed, but all emitted session events are kept in a private TXT file until you export it. Wine's internally suppressed debug lines are not part of the app event log.");
-        addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Start native smoke test",false,v->{
