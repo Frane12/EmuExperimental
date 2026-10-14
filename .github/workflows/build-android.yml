@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.20 Persistent Prefix Mono VC Live R:
+name: EmuExperimental - Android APK v0.5.20 Persistent Prefix Mono VC Live R Drive
 on:
   push:
     branches:
