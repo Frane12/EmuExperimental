@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <elf.h>
 #include <dlfcn.h>
+#include <vulkan/vulkan.h>
 #include <inttypes.h>
 #include <limits.h>
 
@@ -48,6 +49,38 @@ Java_com_drnas_console_NativeHost_nativeVulkanInfo(JNIEnv *env, jclass clazz) {
         "System Vulkan library loaded; vkEnumerateInstanceVersion not exported");
     dlclose(vk);
     return (*env)->NewStringUTF(env, out);
+}
+
+/* Probe the system Vulkan DEVICE name, never an assumed GPU ID.
+ * Unsupported chip -> fail closed to stock Vulkan, not a random Turnip ZIP. */
+JNIEXPORT jstring JNICALL
+Java_com_drnas_console_NativeHost_nativeVulkanDeviceName(JNIEnv *env,jclass clazz) {
+    (void)clazz;
+    void *vk=dlopen("libvulkan.so",RTLD_NOW|RTLD_LOCAL);
+    if (!vk)return (*env)->NewStringUTF(env,"");
+    PFN_vkCreateInstance make=(PFN_vkCreateInstance)dlsym(vk,"vkCreateInstance");
+    PFN_vkDestroyInstance destroy=(PFN_vkDestroyInstance)dlsym(vk,"vkDestroyInstance");
+    PFN_vkEnumeratePhysicalDevices enumerate=(PFN_vkEnumeratePhysicalDevices)dlsym(vk,"vkEnumeratePhysicalDevices");
+    PFN_vkGetPhysicalDeviceProperties props=(PFN_vkGetPhysicalDeviceProperties)dlsym(vk,"vkGetPhysicalDeviceProperties");
+    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE]={0};
+    if(make && destroy && enumerate && props) {
+        VkApplicationInfo app={.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO,.pApplicationName="DRNAS probe",.apiVersion=VK_API_VERSION_1_0};
+        VkInstanceCreateInfo ci={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&app};
+        VkInstance instance=VK_NULL_HANDLE;
+        if(make(&ci,NULL,&instance)==VK_SUCCESS) {
+            uint32_t count=1;
+            VkPhysicalDevice device=VK_NULL_HANDLE;
+            if(enumerate(instance,&count,&device)==VK_SUCCESS && count>0 && device) {
+                VkPhysicalDeviceProperties p;
+                memset(&p,0,sizeof(p));
+                props(device,&p);
+                snprintf(name,sizeof(name),"%s",p.deviceName);
+            }
+            destroy(instance,NULL);
+        }
+    }
+    dlclose(vk);
+    return (*env)->NewStringUTF(env,name);
 }
 
 static const char *wine_kind(uint16_t type) {
