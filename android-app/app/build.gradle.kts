@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 28
-        versionName = "0.5.13-turnip-zip-magic-fix"
+        versionCode = 29
+        versionName = "0.5.14-ntdll-permission-probe"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
