@@ -36,7 +36,7 @@ public final class WineGuiActivity extends Activity {
         toolbar.setHorizontalScrollBarEnabled(false);toolbar.addView(bar);layout.addView(toolbar);
         status=new TextView(this);status.setTextColor(Color.WHITE);
         status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setText("DRNAS 0.5.10 · Starting X11 / Wine GUI test");
+        status.setText("DRNAS 0.5.11 · Starting X11 / Wine GUI test");
         layout.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
         logView=new StableLogView(this,0xff7be4c3);
         layout.addView(logView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));
@@ -45,6 +45,7 @@ public final class WineGuiActivity extends Activity {
         try {raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");}
         catch(IOException e){status.setText("GUI logging unavailable: "+e.getMessage());setContentView(layout);return;}
         session=new WineGuiSession();
+        final String launchApp="files".equals(getIntent().getStringExtra("DRNAS_GUI_APP")) ? "files" : "config";
         xserver=new XServer(this,6012,null);
         xserver.setDiagnosticListener(this::log);
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
@@ -53,7 +54,7 @@ public final class WineGuiActivity extends Activity {
                 log("Embedded X11 server listening only on 127.0.0.1:6012; screen="+
                         xserver.getScreen().getWidth()+"x"+xserver.getScreen().getHeight());
                 new Thread(()->{
-                    try {session.run(WineGuiActivity.this, WineGuiActivity.this::log,raw);}
+                    try {session.run(WineGuiActivity.this, WineGuiActivity.this::log,raw,launchApp);}
                     catch(Throwable e){log("GUI BLOCKED: "+e.getClass().getSimpleName()+": "+e.getMessage());}
                     finally {session.close();try{raw.close();}catch(IOException ignored){}}
                 },"drnas-wine-gui").start();
