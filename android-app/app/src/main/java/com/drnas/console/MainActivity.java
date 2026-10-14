@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private ContainerBootstrap container;
     private String section = "Console";
     private String currentGame = "Far Cry 3";
+    private volatile boolean cpuAssistBusy;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -256,6 +257,11 @@ public final class MainActivity extends Activity {
         probe.addView(info);
         note(probe,RuntimeProbe.windowsRuntimeStatus());
 
+        LinearLayout assist = card();
+        assist.addView(label("CPU ASSIST / HEXAGON LAB",12,ACCENT,true),pad(0,8));
+        assist.addView(label("CPU baseline and FastRPC library visibility only. Hexagon NPU is NOT executing jobs in v0.1.",12,MUTED,false),pad(0,9));
+        addButton(assist,"▶ Test CPU Assist (no NPU)",false,v->testCpuAssist());
+
         LinearLayout panel=card();
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
         liveLog=label(log.toString(),12,ACCENT,false);
@@ -282,6 +288,31 @@ public final class MainActivity extends Activity {
         log.append(msg);
         if(liveLog!=null)liveLog.setText(log.toString());
     }
+    private void testCpuAssist() {
+        if (cpuAssistBusy) { append("CPU Assist test already in progress"); return; }
+        cpuAssistBusy=true;
+        append("Starting CPU Assist baseline in background; Hexagon remains DISABLED");
+        new Thread(()->{
+            String probe;
+            String baseline;
+            try {
+                probe=CpuAssist.probe();
+                baseline=CpuAssist.baseline();
+            } catch (Throwable err) {
+                probe="CPU Assist failed: "+err.getClass().getSimpleName()+": "+err.getMessage();
+                baseline="No baseline available";
+            }
+            final String p=probe;
+            final String b=baseline;
+            runOnUiThread(()->{
+                cpuAssistBusy=false;
+                append(p);
+                append(b);
+                if("Diagnostics".equals(section)) render();
+            });
+        }, "drnas-cpu-assist-baseline").start();
+    }
+
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
         else { append("Wine CLI requested; check live Diagnostics"); showSection("Diagnostics"); }
