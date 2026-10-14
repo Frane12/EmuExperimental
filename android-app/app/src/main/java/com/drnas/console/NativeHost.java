@@ -30,6 +30,10 @@ public final class NativeHost {
     public static String cpuAssistBaseline(){
         return available()?nativeCpuAssistBaseline():"CPU Assist unavailable: "+ERROR;
     }
+    public static String acceleratorProbe(){
+        return available()?nativeAcceleratorProbe():"Accelerator probe unavailable: "+ERROR;
+    }
+    private static native String nativeAcceleratorProbe();
     private static native String nativeCpuAssistProbe();
     private static native String nativeCpuAssistBaseline();
     private static native String nativeHostInfo();
