@@ -178,7 +178,7 @@ public final class WineGuiActivity extends Activity {
         },"drnas-desktop-save-as").start();
     }
 
-    @Override protected void onWindowFocusChanged(boolean focused) {
+    @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
         if(focused)immersive();
     }
