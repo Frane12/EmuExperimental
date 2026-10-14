@@ -1,6 +1,7 @@
 package com.drnas.console;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Typeface;
@@ -36,6 +37,7 @@ public final class MainActivity extends Activity {
     private static final int PICK_WCP = 301;
     private static final int EXPORT_SESSION_LOG = 302;
     private static final int EXPORT_RAW_WINE_LOG = 303;
+    private static final int PICK_SHARED_FOLDER = 304;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -61,6 +63,7 @@ public final class MainActivity extends Activity {
     private String currentGame = "Far Cry 3";
     private boolean resumed;
     private boolean autoGuiPending;
+    private boolean startupWaitingForFolder;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -97,7 +100,55 @@ public final class MainActivity extends Activity {
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
-        autoInstallAndBoot();
+        offerSharedFolderOnFirstLaunch();
+    }
+    /** Android SAF cannot grant the Downloads ROOT; choose Download/DRNAS or Documents. */
+    private void offerSharedFolderOnFirstLaunch() {
+        if(SharedFolderDrive.selectedTree(this)!=null ||
+                getPreferences(MODE_PRIVATE).getBoolean("shared_offer_done",false)) {
+            autoInstallAndBoot();
+            return;
+        }
+        getPreferences(MODE_PRIVATE).edit().putBoolean("shared_offer_done",true).apply();
+        new AlertDialog.Builder(this)
+                .setTitle("Windows R: shared folder")
+                .setMessage("Allow DRNAS Wine to see a chosen Android folder as R:?" +
+                    "\\n\\nAndroid 11+ blocks selecting the Downloads root. Choose a " +
+                    "subfolder like Download/DRNAS (create it first), or a Documents folder. " +
+                    "Only selected files are copied into Wine's private R: mirror; " +
+                    "Android files are not modified.")
+                .setPositiveButton("Choose folder",(dialog,which)->{
+                    startupWaitingForFolder=true;
+                    requestSharedFolder();
+                })
+                .setNegativeButton("Not now",(dialog,which)->autoInstallAndBoot())
+                .setOnCancelListener(dialog->autoInstallAndBoot())
+                .show();
+    }
+    private void requestSharedFolder() {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {startActivityForResult(i,PICK_SHARED_FOLDER);}
+        catch(Exception e) {
+            append("Android folder picker unavailable: "+e.getMessage());
+            if(startupWaitingForFolder) {startupWaitingForFolder=false;autoInstallAndBoot();}
+        }
+    }
+    private void synchronizeSharedFolder(boolean startup) {
+        append("Importing selected Android folder into Wine R: mirror; original files unchanged.");
+        new Thread(()->{
+            try {
+                SharedFolderDrive.importSelected(this,this::append);
+            } catch(Exception failure) {
+                append("R: folder sync warning: "+failure.getMessage());
+            } finally {
+                runOnUiThread(()->{
+                    if("Components".equals(section))render();
+                    if(startup)autoInstallAndBoot();
+                });
+            }
+        },"drnas-saf-mirror").start();
     }
     /** Offline bundle install is performed on a worker: no document picker or tap. */
     private void autoInstallAndBoot() {
@@ -277,6 +328,7 @@ public final class MainActivity extends Activity {
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(bootPanel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
+        addButton(bootPanel,"▶ Windows file manager (R:)",false,v->openWineFiles());
         addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
         addButton(bootPanel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
@@ -300,6 +352,16 @@ public final class MainActivity extends Activity {
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
+        LinearLayout sharing=card();
+        sharing.addView(label("WINDOWS R: · ANDROID SHARED FILES",11,ACCENT,true),pad(0,9));
+        sharing.addView(label("Android folder grant: "+
+                (SharedFolderDrive.selectedTree(this)==null ? "not selected" : "granted")+
+                ". SAF copies selected files into Wine R: (private mirror, import-only). "+
+                "On Android 11+ choose a subfolder, not the root Downloads directory.",
+                12,MUTED,false),pad(0,9));
+        addButton(sharing,"Choose folder for Wine R:",true,v->requestSharedFolder());
+        addButton(sharing,"Import / refresh R: from Android",false,v->synchronizeSharedFolder(false));
+        addButton(sharing,"Open R: in Windows file manager",false,v->openWineFiles());
         note(panel,"FEXCore PE bridges are verified at import. Proton TAR+ZSTD, DXVK TAR+XZ and Turnip ZIP are validated on boot. Live Windows loader is not yet included.");
 
         LinearLayout installed=card();
@@ -334,6 +396,7 @@ public final class MainActivity extends Activity {
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
+        addButton(panel,"▶ Open Windows file manager (R:)",false,v->openWineFiles());
         addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
         });
@@ -477,6 +540,10 @@ public final class MainActivity extends Activity {
         if(container.isBusy()){append("Wait until container initialization finishes.");return;}
         startActivity(new Intent(this,WineGuiActivity.class));
     }
+    private void openWineFiles() {
+        if(container.isBusy()){append("Wait until container initialization finishes.");return;}
+        startActivity(new Intent(this,WineGuiActivity.class).putExtra("DRNAS_GUI_APP","files"));
+    }
     private void startWineboot() {
         if(!container.startWineboot()) append("Container bootstrap already in progress");
         else {
@@ -492,6 +559,27 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==PICK_SHARED_FOLDER) {
+            boolean startup=startupWaitingForFolder;
+            startupWaitingForFolder=false;
+            if(result==RESULT_OK && data!=null && data.getData()!=null) {
+                Uri tree=data.getData();
+                try {
+                    getContentResolver().takePersistableUriPermission(tree,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    SharedFolderDrive.persistTree(this,tree);
+                    append("Android SAF folder permission granted for Wine R:");
+                    synchronizeSharedFolder(startup);
+                } catch(Exception e) {
+                    append("SAF grant failed: "+e.getMessage());
+                    if(startup)autoInstallAndBoot();
+                }
+            } else {
+                append("Folder permission declined. Wine R: remains private, no Android access.");
+                if(startup)autoInstallAndBoot();
+            }
+            return;
+        }
         if(result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();
         if(request==EXPORT_SESSION_LOG) {
