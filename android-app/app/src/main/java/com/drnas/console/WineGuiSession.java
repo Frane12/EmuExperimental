@@ -25,7 +25,9 @@ final class WineGuiSession implements AutoCloseable {
         // Explorer is the persistent guest desktop. Do not start winecfg by
         // default; keep it available for explicit maintenance only.
         args.set(args.size()-1,"explorer.exe");
-        args.add("/desktop=DRNAS,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
+        // Wine's special desktop name "shell" enables its built-in taskbar
+        // and Start menu; "DRNAS" used in v0.5.17 intentionally did not.
+        args.add("/desktop=shell,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
         if ("files".equals(app)) args.add("winefile.exe");
         else if ("config".equals(app)) args.add("winecfg.exe");
         else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
@@ -34,7 +36,9 @@ final class WineGuiSession implements AutoCloseable {
     static void displayEnvironment(Map<String,String> env) {
         env.put("DISPLAY","127.0.0.1:12.0");
         env.put("WINEDLLOVERRIDES","winex11.drv=b;wineandroid.drv=d;winewayland.drv=d");
-        env.put("WINEDEBUG","-all,+x11drv,+module,+seh");
+        // Avoid high-volume per-module / X11 tracing on every GUI operation.
+        // Full logs can still be exported from the app when needed.
+        env.put("WINEDEBUG","-all");
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
