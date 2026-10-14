@@ -129,6 +129,10 @@ public final class ContainerBootstrap {
         File bridgeDir=new File(bridge.getString("stagedAt"));
         for(String dll:FEX_DLLS)existing(bridgeDir,dll);
 
+        String detectedGpu=NativeHost.vulkanDeviceName();
+        String gpuTarget=TurnipRuntime.gpuTarget(detectedGpu);
+        log("System Vulkan GPU: "+(detectedGpu.isEmpty()?"unavailable":detectedGpu)+
+                " | bundled Drnas Turnip target: "+(gpuTarget.isEmpty()?"unconfirmed":gpuTarget));
         WcpRuntimeStager.PackageInfo proton=null,dxvk=null,turnip=null;
         List<String> unsupported=new ArrayList<>();
         for(JSONObject record:entries) {
@@ -138,7 +142,11 @@ public final class ContainerBootstrap {
             if("ZIP".equals(compression)) {
                 // Imported driver ZIP can have its original extension; archive is
                 // content-addressed in the same vault for safekeeping.
-                if(turnip==null && archive.isFile()) {
+                String claimed=record.optString("gpuTarget","");
+                // A bundled driver is applied only to an exactly identified GPU.
+                // A manually imported ZIP remains an explicit user-selected override.
+                if(turnip==null && archive.isFile() &&
+                        (claimed.isEmpty() || claimed.equals(gpuTarget))) {
                     try {turnip=WcpRuntimeStager.stageTurnipZip(archive,vault,sha,this::log);}
                     catch(Exception e){unsupported.add("Turnip: "+e.getMessage());}
                 }
@@ -158,7 +166,7 @@ public final class ContainerBootstrap {
         if(dxvk==null)throw new IOException("Bundled DXVK WCP missing or invalid.");
         if(turnip==null)log("No custom Turnip ZIP: keep system Vulkan driver; Turnip can be imported later.");
         log("Selected Proton "+proton.version+", DXVK "+dxvk.version+
-                (turnip==null?", system Vulkan only":", "+turnip.version));
+                (turnip==null?", system Vulkan only":", Drnas Turnip candidate "+turnip.version));
 
         File base=new File(ctx.getFilesDir(),"containers/default");
         if(!base.isDirectory()&&!base.mkdirs())throw new IOException("Cannot allocate sandbox");
@@ -218,12 +226,23 @@ public final class ContainerBootstrap {
             .put("nativeBionicHostAvailable",NativeHost.available())
             .put("wineLoaderConnected",false).put("xServerConnected",false)
             .put("audioConnected",false).put("turnipVulkanICDConnected",false);
+        if(turnip!=null) {
+            try {
+                File icd=TurnipRuntime.writeIcd(turnip,vault,this::log);
+                plan.put("turnipIcd",icd.getCanonicalPath());
+                plan.put("turnipPreferenceRequested",true);
+            } catch(Exception error) {
+                log("Turnip driver candidate invalid; keeping system Vulkan: "+error.getMessage());
+                plan.put("turnipPreferenceRequested",false);
+            }
+        } else plan.put("turnipPreferenceRequested",false);
         WcpRuntimeStager.writeJson(new File(base,"boot-plan.json"),plan);
         log("Boot plan written: "+new File(base,"boot-plan.json"));
         boolean vulkan=ctx.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_VULKAN_HARDWARE_VERSION);
         log("Android Vulkan feature: "+(vulkan?"present":"NOT advertised")+
-                "; custom Turnip ICD is staged, not loaded");
+                "; driver preference="+plan.optBoolean("turnipPreferenceRequested")+
+                " (not proof of ICD activation)");
         // v0.4 now runs real compiled ARM64 code via JNI; the native code
         // probes guest ELF and Android Vulkan, but it is not an ELF loader.
         // Never pass untrusted Wine/Proton executables to ProcessBuilder:
