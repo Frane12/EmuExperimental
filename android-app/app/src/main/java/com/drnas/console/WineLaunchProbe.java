@@ -127,6 +127,18 @@ public final class WineLaunchProbe {
         }
     }
 
+    /** Android linker64 direct launch: the first argument must be an absolute
+     * executable path (AOSP bionic linker_main.cpp, not GNU ld-linux). */
+    static List<String> linkerCommand(File linker, File wine) {
+        if(!linker.isAbsolute() || !wine.isAbsolute())
+            throw new IllegalArgumentException("Android linker requires absolute paths");
+        List<String> command=new ArrayList<>();
+        command.add(linker.getAbsolutePath());
+        command.add(wine.getAbsolutePath());
+        command.add("--version");
+        return command;
+    }
+
     private static File prefixRoot(File prefix) {
         File nested=new File(prefix,".wine");
         return new File(nested,"drive_c").isDirectory()?nested:prefix;
@@ -199,12 +211,14 @@ public final class WineLaunchProbe {
             File folder=new File(libdir,sub);
             if(folder.isDirectory())libPath.append(":").append(folder.getAbsolutePath());
         }
-        List<String> args=new ArrayList<>();
-        args.add(linker.getAbsolutePath());
-        args.add("--library-path");args.add(libPath.toString());
-        args.add(target.getAbsolutePath());args.add("--version");
+        // Android's linker64 is NOT GNU ld-linux: direct invocation syntax is
+        // linker64 ABSOLUTE_ELF_PATH [ARGS...]. It has no --library-path
+        // option; linker_main.cpp treats argv[1] as the executable path.
+        // Set LD_LIBRARY_PATH in the child environment instead.
+        List<String> args=linkerCommand(linker,target);
         report.accept("TRY REAL BIONIC WINE --version via Android linker64 ("+
                 TIMEOUT_SECONDS+" second watchdog), from "+target.getAbsolutePath());
+        report.accept("linker64 argv[1] = "+args.get(1));
         ProcessBuilder builder=new ProcessBuilder(args);
         builder.directory(protonDir);
         builder.redirectErrorStream(true);
@@ -214,6 +228,8 @@ public final class WineLaunchProbe {
         env.put("HOME",prefix.getParentFile().getAbsolutePath());
         env.put("TMPDIR",tmp.getAbsolutePath());
         env.put("XDG_RUNTIME_DIR",tmp.getAbsolutePath());
+        // Bionic parses LD_LIBRARY_PATH when dynamically loading guest ELF.
+        // Passing --library-path on the linker command line is invalid.
         env.put("LD_LIBRARY_PATH",libPath.toString());
         env.put("LC_ALL","C");
         env.put("WINEDEBUG","-all");

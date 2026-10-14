@@ -88,4 +88,20 @@ public class WineLaunchProbeTest {
             }
         }
     }
+
+    @Test public void linkerDirectInvocationDoesNotUseGnuFlags() {
+        java.util.List<String> args=WineLaunchProbe.linkerCommand(
+                new File("/system/bin/linker64"),
+                new File("/data/user/0/com.drnas.console/files/wine"));
+        assertEquals(3,args.size());
+        assertEquals("/system/bin/linker64",args.get(0));
+        assertEquals("/data/user/0/com.drnas.console/files/wine",args.get(1));
+        assertEquals("--version",args.get(2));
+        assertFalse(args.contains("--library-path"));
+    }
+
+    @Test public void linkerRejectsRelativeWineExecutable() {
+        assertThrows(IllegalArgumentException.class,()->WineLaunchProbe.linkerCommand(
+                new File("/system/bin/linker64"),new File("wine")));
+    }
 }

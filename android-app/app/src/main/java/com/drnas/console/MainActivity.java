@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.4.2");
+        append("DRNAS CONSOLE · Runtime Core v0.4.3");
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.4.2 WINE LOADER PROBE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.4.3 LINKER ARG FIX",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (experimental)",true,v->startContainer());
-        note(bootPanel,"GameNative Proton 11: find the real lib/wine/aarch64-unix/wine ELF when bin/wine is empty. Then test wine --version via linker64 with a 12-second watchdog. No game/desktop yet.");
+        note(bootPanel,"Try real Bionic Wine --version with corrected Android linker64 argv and LD_LIBRARY_PATH. This may reveal Android execution policy or missing libs. No games or Wine desktop yet.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));
