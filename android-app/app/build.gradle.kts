@@ -64,4 +64,6 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.github.luben:zstd-jni:1.5.6-9@aar")
     testImplementation("junit:junit:4.13.2")
+    // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
+    testImplementation("org.json:json:20240303")
 }
