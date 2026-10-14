@@ -113,7 +113,7 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("Windows R: shared folder")
                 .setMessage("Allow DRNAS Wine to see a chosen Android folder as R:?" +
-                    "\\n\\nAndroid 11+ blocks selecting the Downloads root. Choose a " +
+                    "\n\nAndroid 11+ blocks selecting the Downloads root. Choose a " +
                     "subfolder like Download/DRNAS (create it first), or a Documents folder. " +
                     "Only selected files are copied into Wine's private R: mirror; " +
                     "Android files are not modified.")
