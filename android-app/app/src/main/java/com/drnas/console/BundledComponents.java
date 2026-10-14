@@ -35,7 +35,8 @@ final class BundledComponents {
         }
         if (manifest.getInt("schema") != 1) throw new IOException("Unsupported bundled schema");
         JSONArray items = manifest.getJSONArray("items");
-        if (items.length() != 3) throw new IOException("Expected Proton, FEXCore and DXVK");
+        if (items.length() < 3 || items.length() > 6)
+            throw new IOException("Expected three WCPs and optional Turnip variants");
         Set<String> kinds = new HashSet<>();
         File vault = new File(context.getFilesDir(), "wcp-vault");
         if (!vault.isDirectory() && !vault.mkdirs()) throw new IOException("Cannot create component vault");
@@ -47,12 +48,17 @@ final class BundledComponents {
             String sha = p.getString("sha256");
             String compression = p.getString("compression");
             long expectedSize = p.getLong("bytes");
-            if (!kinds.add(kind) ||
-                    !(kind.equals("Proton") || kind.equals("FEXCore") || kind.equals("DXVK")) ||
-                    !name.matches("[A-Za-z0-9][A-Za-z0-9_.-]{1,100}\\.wcp") ||
+            String gpuTarget=p.optString("gpuTarget","");
+            if (!kinds.add(kind.equals("Turnip") ? kind+gpuTarget : kind) ||
+                    !(kind.equals("Proton") || kind.equals("FEXCore") ||
+                      kind.equals("DXVK") || kind.equals("Turnip")) ||
+                    (kind.equals("Turnip") &&
+                       !(gpuTarget.equals("A810") || gpuTarget.equals("A830") || gpuTarget.equals("A840"))) ||
+                    !name.matches("[A-Za-z0-9][A-Za-z0-9_.-]{1,100}\\.(?:wcp|zip)") ||
                     !asset.equals("bundled/" + name) ||
                     !sha.matches("[0-9a-f]{64}") ||
-                    !compression.equals(kind.equals("Proton") ? "ZSTD" : "XZ") ||
+                    !compression.equals(kind.equals("Proton") ? "ZSTD" :
+                            kind.equals("Turnip") ? "ZIP" : "XZ") ||
                     expectedSize < 16 || expectedSize > LIMIT)
                 throw new IOException("Unsafe bundled component manifest entry");
             File archive = new File(vault, sha + ".wcp");
@@ -61,6 +67,7 @@ final class BundledComponents {
             if (archive.isFile() && metadata.isFile()) {
                 JSONObject meta = WcpRuntimeStager.readJson(metadata);
                 if (sha.equals(meta.optString("sha256")) &&
+                        (!kind.equals("Turnip") || gpuTarget.equals(meta.optString("gpuTarget"))) &&
                         (!kind.equals("FEXCore") ||
                                 "fex_bridge_pair_verified_not_activated".equals(meta.optString("status")))) {
                     log.accept("[bundle] " + kind + " already installed");
@@ -103,6 +110,11 @@ final class BundledComponents {
                 meta.put("compression", compression);
                 meta.put("componentType", kind);
                 meta.put("status", "archive_staged_not_validated");
+                if (kind.equals("Turnip")) {
+                    WcpRuntimeStager.stageTurnipZip(partial,vault,sha,log);
+                    meta.put("status","turnip_zip_staged_not_activated");
+                    meta.put("gpuTarget",gpuTarget);
+                }
                 if (kind.equals("FEXCore")) {
                     JSONObject fex = FexBridgePackage.inspectXz(partial, vault, sha);
                     if (fex == null) throw new IOException("Bundled FEXCore profile invalid");
