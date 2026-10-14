@@ -1,9 +1,10 @@
-name: EmuExperimental - Android APK v0.5.15 Stable or Transient Test
+name: EmuExperimental - Android APK v0.5.16 Proton11 Anonymous PE A/B
 on:
   push:
     branches:
       - main
       - feat/bundled-runtime-autostart
+      - experiment/proton11-anon-pe-v0.5.16
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -38,7 +39,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Embed Proton 10 ARM64EC, FEX 2609 and DXVK 1.10.3 WCP archives
+      - name: Embed pinned Proton 11.0-2 ARM64EC, FEX 2609 and DXVK 1.10.3
         run: |
           python3 -m py_compile tools/package_bundled_runtime.py
           python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
@@ -81,7 +82,7 @@ jobs:
           sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
-          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/proton-10-arm64ec-controller-fix.wcp
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/proton-11.0-2-arm64ec.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
@@ -92,17 +93,17 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.15-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.15\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.16-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.16\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.15-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.15 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0515 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.14 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.16-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.16 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0516 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.15 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.15-APK-ZIP
+          name: Drnas-Console-v0.5.16-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
