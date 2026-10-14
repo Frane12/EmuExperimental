@@ -304,6 +304,20 @@ public final class WineBootProbe {
                 "; missing candidates are not automatically proof of failure");
         String serverStatus=probeWineserver(linker,wineServer,env,protonFolder,report);
         report.accept("Wineserver preflight status="+serverStatus);
+        // Two different operations: a direct exec() sanity check and a real
+        // foreground server started through Android's Bionic linker.
+        // A --version smoke test cannot establish whether the Wine client
+        // can connect to its unix-domain wineserver socket.
+        String directStatus=WineServerDiagnostics.probeDirectExec(
+                wineServer,protonFolder,env,report);
+        report.accept("Direct wineserver exec A/B="+directStatus);
+        WineServerDiagnostics.ManagedServer prestarted=WineServerDiagnostics.prestart(
+                linker,wineServer,protonFolder,env,report);
+        if(prestarted==null) {
+            report.accept("Foreground server could not remain alive; skipping Wineboot.");
+            return new Result("WINESERVER_PRESTART_FAILED",-1,0);
+        }
+        try {
         // Isolate the Wine second-stage bypass to this controlled experiment.
         configureSecondStage(env);
         report.accept("WINELOADERNOEXEC=1 (second-stage handoff experiment)");
@@ -356,8 +370,8 @@ public final class WineBootProbe {
         report.accept("Wineboot launcher exit="+exit);
         if(exit!=0) {
             if(exit==127) {
-                report.accept("EXIT 127 after WINELOADERNOEXEC: cause not yet established.");
-                report.accept("Compare wineserver smoke status and PE module inventory above.");
+                report.accept("EXIT 127 despite prestarted wineserver (if server remained alive).");
+                report.accept("This narrows but does NOT prove the failing Wine startup stage.");
                 return new Result("WINEBOOT_EARLY_EXIT_127",exit,changed?1:0);
             }
             return new Result("WINEBOOT_EXIT_"+exit,exit,changed?1:0);
@@ -365,6 +379,9 @@ public final class WineBootProbe {
         if(count<2)return new Result("WINEBOOT_EXIT_0_REGISTRY_INCOMPLETE",0,changed?1:0);
         if(!changed)return new Result("WINEBOOT_EXIT_0_REGISTRY_UNCHANGED",0,0);
         return new Result("WINEBOOT_PREFIX_INITIALIZED",0,count);
+        } finally {
+            prestarted.close();
+        }
     }
 
     private static String registrySummary(File prefix) {

@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK Stable Signed
+name: EmuExperimental - Android APK v0.4.8 Stable Signed
 on:
   push:
     branches:
@@ -19,6 +19,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Install Android platform SDK
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Use installed Android NDK and CMake
+        run: |
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          test -f "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Run JVM regression tests before checking signing secrets
+        working-directory: android-app
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
       - name: Restore persistent signing key
         env:
           DRNAS_KEYSTORE_BASE64: ${{ secrets.DRNAS_KEYSTORE_BASE64 }}
@@ -34,26 +50,13 @@ jobs:
           chmod 600 "$RUNNER_TEMP/drnas-signing.p12"
           keytool -list -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" >/dev/null
           echo "DRNAS_SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/drnas-signing.p12" >> "$GITHUB_ENV"
-      - name: Install Android platform SDK
-        run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
-          command -v sdkmanager
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
-      - name: Use installed Android NDK and CMake
-        run: |
-          test -f "$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
-          test -f "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-      - name: Run JVM regression tests and build persistently signed debug APK
+      - name: Build persistently signed debug APK
         working-directory: android-app
         env:
           DRNAS_SIGNING_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
           DRNAS_SIGNING_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
           DRNAS_SIGNING_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
-        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK contains native ARM64 host and Android manifest
         run: |
           test -s android-app/app/build/outputs/apk/debug/app-debug.apk
@@ -64,7 +67,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-Stable-Signed-debug-apk
+          name: Drnas-Console-v0.4.8-Stable-Signed-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
