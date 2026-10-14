@@ -9,8 +9,8 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 11
-        versionName = "0.4.5-wineboot-no-reexec"
+        versionCode = 12
+        versionName = "0.4.6-wineserver-diagnostics"
     }
     ndkVersion = "27.2.12479018"
     externalNativeBuild {

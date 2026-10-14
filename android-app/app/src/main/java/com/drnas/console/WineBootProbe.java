@@ -28,6 +28,7 @@ import java.util.function.Consumer;
 public final class WineBootProbe {
     private static final int TIMEOUT_SECONDS=50;
     private static final int MAX_LOG_LINES=120;
+    private static final int SERVER_PROBE_TIMEOUT_SECONDS=7;
     private static final String[] REGISTRY={"system.reg","user.reg","userdef.reg"};
 
     public static final class Result {
@@ -101,6 +102,104 @@ public final class WineBootProbe {
             for(File child:children)removeWithoutFollowingLinks(child);
         }
         Files.delete(file.toPath());
+    }
+
+    private static String fileKind(File f) throws IOException {
+        if(!f.isFile()) return "absent";
+        long n=f.length();
+        if(n==0) return "empty";
+        byte[] magic=new byte[4];
+        try(FileInputStream in=new FileInputStream(f)) {
+            if(in.read(magic,0,4)!=4) return "truncated:"+n;
+        }
+        if(magic[0]=='M' && magic[1]=='Z') return "PE/MZ "+n+"B";
+        if((magic[0]&255)==0x7f && magic[1]=='E' &&
+           magic[2]=='L' && magic[3]=='F')return "ELF "+n+"B";
+        return "unknown magic "+n+"B";
+    }
+
+    /**
+     * Before wineboot, locate known builtin PE modules in our staged Proton
+     * and freshly extracted prefix. These are diagnostics only: the actual
+     * GameNative Wine implementation chooses its own DLL search paths.
+     */
+    static boolean inspectWinebootArtifacts(File wineDir,File prefix,
+                                              Consumer<String> report) throws IOException {
+        String[] relative={
+                "aarch64-windows/wineboot.exe",
+                "arm64ec-windows/wineboot.exe",
+                "x86_64-windows/wineboot.exe",
+                "aarch64-windows/ntdll.dll",
+                "aarch64-unix/ntdll.so"
+        };
+        boolean winebootFound=false;
+        for(String path:relative) {
+            File file=new File(wineDir,path);
+            String kind=fileKind(file);
+            report.accept("Component "+path+": "+kind);
+            if(path.endsWith("/wineboot.exe") && kind.startsWith("PE/MZ"))
+                winebootFound=true;
+        }
+        String[] prefixEntries={"drive_c/windows/system32/wineboot.exe",
+                "drive_c/windows/system32/ntdll.dll",
+                "drive_c/windows/syswow64/wineboot.exe"};
+        for(String path:prefixEntries) {
+            File file=new File(prefix,path);
+            String kind=fileKind(file);
+            report.accept("Prefix "+path+": "+kind);
+            if(path.endsWith("/wineboot.exe") && kind.startsWith("PE/MZ"))
+                winebootFound=true;
+        }
+        return winebootFound;
+    }
+
+    static String probeWineserver(File linker,File server,Map<String,String> env,
+                                  File workingDir,Consumer<String> report) throws Exception {
+        if(!server.isFile() || !WineLaunchProbe.inspect(server).runnable)
+            return "SERVER_ELF_MISSING";
+        List<String> args=new ArrayList<>();
+        args.add(linker.getAbsolutePath());
+        args.add(server.getAbsolutePath());
+        args.add("--version");
+        ProcessBuilder pb=new ProcessBuilder(args);
+        pb.directory(workingDir);
+        pb.redirectErrorStream(true);
+        // Environment is copied. The probe NEVER starts persistent wineserver.
+        Map<String,String> child=pb.environment();
+        child.clear();
+        child.putAll(env);
+        child.remove("WINELOADERNOEXEC");
+        report.accept("wineserver smoke test: linker64 <verified server ELF> --version");
+        final Process process;
+        try {process=pb.start();}
+        catch(IOException e) {
+            report.accept("wineserver start rejected: "+e.getMessage());
+            return "SERVER_EXEC_REJECTED";
+        }
+        final StringBuilder captured=new StringBuilder();
+        Thread out=new Thread(()->{
+            try(BufferedReader lines=new BufferedReader(new InputStreamReader(
+                    process.getInputStream(),StandardCharsets.UTF_8))) {
+                String line;int n=0;
+                while((line=lines.readLine())!=null){
+                    if(n++<8) {
+                        String shortLine=line.substring(0,Math.min(line.length(),320));
+                        synchronized(captured){captured.append(shortLine).append("\\n");}
+                        report.accept("[server stdout] "+shortLine);
+                    }
+                }
+            } catch(IOException e){report.accept("server output stream: "+e.getMessage());}
+        },"drnas-server-version");
+        out.setDaemon(true);out.start();
+        boolean ended=process.waitFor(SERVER_PROBE_TIMEOUT_SECONDS,TimeUnit.SECONDS);
+        if(!ended) {
+            process.destroyForcibly();process.waitFor(3,TimeUnit.SECONDS);
+        }
+        out.join(1500);
+        if(!ended)return "SERVER_VERSION_TIMEOUT";
+        int exit=process.exitValue();
+        report.accept("wineserver --version exit="+exit);
+        return exit==0?"SERVER_VERSION_EXIT_0":"SERVER_VERSION_EXIT_"+exit;
     }
 
     private static File winePrefix(File root) throws IOException {
@@ -188,7 +287,10 @@ public final class WineBootProbe {
         env.put("TMPDIR",tmp.getAbsolutePath());
         env.put("XDG_RUNTIME_DIR",tmp.getAbsolutePath());
         env.put("LD_LIBRARY_PATH",libs.toString());
-        env.put("WINEDLLPATH",new File(libdir,"wine/aarch64-unix").getAbsolutePath());
+        // Wine's get_pe_dir() appends /aarch64-windows to each WINEDLLPATH
+        // root, so passing aarch64-unix here incorrectly doubles the suffix.
+        // GameNative ntdll/unix/loader.c -> set_dll_path().
+        env.put("WINEDLLPATH",new File(libdir,"wine").getAbsolutePath());
         env.put("WINELOADER",wine.getAbsolutePath());
         File wineServer=new File(protonFolder,"bin/wineserver");
         if(wineServer.isFile() && WineLaunchProbe.inspect(wineServer).runnable)
@@ -196,8 +298,15 @@ public final class WineBootProbe {
         env.put("LC_ALL","C");
         env.put("WINEDEBUG","+process,+server"); // bounded output shows wineserver/PE initialization failures
         env.put("PROTON_NO_NTSYNC","1");
+        File wineLib=new File(libdir,"wine");
+        boolean pePresent=inspectWinebootArtifacts(wineLib,isolated,report);
+        report.accept("At least one Wineboot PE candidate="+pePresent+
+                "; missing candidates are not automatically proof of failure");
+        String serverStatus=probeWineserver(linker,wineServer,env,protonFolder,report);
+        report.accept("Wineserver preflight status="+serverStatus);
+        // Isolate the Wine second-stage bypass to this controlled experiment.
         configureSecondStage(env);
-        report.accept("WINELOADERNOEXEC=1 (skip Wine internal second execv; host linker64 has already loaded ELF)");
+        report.accept("WINELOADERNOEXEC=1 (second-stage handoff experiment)");
         report.accept("WINEPREFIX="+isolated.getAbsolutePath());
         report.accept("WINELOADER/LD_LIBRARY_PATH set; X11, audio, Turnip ICD not connected.");
         Process child;
@@ -245,8 +354,14 @@ public final class WineBootProbe {
         if(!ended)return new Result("WINEBOOT_TIMEOUT",-1,changed?1:0);
         int exit=child.exitValue();
         report.accept("Wineboot launcher exit="+exit);
-        if(exit!=0)
+        if(exit!=0) {
+            if(exit==127) {
+                report.accept("EXIT 127 after WINELOADERNOEXEC: cause not yet established.");
+                report.accept("Compare wineserver smoke status and PE module inventory above.");
+                return new Result("WINEBOOT_EARLY_EXIT_127",exit,changed?1:0);
+            }
             return new Result("WINEBOOT_EXIT_"+exit,exit,changed?1:0);
+        }
         if(count<2)return new Result("WINEBOOT_EXIT_0_REGISTRY_INCOMPLETE",0,changed?1:0);
         if(!changed)return new Result("WINEBOOT_EXIT_0_REGISTRY_UNCHANGED",0,0);
         return new Result("WINEBOOT_PREFIX_INITIALIZED",0,count);

@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK V0.4.5 Wineboot No-Reexec
+name: EmuExperimental - Android APK V0.4.6 Wineserver Diagnostics
 on:
   push:
     branches:
@@ -44,7 +44,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-V0.4.5-Wineboot-Noexec-debug-apk
+          name: Drnas-Console-V0.4.6-Wineserver-Diagnostics-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

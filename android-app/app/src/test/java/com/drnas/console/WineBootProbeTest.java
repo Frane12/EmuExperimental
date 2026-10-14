@@ -52,4 +52,39 @@ public class WineBootProbeTest {
                 new File("/data/user/0/com.drnas.console/files/wine"))
                 .contains("WINELOADERNOEXEC"));
     }
+
+    @Test public void findsPEModuleInGameNativeWineFolder() throws Exception {
+        Path root=Files.createTempDirectory("drnas-wine-pe");
+        try {
+            Path lib=Files.createDirectories(root.resolve("lib/wine"));
+            Path prefix=Files.createDirectories(root.resolve("prefix"));
+            Path pe=lib.resolve("aarch64-windows/wineboot.exe");
+            Files.createDirectories(pe.getParent());
+            byte[] hdr=new byte[80]; hdr[0]='M';hdr[1]='Z';
+            Files.write(pe,hdr);
+            java.util.ArrayList<String> logs=new java.util.ArrayList<>();
+            assertTrue(WineBootProbe.inspectWinebootArtifacts(lib.toFile(),
+                    prefix.toFile(),logs::add));
+            assertTrue(logs.stream().anyMatch(x->x.contains(
+                    "aarch64-windows/wineboot.exe: PE/MZ")));
+        } finally {
+            WineBootProbe.removeWithoutFollowingLinks(root.toFile());
+        }
+    }
+
+    @Test public void doesNotTreatZeroLengthPrefixRegistryOrBootModuleAsValidPE()
+            throws Exception {
+        Path root=Files.createTempDirectory("drnas-wine-empty-pe");
+        try {
+            Path lib=Files.createDirectories(root.resolve("lib/wine"));
+            Path prefix=Files.createDirectories(root.resolve("prefix"));
+            Path pe=lib.resolve("aarch64-windows/wineboot.exe");
+            Files.createDirectories(pe.getParent());
+            Files.createFile(pe);
+            assertFalse(WineBootProbe.inspectWinebootArtifacts(lib.toFile(),
+                    prefix.toFile(),msg->{}));
+        } finally {
+            WineBootProbe.removeWithoutFollowingLinks(root.toFile());
+        }
+    }
 }
