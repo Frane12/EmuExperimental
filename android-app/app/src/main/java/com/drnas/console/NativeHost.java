@@ -27,6 +27,15 @@ public final class NativeHost {
     public static String probeFile(String path){
         return available()?nativeProbeFile(path):"Native ELF probe unavailable: "+ERROR;
     }
+    /**
+     * Observe executable-memory policy for the selected read-only DLL/file.
+     * No guest instruction is executed and the source file is not modified.
+     */
+    public static String execMappingProbe(String path){
+        return available()?nativeExecMappingProbe(path):
+                "Native executable-mapping probe unavailable: "+ERROR;
+    }
+    private static native String nativeExecMappingProbe(String path);
     private static native String nativeHostInfo();
     private static native String nativeVulkanInfo();
     private static native String nativeVulkanDeviceName();
