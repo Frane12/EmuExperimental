@@ -18,9 +18,10 @@ LIMIT = 768 * 1024 * 1024
 FILES = [
     {
         "kind": "Proton",
-        "name": "proton-10-arm64ec-controller-fix.wcp",
+        "name": "proton-11.0-2-arm64ec.wcp",
+        "sha256": "fffa467241bdae3eacd6ceb7e8096bb7793d617ce53a198dae8bc63a3453f595",
         "compression": "ZSTD",
-        "url": "https://github.com/K11MCH1/Winlator101/releases/download/wine_col/proton-10-arm64ec-controller-fix.wcp",
+        "url": "https://github.com/GameNative/proton-wine/releases/download/proton-11.0-2-20260928/proton-11.0-2-arm64ec.wcp",
     },
     {
         "kind": "FEXCore",
@@ -42,7 +43,7 @@ def drnas_turnip_assets():
     """Choose only *published* Drnas Turnip release ZIPs, never draft/internal."""
     api = "https://api.github.com/repos/Frane12/Testturnip/releases?per_page=100"
     req = urllib.request.Request(api, headers={
-        "User-Agent": "DRNAS-EmuExperimental-bundled/0.5.11",
+        "User-Agent": "DRNAS-EmuExperimental-bundled/0.5.16",
         "Accept": "application/vnd.github+json"})
     try:
         with urllib.request.urlopen(req, timeout=40) as stream:
@@ -113,7 +114,7 @@ def package(directory):
                 [
                     "curl", "--fail", "--location", "--retry", "3",
                     "--connect-timeout", "25", "--max-time", "360",
-                    "--user-agent", "DRNAS-EmuExperimental-bundled/0.5.11",
+                    "--user-agent", "DRNAS-EmuExperimental-bundled/0.5.16",
                     "--output", str(tmp), component["url"],
                 ],
                 check=True,
@@ -138,6 +139,8 @@ def package(directory):
         finally:
             tmp.unlink(missing_ok=True)
         digest = hasher.hexdigest()
+        if component.get("sha256") and digest != component["sha256"]:
+            raise ValueError(f"{name}: pinned SHA-256 mismatch; refusing third-party runtime")
         print(f"{component['kind']} {name} size={size} sha256={digest}", flush=True)
         manifest["items"].append(
             {
