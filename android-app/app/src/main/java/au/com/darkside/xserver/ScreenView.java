@@ -183,6 +183,93 @@ public class ScreenView extends View {
     }
 
 
+    // Laptop-style touchpad: one-finger movement is relative, not a warp to
+    // the finger's absolute X11 coordinates. Tap clicks at the cursor.
+    private boolean _relativeTouchMode;
+    private float _touchLastX, _touchLastY, _touchRemainderX, _touchRemainderY;
+    private float _touchTravel;
+    private long _touchStartedAt;
+    private boolean _touchTwoFingers, _touchDragging;
+
+    public void setRelativeTouchMode(boolean enabled) {
+        _relativeTouchMode=enabled;
+    }
+
+    private boolean handleRelativeTouch(MotionEvent event) {
+        int action=event.getActionMasked();
+        switch(action) {
+        case MotionEvent.ACTION_DOWN:
+            _touchLastX=event.getX(0);
+            _touchLastY=event.getY(0);
+            _touchStartedAt=event.getEventTime();
+            _touchTravel=0f;
+            _touchRemainderX=_touchRemainderY=0f;
+            _touchTwoFingers=false;
+            _touchDragging=false;
+            return true;
+        case MotionEvent.ACTION_POINTER_DOWN:
+            _touchTwoFingers=true;
+            return true;
+        case MotionEvent.ACTION_MOVE:
+            if(event.getPointerCount()!=1) {
+                _touchTwoFingers=true;
+                return true;
+            }
+            float x=event.getX(0),y=event.getY(0);
+            float dx=x-_touchLastX,dy=y-_touchLastY;
+            _touchLastX=x;
+            _touchLastY=y;
+            _touchTravel+=(float)Math.hypot(dx,dy);
+            if(_touchTwoFingers)return true;
+            // Hold the finger for 400 ms and begin a slow drag to press mouse
+            // button one; keep it held while moving, release on finger up.
+            // Fast swipes only move the pointer. A quick tap clicks instead.
+            if(!_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
+                    _touchTravel<dpTouch(24)) {
+                updatePointerButtons(1,true);
+                _touchDragging=true;
+            }
+            float scale=Math.max(0.01f,guestScale());
+            _touchRemainderX+=dx/scale;
+            _touchRemainderY+=dy/scale;
+            int stepX=(int)_touchRemainderX;
+            int stepY=(int)_touchRemainderY;
+            _touchRemainderX-=stepX;
+            _touchRemainderY-=stepY;
+            if(stepX!=0 || stepY!=0)
+                updatePointerPosition(
+                    Math.max(0,Math.min(getGuestWidth()-1,_currentCursorX+stepX)),
+                    Math.max(0,Math.min(getGuestHeight()-1,_currentCursorY+stepY)),0);
+            return true;
+        case MotionEvent.ACTION_POINTER_UP:
+            _touchTwoFingers=true;
+            return true;
+        case MotionEvent.ACTION_UP:
+            if(_touchDragging) {
+                updatePointerButtons(1,false);
+            } else if(_touchTwoFingers) {
+                updatePointerButtons(3,true);
+                updatePointerButtons(3,false);
+            } else if(_touchTravel<dpTouch(15)) {
+                int button=(event.getEventTime()-_touchStartedAt>=650)?3:1;
+                updatePointerButtons(button,true);
+                updatePointerButtons(button,false);
+            }
+            _touchDragging=false;
+            return true;
+        case MotionEvent.ACTION_CANCEL:
+            if(_touchDragging)updatePointerButtons(1,false);
+            _touchDragging=false;
+            return true;
+        default:
+            return true;
+        }
+    }
+
+    private float dpTouch(float size) {
+        return size*getResources().getDisplayMetrics().density;
+    }
+
     private Cursor _currentCursor;
     private int _currentCursorX;
     private int _currentCursorY;
@@ -281,6 +368,7 @@ public class ScreenView extends View {
                     if (_rootWindow == null) return false;
         
                     blank(false);    // Reset the screen saver.
+                    if (_relativeTouchMode) return handleRelativeTouch(event);
                     updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
         
                     if(_enableTouchClicks){
