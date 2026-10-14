@@ -7,7 +7,7 @@ on:
       - experiment/proton11-anon-pe-v0.5.16
       - feat/explorer-desktop-1280x720-v0.5.17
       - feat/wine-power-progress-taskbar-touch-v0.5.18
-      - feat/desktop-audio-turnip-reset-v0.5.20
+      - feat/desktop-audio-turnip-reset-v0.5.19
       - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.20
     paths:
       - "android-app/**"
