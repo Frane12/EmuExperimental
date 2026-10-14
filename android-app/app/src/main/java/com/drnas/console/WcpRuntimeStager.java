@@ -12,7 +12,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -82,6 +84,11 @@ public final class WcpRuntimeStager {
     }
 
     private static void remove(File folder) {
+        // NEVER traverse directory symlinks during rollback, even if a
+        // malicious TAR member created one before a later validation error.
+        if(Files.isSymbolicLink(folder.toPath())) {
+            folder.delete();return;
+        }
         File[] children=folder.listFiles();
         if(children!=null) for(File child:children)remove(child);
         folder.delete();
@@ -269,6 +276,37 @@ public final class WcpRuntimeStager {
         } finally {if(!ok || temp.exists())remove(temp);}
     }
 
+    /** A dosdevices drive letter often points to the original Winlator host
+     * storage (/storage, /mnt, / or /sdcard). Never follow or recreate those
+     * external links in our private prefix. It is not a real Android mount.
+     * Other unsafe symlinks remain hard errors.
+     *
+     * Returns false when a DOS drive mapping must be deferred.
+     */
+    static boolean acceptPrefixSymlink(String name,String target) throws IOException {
+        if(target==null || target.isEmpty() || target.indexOf(0)>=0
+                || target.contains("\\"))
+            throw new IOException("Invalid prefix symlink target: "+name);
+        boolean dosdevices=name.matches("(?:^|.*/)dosdevices/[A-Za-z]:{1,2}");
+        if(target.startsWith("/")) {
+            if(dosdevices) return false;
+            throw new IOException("Absolute non-DOS prefix symlink: "+name);
+        }
+        final Path resolved;
+        try {
+            Path parent=Paths.get(name).getParent();
+            if(parent==null) parent=Paths.get("");
+            resolved=parent.resolve(target).normalize();
+        } catch(RuntimeException e) {
+            throw new IOException("Malformed prefix symlink target: "+name,e);
+        }
+        if(resolved.isAbsolute() || resolved.startsWith("..") || resolved.toString().isEmpty()) {
+            if(dosdevices) return false;
+            throw new IOException("Escaping prefix symlink: "+name);
+        }
+        return true;
+    }
+
     public static void unpackPrefixPack(File prefixPack,File prefix,Consumer<String> report)
             throws Exception {
         File marker=new File(prefix,"drnas-prefix.ready");
@@ -278,7 +316,9 @@ public final class WcpRuntimeStager {
         File temp=new File(parent,".prefix-"+System.nanoTime());
         if(!temp.mkdir())throw new IOException("Cannot create prefix");
         boolean ok=false;
-        int regular=0, symlinks=0;long sum=0;
+        int regular=0, symlinks=0, deferredDrives=0, hardlinks=0;long sum=0;
+        List<String[]> pendingSymlinks=new ArrayList<>();
+        List<String[]> pendingHardlinks=new ArrayList<>();
         try {
             try(InputStream decoded=new XZInputStream(new FileInputStream(prefixPack));
                 TarArchiveInputStream tar=new TarArchiveInputStream(decoded)) {
@@ -293,20 +333,20 @@ public final class WcpRuntimeStager {
                     if(entry.isDirectory()) {
                         if(!out.isDirectory()&&!out.mkdirs())throw new IOException("Prefix directory");
                     } else if(entry.isSymbolicLink()) {
-                        // Prefix templates contain dosdevices symlinks. Keep only relative
-                        // links whose normalized destinations stay within the isolated prefix.
                         String target=entry.getLinkName();
-                        if(target==null || target.isEmpty() || target.startsWith("\\") || target.startsWith("/"))
-                            throw new IOException("Unsafe prefix symlink: "+name);
-                        Path resolved=Paths.get(name).getParent();
-                        if(resolved==null)resolved=Paths.get("");
-                        resolved=resolved.resolve(target).normalize();
-                        if(resolved.startsWith("..") || resolved.isAbsolute())
-                            throw new IOException("Escaping prefix symlink: "+name);
-                        if(!out.getParentFile().isDirectory()&&!out.getParentFile().mkdirs())
-                            throw new IOException("Prefix link parent");
-                        Files.createSymbolicLink(out.toPath(),Paths.get(target));
-                        symlinks++;
+                        if(!acceptPrefixSymlink(name,target)) {
+                            deferredDrives++;
+                            report.accept("Deferred external Windows drive mapping: "+name+
+                                    " (no access to host storage)");
+                            continue;
+                        }
+                        // Do not materialize links while extracting regular files,
+                        // otherwise a later TAR entry could follow a symlink.
+                        pendingSymlinks.add(new String[]{name,target});
+                    } else if(entry.isLink()) {
+                        // TAR hardlink names are relative to archive root.
+                        String target=clean(entry.getLinkName(),false);
+                        pendingHardlinks.add(new String[]{name,target});
                     } else if(entry.isFile()) {
                         sum+=entry.getSize();
                         if(sum>MAX_EXPANDED)throw new IOException("Prefix expansion too large");
@@ -319,13 +359,40 @@ public final class WcpRuntimeStager {
                     } else throw new IOException("Untrusted prefix special entry: "+name);
                 }
             }
+            // Hardlinks first, symlinks last. This prevents archive member
+            // extraction from following attacker-controlled symbolic links.
+            for(String[] pair:pendingHardlinks) {
+                File link=outputFor(temp,pair[0]);
+                File target=outputFor(temp,pair[1]);
+                if(!Files.isRegularFile(target.toPath(),java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Hardlink target is not a regular file: "+pair[0]);
+                if(Files.exists(link.toPath(),java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Duplicate hardlink path: "+pair[0]);
+                if(!link.getParentFile().isDirectory()&&!link.getParentFile().mkdirs())
+                    throw new IOException("Prefix hardlink parent");
+                Files.createLink(link.toPath(),target.toPath());
+                hardlinks++;
+            }
+            for(String[] pair:pendingSymlinks) {
+                File link=outputFor(temp,pair[0]);
+                if(Files.exists(link.toPath(),java.nio.file.LinkOption.NOFOLLOW_LINKS))
+                    throw new IOException("Duplicate symlink path: "+pair[0]);
+                if(!link.getParentFile().isDirectory()&&!link.getParentFile().mkdirs())
+                    throw new IOException("Prefix symlink parent");
+                Files.createSymbolicLink(link.toPath(),Paths.get(pair[1]));
+                symlinks++;
+            }
             try(FileOutputStream output=new FileOutputStream(new File(temp,"drnas-prefix.ready"))) {
-                output.write(("files="+regular+" symlinks="+symlinks).getBytes(StandardCharsets.UTF_8));
+                output.write(("files="+regular+" symlinks="+symlinks+
+                        " hardlinks="+hardlinks+" deferredDrives="+deferredDrives)
+                        .getBytes(StandardCharsets.UTF_8));
             }
             if(prefix.exists())throw new IOException("Existing partial prefix; avoid overwriting");
             if(!temp.renameTo(prefix))throw new IOException("Could not commit prefix");
             ok=true;
-            report.accept("Wine prefix template staged ("+regular+" files, "+symlinks+" links)");
+            report.accept("Wine prefix staged ("+regular+" files, "+symlinks+
+                    " internal symlinks, "+hardlinks+" hardlinks, "+deferredDrives+
+                    " external drive mappings deferred)");
         } finally {if(!ok)remove(temp);}
     }
 

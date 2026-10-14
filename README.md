@@ -2,7 +2,7 @@
 
 Private experimental Android PC-gaming runtime project.
 
-**Version:** Drnas Console v0.3 — experimental container assembly
+**Version:** Drnas Console v0.3.1 — experimental container assembly + safe prefix link handling
 **Project status:** FEX 2609 bridge verification passed on Android 16. v0.3 stages Proton (ZSTD WCP), DXVK (XZ WCP), Turnip (ZIP), applies a private Wine-prefix overlay, and runs an Android host preflight. **It does not yet run Wine/Proton or Windows games**: Bionic/glibc host, X server, audio and Vulkan ICD loader are not bundled.
 
 ## Code layout
@@ -20,8 +20,8 @@ Private experimental Android PC-gaming runtime project.
 
 ## Build and install the Android APK
 
-Use **Actions → EmuExperimental - Android APK V0.3 Container Bootstrap** and download the artifact
-`Drnas-Console-V0.3-Container-Boot-debug-apk` from a successful run. The artifact
+Use **Actions → EmuExperimental - Android APK V0.3.1 Prefix Compatibility** and download the artifact
+`Drnas-Console-V0.3.1-Prefix-Link-Fix-debug-apk` from a successful run. The artifact
 is a ZIP containing `app-debug.apk`.
 
 To build with Gradle 8.9, Android SDK 35 and Java 17:

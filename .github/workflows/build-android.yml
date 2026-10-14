@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK V0.3 Container Bootstrap
+name: EmuExperimental - Android APK V0.3.1 Prefix Compatibility
 on:
   push:
     branches:
@@ -39,7 +39,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-V0.3-Container-Boot-debug-apk
+          name: Drnas-Console-V0.3.1-Prefix-Link-Fix-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.3.0");
+        append("DRNAS CONSOLE · Runtime Core v0.3.1");
         append("No Windows runner connected — this APK does not launch games.");
         render();
     }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.3 EXPERIMENTAL",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.3.1 EXPERIMENTAL",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
