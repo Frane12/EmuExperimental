@@ -52,8 +52,9 @@ public final class ComponentStore {
                 if (!root.isDirectory() && !root.mkdirs())
                     throw new IllegalStateException("Cannot create component vault");
                 String originalName = displayName(uri);
-                if (!originalName.toLowerCase(java.util.Locale.ROOT).endsWith(".wcp"))
-                    throw new IllegalArgumentException("Choose a .wcp component package");
+                boolean turnipZip=originalName.toLowerCase(java.util.Locale.ROOT).endsWith(".zip");
+                if (!originalName.toLowerCase(java.util.Locale.ROOT).endsWith(".wcp") && !turnipZip)
+                    throw new IllegalArgumentException("Choose a .wcp or Turnip .zip");
                 tmp = File.createTempFile(".incoming-", ".tmp", root);
                 MessageDigest digest = MessageDigest.getInstance("SHA-256");
                 long total = 0;
@@ -79,6 +80,8 @@ public final class ComponentStore {
                 String compression = sniff(first);
                 if ("unknown".equals(compression))
                     throw new IllegalArgumentException("Unsupported/unknown archive format");
+                if(turnipZip && !"ZIP".equals(compression)) throw new IllegalArgumentException("Turnip ZIP invalid");
+                if(!turnipZip && "ZIP".equals(compression)) throw new IllegalArgumentException("Use .zip for Turnip driver");
                 String sha = hex(digest.digest());
                 File dst = new File(root, sha + ".wcp");
                 // Inspect the temporary file first: invalid FEX packages must
@@ -89,7 +92,11 @@ public final class ComponentStore {
                 meta.put("sha256", sha);
                 meta.put("compression", compression);
                 meta.put("status", "archive_staged_not_validated");
-                boolean isFex = originalName.toLowerCase(java.util.Locale.ROOT).contains("fex");
+                boolean isFex = !turnipZip && originalName.toLowerCase(java.util.Locale.ROOT).contains("fex");
+                if(turnipZip) {
+                    meta.put("componentType","Turnip");
+                    meta.put("status","turnip_zip_staged_not_activated");
+                }
                 if (isFex) {
                     if (!"XZ".equals(compression))
                         throw new IllegalArgumentException("FEXCore bridge validation currently supports XZ packages only");
@@ -153,6 +160,7 @@ public final class ComponentStore {
                 (magic[2]&255)==0x7a && (magic[3]&255)==0x58 &&
                 (magic[4]&255)==0x5a && (magic[5]&255)==0x00) return "XZ";
         if ((magic[0]&255)==0x1f && (magic[1]&255)==0x8b) return "GZIP";
+        if ((magic[0]&255)==0x50 && (magic[1]&255)==0x4b && (magic[2]&255)==0x03 && (magic[3]&255)==0x04) return "ZIP";
         return "unknown";
     }
     private static String hex(byte[] a) {
@@ -176,7 +184,9 @@ public final class ComponentStore {
                         " · " + meta.optString("sha256").substring(0,12) +
                         "\n    " + ("fex_bridge_pair_verified_not_activated".equals(meta.optString("status"))
                                 ? "FEX BRIDGE PAIR VERIFIED — Proton link not active"
-                                : "STAGED — not validated"));
+                                : ("turnip_zip_staged_not_activated".equals(meta.optString("status"))
+                                    ? "TURNIP ARCHIVE STAGED — Vulkan ICD not connected"
+                                    : "STAGED — not validated")));
                 if (items.size() == 8) break;
             } catch (Exception ignored) {
                 items.add("[bad component metadata: " + entry.getName() + "]");

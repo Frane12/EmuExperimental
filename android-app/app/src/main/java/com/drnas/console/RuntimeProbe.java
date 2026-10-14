@@ -21,15 +21,15 @@ public final class RuntimeProbe {
                 "\nRAM total: " + (mi.totalMem / (1024 * 1024)) + " MiB" +
                 "\nAndroid Vulkan feature: " + (vulkanFeature ? "present" : "not advertised") +
                 "\nAdreno chip: NOT PROBED (no GPU ID spoofing)" +
-                "\nProton/Wine loader: NOT CONNECTED" +
-                "\nFEXCore bridge: PE bridge staging available; NOT CONNECTED" +
-                "\nDXVK/Turnip: NOT CONNECTED";
+                "\nProton/Wine: prefix staging available; GUEST LOADER MISSING" +
+                "\nFEXCore: PE bridge check + prefix layering available" +
+                "\nDXVK/Turnip: archives stageable; Vulkan ICD NOT CONNECTED";
     }
 
     public static String windowsRuntimeStatus() {
-        return "UNSUPPORTED in v0.1: no native Wine/Bionic loader, FEXCore bridge, " +
+        return "EXPERIMENTAL v0.3: no native Wine/Bionic glibc loader, " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
-                "WCP archives and FEXCore PE bridges can be validated and staged, but cannot yet be executed.";
+                "Proton, DXVK, Turnip and FEX may be staged into an isolated prefix, but Wine cannot yet execute.";
     }
     private RuntimeProbe() {}
 }

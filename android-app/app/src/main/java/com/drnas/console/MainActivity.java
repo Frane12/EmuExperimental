@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
     private final StringBuilder log = new StringBuilder();
     private SessionManager sessions;
     private ComponentStore vault;
+    private ContainerBootstrap container;
     private String section = "Console";
     private String currentGame = "Far Cry 3";
 
@@ -49,6 +50,15 @@ public final class MainActivity extends Activity {
         getWindow().setStatusBarColor(BACK);
         getWindow().setNavigationBarColor(BACK);
         vault = new ComponentStore(this);
+        container = new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
+            @Override public void onLog(String msg) { runOnUiThread(()->append(msg)); }
+            @Override public void onComplete(boolean guestStarted,String status) {
+                runOnUiThread(()->{
+                    append("Container status: "+status);
+                    if("Diagnostics".equals(section))render();
+                });
+            }
+        });
         sessions = new SessionManager(new SessionManager.Listener() {
             @Override public void onStateChanged(SessionManager.State status) {
                 append("Session state: " + status);
@@ -56,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.2.2");
+        append("DRNAS CONSOLE · Runtime Core v0.3.0");
         append("No Windows runner connected — this APK does not launch games.");
         render();
     }
@@ -151,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.2",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.3 EXPERIMENTAL",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -173,7 +183,7 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("PRIVATE PROTOTYPE · NO WINDOWS GAME EXECUTION",10,MUTED,true),pad(6,0));
+        content.addView(label("EXPERIMENTAL BOOT · GUEST LAUNCH NOT YET CONNECTED",10,MUTED,true),pad(6,0));
     }
 
     private void showConsole() {
@@ -199,6 +209,12 @@ public final class MainActivity extends Activity {
         game.addView(label("Proton 10 ARM64EC · FEXCore 2609 O3 · DXVK 1.10.3",12,MUTED,false),pad(9,5));
         note(game,"Game launch is NOT implemented in v0.2. Game cards represent profiles only.");
 
+        LinearLayout bootPanel=card();
+        bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
+        bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
+        addButton(bootPanel,"▶ Start container (experimental)",true,v->startContainer());
+        note(bootPanel,"First boot may unpack gigabytes and take several minutes. Guest launch requires Bionic/glibc/X11/Vulkan support not yet included.");
+
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));
         panel.addView(label("Starts a bounded diagnostic /system/bin/sh process; reads output asynchronously; allows stop/cleanup. Does NOT load Wine.",13,MUTED,false),pad(0,9));
@@ -214,11 +230,11 @@ public final class MainActivity extends Activity {
     private void showComponents() {
         content.addView(label("VERSIONED COMPONENT VAULT",11,ACCENT,true),pad(0,6));
         heading("Your engine parts.");
-        content.addView(label("Import your WCP packages using Android's file picker. FEXCore XZ WCPs are checked and their bridge DLLs staged; other packages remain opaque. No Wine integration yet.",13,MUTED,false),pad(0,18));
+        content.addView(label("Import Proton ARM64EC WCP, FEXCore 2609 WCP, DXVK WCP and your Turnip .zip. Start container extracts them into an isolated sandbox.",13,MUTED,false),pad(0,18));
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
-        addButton(panel,"+ Select local .wcp",true,v->selectWcp());
-        note(panel,"FEXCore XZ packages: validates TAR/manifest and stages both PE bridge DLLs. Other WCPs: stored as opaque archives. Nothing is executable yet.");
+        addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
+        note(panel,"FEXCore PE bridges are verified at import. Proton TAR+ZSTD, DXVK TAR+XZ and Turnip ZIP are validated on boot. Live Windows loader is not yet included.");
 
         LinearLayout installed=card();
         installed.addView(label("LOCAL VAULT",12,ACCENT,true),pad(0,8));
@@ -247,7 +263,8 @@ public final class MainActivity extends Activity {
         liveLog.setPadding(dp(12),dp(11),dp(12),dp(11));
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
         panel.addView(liveLog,pad(0,10));
-        addButton(panel,"▶ Start native smoke test",true,v->{
+        addButton(panel,"▶ Start container (experimental)",true,v->startContainer());
+        addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
         });
         addButton(panel,"■ Stop process",false,v->sessions.stop());
@@ -262,6 +279,10 @@ public final class MainActivity extends Activity {
         if(log.length()>30000)log.delete(0,Math.min(12000,log.length()));
         log.append(msg);
         if(liveLog!=null)liveLog.setText(log.toString());
+    }
+    private void startContainer() {
+        if(!container.start()) append("Container bootstrap already in progress");
+        else { append("Container boot requested; check live Diagnostics"); showSection("Diagnostics"); }
     }
     private void selectWcp() {
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
