@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - feat/bundled-runtime-autostart
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -35,7 +36,9 @@ jobs:
         with:
           gradle-version: "8.9"
       - name: Embed Proton 10 ARM64EC, FEX 2609 and DXVK 1.10.3 WCP archives
-        run: python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
+        run: |
+          python3 -m py_compile tools/package_bundled_runtime.py
+          python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
       - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
         run: |
           python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
