@@ -151,6 +151,37 @@ public class ScreenView extends View {
     private Colormap _defaultColormap = null;
     private final Vector<Colormap> _installedColormaps;
     private final float _pixelsPerMillimeter;
+    // X11 advertises a stable guest framebuffer independently of Android's physical
+    // view size. Set once before clients connect; later inset/IME changes must not
+    // re-create the live X11 root window.
+    private int _guestWidth;
+    private int _guestHeight;
+
+    public void setGuestResolution(int width,int height) {
+        if (_rootWindow != null) throw new IllegalStateException("X11 screen already started");
+        if (width < 640 || height < 480 || width > 4096 || height > 2160)
+            throw new IllegalArgumentException("Unsupported guest resolution");
+        _guestWidth = width;
+        _guestHeight = height;
+    }
+    public int getGuestWidth() { return _guestWidth > 0 ? _guestWidth : getWidth(); }
+    public int getGuestHeight() { return _guestHeight > 0 ? _guestHeight : getHeight(); }
+    private float guestScale() {
+        if (_guestWidth == 0 || _guestHeight == 0 || getWidth() == 0 || getHeight() == 0)
+            return 1f;
+        return Math.min((float)getWidth()/_guestWidth,(float)getHeight()/_guestHeight);
+    }
+    private float guestLeft(float scale) { return (getWidth() - getGuestWidth()*scale)/2f; }
+    private float guestTop(float scale) { return (getHeight() - getGuestHeight()*scale)/2f; }
+    private int guestX(float physicalX) {
+        float scale=guestScale();
+        return Math.max(0,Math.min(getGuestWidth()-1,Math.round((physicalX-guestLeft(scale))/scale)));
+    }
+    private int guestY(float physicalY) {
+        float scale=guestScale();
+        return Math.max(0,Math.min(getGuestHeight()-1,Math.round((physicalY-guestTop(scale))/scale)));
+    }
+
 
     private Cursor _currentCursor;
     private int _currentCursorX;
@@ -250,7 +281,7 @@ public class ScreenView extends View {
                     if (_rootWindow == null) return false;
         
                     blank(false);    // Reset the screen saver.
-                    updatePointerPosition((int) event.getX(), (int) event.getY(), 0);
+                    updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
         
                     if(_enableTouchClicks){
                         if(event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getActionIndex() == 0)
@@ -633,9 +664,20 @@ public class ScreenView extends View {
             }
 
             _paint.reset();
+            // Keep a constant 1280x720 X11 coordinate system, scaled uniformly
+            // with letterboxing; drawing and touch use the SAME transformation.
+            int checkpoint=canvas.save();
+            if (_guestWidth>0 && _guestHeight>0) {
+                float scale=guestScale();
+                canvas.drawColor(0xff000000);
+                canvas.translate(guestLeft(scale),guestTop(scale));
+                canvas.scale(scale,scale);
+                canvas.clipRect(0,0,_guestWidth,_guestHeight);
+            }
             _rootWindow.draw(canvas, _paint);
             _xServer.canvasDrawn();
             canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
+            canvas.restoreToCount(checkpoint);
 
             _drawnCursor = _currentCursor;
             _drawnCursorX = _currentCursorX;
@@ -656,7 +698,11 @@ public class ScreenView extends View {
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
 
-        _rootWindow = new Window(_rootId, _xServer, null, this, null, 0, 0, width, height, 0, false, true);
+        // Android insets / keyboard can resize the physical View. Do not
+        // destroy X11 root resources while Explorer has active client windows.
+        if (_rootWindow != null) { postInvalidate(); return; }
+        int rootWidth=getGuestWidth(),rootHeight=getGuestHeight();
+        _rootWindow = new Window(_rootId, _xServer, null, this, null, 0, 0, rootWidth, rootHeight, 0, false, true);
         _sharedClipboardWindow = new Window(_xServer.nextFreeResourceId()+1, _xServer, null, this, _rootWindow, -1, -1, 1, 1, 0, true, false); // hidden window managing android <-> xServer clipboard
         _sharedClipboardWindow.setIsServerWindow(true); // flag as functional server only window (there is a urgent need to introduce interfaces..)
         _sharedClipboardProperty = new Property(_xServer.findAtom("CLIPBOARD").getId(), _xServer.findAtom("CLIPBOARD").getId(), (byte)32); // property which will hold the clipboard data
@@ -699,8 +745,8 @@ public class ScreenView extends View {
         _xServer.addResource(_sharedClipboardWindow);
 
         _currentCursor = _rootWindow.getCursor();
-        _currentCursorX = width / 2;
-        _currentCursorY = height / 2;
+        _currentCursorX = rootWidth / 2;
+        _currentCursorY = rootHeight / 2;
         _drawnCursorX = _currentCursorX;
         _drawnCursorY = _currentCursorY;
         _motionX = _currentCursorX;
@@ -725,7 +771,8 @@ public class ScreenView extends View {
             int top = _drawnCursorY - _drawnCursor.getHotspotY();
             Bitmap bm = _drawnCursor.getBitmap();
 
-            postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+            if (_guestWidth>0) postInvalidate();
+            else postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
             _drawnCursor = null;
         }
 
@@ -737,7 +784,8 @@ public class ScreenView extends View {
         int top = y - cursor.getHotspotY();
         Bitmap bm = cursor.getBitmap();
 
-        postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
+        if (_guestWidth>0) postInvalidate();
+        else postInvalidate(left, top, left + bm.getWidth(), top + bm.getHeight());
     }
 
     /**
@@ -1101,10 +1149,10 @@ public class ScreenView extends View {
         io.writeInt(_defaultColormap.getWhitePixel());    // White pixel.
         io.writeInt(_defaultColormap.getBlackPixel());    // Black pixel.
         io.writeInt(0);    // Current input masks.
-        io.writeShort((short) getWidth());    // Width in pixels.
-        io.writeShort((short) getHeight());    // Height in pixels.
-        io.writeShort((short) (getWidth() / _pixelsPerMillimeter));    // Width in millimeters.
-        io.writeShort((short) (getHeight() / _pixelsPerMillimeter));    // Height in millimeters.
+        io.writeShort((short) getGuestWidth());    // Width in pixels.
+        io.writeShort((short) getGuestHeight());    // Height in pixels.
+        io.writeShort((short) (getGuestWidth() / _pixelsPerMillimeter));    // Width in millimeters.
+        io.writeShort((short) (getGuestHeight() / _pixelsPerMillimeter));    // Height in millimeters.
         io.writeShort((short) 1);    // Minimum installed maps.
         io.writeShort((short) 1);    // Maximum installed maps.
         io.writeInt(vis.getId());    // Root visual ID.
