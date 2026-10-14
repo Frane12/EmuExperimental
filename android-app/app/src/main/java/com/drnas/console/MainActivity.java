@@ -1,6 +1,7 @@
 package com.drnas.console;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Typeface;
@@ -36,6 +37,7 @@ public final class MainActivity extends Activity {
     private static final int PICK_WCP = 301;
     private static final int EXPORT_SESSION_LOG = 302;
     private static final int EXPORT_RAW_WINE_LOG = 303;
+    private static final int PICK_SHARED_FOLDER = 304;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -61,6 +63,7 @@ public final class MainActivity extends Activity {
     private String currentGame = "Far Cry 3";
     private boolean resumed;
     private boolean autoGuiPending;
+    private boolean startupWaitingForFolder;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -92,11 +95,66 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.10");
+        append("DRNAS CONSOLE · Runtime Core v0.5.15");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
+        offerSharedFolderOnFirstLaunch();
+    }
+    /** Android SAF cannot grant the Downloads ROOT; choose Download/DRNAS or Documents. */
+    private void offerSharedFolderOnFirstLaunch() {
+        if(SharedFolderDrive.selectedTree(this)!=null ||
+                getPreferences(MODE_PRIVATE).getBoolean("shared_offer_done",false)) {
+            autoInstallAndBoot();
+            return;
+        }
+        getPreferences(MODE_PRIVATE).edit().putBoolean("shared_offer_done",true).apply();
+        new AlertDialog.Builder(this)
+                .setTitle("Windows R: shared folder")
+                .setMessage("Allow DRNAS Wine to see a chosen Android folder as R:?" +
+                    "\n\nAndroid 11+ blocks selecting the Downloads root. Choose a " +
+                    "subfolder like Download/DRNAS (create it first), or a Documents folder. " +
+                    "Only selected files are copied into Wine's private R: mirror; " +
+                    "Android files are not modified.")
+                .setPositiveButton("Choose folder",(dialog,which)->{
+                    startupWaitingForFolder=true;
+                    requestSharedFolder();
+                })
+                .setNegativeButton("Not now",(dialog,which)->autoInstallAndBoot())
+                .setOnCancelListener(dialog->autoInstallAndBoot())
+                .show();
+    }
+    private void requestSharedFolder() {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {startActivityForResult(i,PICK_SHARED_FOLDER);}
+        catch(Exception e) {
+            append("Android folder picker unavailable: "+e.getMessage());
+            if(startupWaitingForFolder) {startupWaitingForFolder=false;autoInstallAndBoot();}
+        }
+    }
+    private void synchronizeSharedFolder(boolean startup) {
+        append("Importing selected Android folder into Wine R: mirror; original files unchanged.");
+        new Thread(()->{
+            try {
+                SharedFolderDrive.importSelected(this,this::append);
+            } catch(Exception failure) {
+                append("R: folder sync warning: "+failure.getMessage());
+            } finally {
+                runOnUiThread(()->{
+                    if("Components".equals(section))render();
+                    if(startup)autoInstallAndBoot();
+                });
+            }
+        },"drnas-saf-mirror").start();
+    }
+    /** ContainerBootstrap verifies embedded archives on its own worker,
+     * including when the user manually presses Init. Never race with it. */
+    private void autoInstallAndBoot() {
+        append("Starting self-contained Wine initialization (offline APK components).");
+        startWineboot();
     }
     @Override public void onConfigurationChanged(Configuration cfg) {
         super.onConfigurationChanged(cfg);
@@ -205,7 +263,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.10 RAW TRACE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.15 WINE PE RX MAPPING PROBE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -227,15 +285,14 @@ public final class MainActivity extends Activity {
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
-        content.addView(label("EXPERIMENTAL WINEBOOT TEST · NO GRAPHICS OR GAME EXECUTION",10,MUTED,true),pad(6,0));
+        content.addView(label("EXPERIMENTAL WINDOWS RUNTIME · GAME EXECUTION NOT YET VALIDATED",10,MUTED,true),pad(6,0));
         scroll.post(()->scroll.scrollTo(0,pageY));
     }
 
     private void showConsole() {
         content.addView(label("SESSION LAB / ANDROID",11,ACCENT,true),pad(0,6));
         heading("PC gaming, your rules.");
-        content.addView(label("Proof of Android process lifecycle first. " +
-                "Proton 11, FEXCore 2609, DXVK 1.10.3 and Turnip remain modular.",14,MUTED,false),pad(0,20));
+        content.addView(label("Proton 10 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are shipped inside this APK. They install automatically on first launch; Turnip remains optional.",14,MUTED,false),pad(0,20));
         LinearLayout game = card();
         game.addView(label("SELECTED GAME PROFILE",10,ACCENT,true),pad(0,8));
         game.addView(label(currentGame,23,TEXT,true),pad(0,9));
@@ -256,10 +313,11 @@ public final class MainActivity extends Activity {
 
         LinearLayout bootPanel=card();
         bootPanel.addView(label("EXPERIMENTAL WINE CONTAINER BOOT",11,ACCENT,true),pad(0,9));
-        bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
+        bootPanel.addView(label("Auto-installs bundled Proton 10, FEX 2609 and DXVK 1.10.3, then initializes Wine without requiring a component picker. Custom Turnip ZIP can still be imported separately.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(bootPanel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
+        addButton(bootPanel,"▶ Windows file manager (R:)",false,v->openWineFiles());
         addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
         addButton(bootPanel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
@@ -279,10 +337,20 @@ public final class MainActivity extends Activity {
     private void showComponents() {
         content.addView(label("VERSIONED COMPONENT VAULT",11,ACCENT,true),pad(0,6));
         heading("Your engine parts.");
-        content.addView(label("Import Proton ARM64EC WCP, FEXCore 2609 WCP, DXVK WCP and your Turnip .zip. Start container extracts them into an isolated sandbox.",13,MUTED,false),pad(0,18));
+        content.addView(label("Proton 10 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are included and provisioned automatically. Optional import is for alternative WCPs and Turnip ZIP.",13,MUTED,false),pad(0,18));
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
+        LinearLayout sharing=card();
+        sharing.addView(label("WINDOWS R: · ANDROID SHARED FILES",11,ACCENT,true),pad(0,9));
+        sharing.addView(label("Android folder grant: "+
+                (SharedFolderDrive.selectedTree(this)==null ? "not selected" : "granted")+
+                ". SAF copies selected files into Wine R: (private mirror, import-only). "+
+                "On Android 11+ choose a subfolder, not the root Downloads directory.",
+                12,MUTED,false),pad(0,9));
+        addButton(sharing,"Choose folder for Wine R:",true,v->requestSharedFolder());
+        addButton(sharing,"Import / refresh R: from Android",false,v->synchronizeSharedFolder(false));
+        addButton(sharing,"Open R: in Windows file manager",false,v->openWineFiles());
         note(panel,"FEXCore PE bridges are verified at import. Proton TAR+ZSTD, DXVK TAR+XZ and Turnip ZIP are validated on boot. Live Windows loader is not yet included.");
 
         LinearLayout installed=card();
@@ -290,8 +358,7 @@ public final class MainActivity extends Activity {
         List<String> items=vault.list();
         if(items.isEmpty()) installed.addView(label("No components staged on this phone.",13,MUTED,false),pad(0,6));
         for(String item:items) installed.addView(label("◉ "+item,12,TEXT,false),pad(3,12));
-        installed.addView(label("Our example backend inventory (not installed here):\n" +
-                "Proton 10 ARM64EC • FEXCore 2609 O3 • DXVK 1.10.3 • Turnip A840",12,MUTED,false),pad(7,0));
+        installed.addView(label("Default APK bundle: Proton 10 ARM64EC • FEXCore 2609 • DXVK 1.10.3. Optional: your own Turnip ZIP",12,MUTED,false),pad(7,0));
     }
 
     private void showDiagnostics() {
@@ -318,6 +385,7 @@ public final class MainActivity extends Activity {
         addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Open Wine GUI (embedded X11)",true,v->openWineGui());
+        addButton(panel,"▶ Open Windows file manager (R:)",false,v->openWineFiles());
         addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
         });
@@ -461,10 +529,14 @@ public final class MainActivity extends Activity {
         if(container.isBusy()){append("Wait until container initialization finishes.");return;}
         startActivity(new Intent(this,WineGuiActivity.class));
     }
+    private void openWineFiles() {
+        if(container.isBusy()){append("Wait until container initialization finishes.");return;}
+        startActivity(new Intent(this,WineGuiActivity.class).putExtra("DRNAS_GUI_APP","files"));
+    }
     private void startWineboot() {
         if(!container.startWineboot()) append("Container bootstrap already in progress");
         else {
-            append("Wineboot init test requested in an isolated disposable prefix (50s watchdog)");
+            append("Bundled runtime verification + Wineboot requested; please wait for status before opening GUI.");
             showSection("Diagnostics");
         }
     }
@@ -476,6 +548,27 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==PICK_SHARED_FOLDER) {
+            boolean startup=startupWaitingForFolder;
+            startupWaitingForFolder=false;
+            if(result==RESULT_OK && data!=null && data.getData()!=null) {
+                Uri tree=data.getData();
+                try {
+                    getContentResolver().takePersistableUriPermission(tree,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    SharedFolderDrive.persistTree(this,tree);
+                    append("Android SAF folder permission granted for Wine R:");
+                    synchronizeSharedFolder(startup);
+                } catch(Exception e) {
+                    append("SAF grant failed: "+e.getMessage());
+                    if(startup)autoInstallAndBoot();
+                }
+            } else {
+                append("Folder permission declined. Wine R: remains private, no Android access.");
+                if(startup)autoInstallAndBoot();
+            }
+            return;
+        }
         if(result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();
         if(request==EXPORT_SESSION_LOG) {

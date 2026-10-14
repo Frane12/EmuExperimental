@@ -17,8 +17,9 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 25
-        versionName = "0.5.10-x11-linker-aliases"
+        manifestPlaceholders["appLabel"] = "Drnas Console"
+        versionCode = 30
+        versionName = "0.5.15-pe-execmap-diagnostics"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -46,6 +47,11 @@ android {
             // Use the SAME private secret-backed key on EVERY downloadable build.
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
+            } else {
+                // Missing project signing secrets: install experimental CI APK
+                // alongside existing DRNAS and earlier LAB builds without uninstalling data.
+                applicationIdSuffix = ".labv0515"
+                manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }
         release {
@@ -64,4 +70,6 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.27.1")
     implementation("com.github.luben:zstd-jni:1.5.6-9@aar")
     testImplementation("junit:junit:4.13.2")
+    // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
+    testImplementation("org.json:json:20240303")
 }

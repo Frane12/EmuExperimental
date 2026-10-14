@@ -8,8 +8,13 @@
 #include <errno.h>
 #include <elf.h>
 #include <dlfcn.h>
+#include <vulkan/vulkan.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <stdarg.h>
 
 /* Native Android/Bionic host ABI diagnostics. No untrusted guest execution. */
 JNIEXPORT jstring JNICALL
@@ -48,6 +53,38 @@ Java_com_drnas_console_NativeHost_nativeVulkanInfo(JNIEnv *env, jclass clazz) {
         "System Vulkan library loaded; vkEnumerateInstanceVersion not exported");
     dlclose(vk);
     return (*env)->NewStringUTF(env, out);
+}
+
+/* Probe the system Vulkan DEVICE name, never an assumed GPU ID.
+ * Unsupported chip -> fail closed to stock Vulkan, not a random Turnip ZIP. */
+JNIEXPORT jstring JNICALL
+Java_com_drnas_console_NativeHost_nativeVulkanDeviceName(JNIEnv *env,jclass clazz) {
+    (void)clazz;
+    void *vk=dlopen("libvulkan.so",RTLD_NOW|RTLD_LOCAL);
+    if (!vk)return (*env)->NewStringUTF(env,"");
+    PFN_vkCreateInstance make=(PFN_vkCreateInstance)dlsym(vk,"vkCreateInstance");
+    PFN_vkDestroyInstance destroy=(PFN_vkDestroyInstance)dlsym(vk,"vkDestroyInstance");
+    PFN_vkEnumeratePhysicalDevices enumerate=(PFN_vkEnumeratePhysicalDevices)dlsym(vk,"vkEnumeratePhysicalDevices");
+    PFN_vkGetPhysicalDeviceProperties props=(PFN_vkGetPhysicalDeviceProperties)dlsym(vk,"vkGetPhysicalDeviceProperties");
+    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE]={0};
+    if(make && destroy && enumerate && props) {
+        VkApplicationInfo app={.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO,.pApplicationName="DRNAS probe",.apiVersion=VK_API_VERSION_1_0};
+        VkInstanceCreateInfo ci={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&app};
+        VkInstance instance=VK_NULL_HANDLE;
+        if(make(&ci,NULL,&instance)==VK_SUCCESS) {
+            uint32_t count=1;
+            VkPhysicalDevice device=VK_NULL_HANDLE;
+            if(enumerate(instance,&count,&device)==VK_SUCCESS && count>0 && device) {
+                VkPhysicalDeviceProperties p;
+                memset(&p,0,sizeof(p));
+                props(device,&p);
+                snprintf(name,sizeof(name),"%s",p.deviceName);
+            }
+            destroy(instance,NULL);
+        }
+    }
+    dlclose(vk);
+    return (*env)->NewStringUTF(env,name);
 }
 
 static const char *wine_kind(uint16_t type) {
@@ -129,4 +166,87 @@ Java_com_drnas_console_NativeHost_nativeProbeFile(JNIEnv *env, jclass clazz,
     fclose(f);
     (*env)->ReleaseStringUTFChars(env, jpath, path);
     return (*env)->NewStringUTF(env, out);
+}
+
+/*
+ * Safe no-exec memory-permission diagnostics. mmap/mprotect never executes the
+ * mapped bytes, patches a Wine library, changes SELinux policy or elevates
+ * permissions. The Android app and Wine child may have different seccomp
+ * limits, so findings are strong indicators rather than definitive proof.
+ */
+static void append_map(char *out,size_t cap,const char *fmt,...) {
+    size_t len=strlen(out);
+    if(len>=cap-1)return;
+    va_list args;va_start(args,fmt);
+    vsnprintf(out+len,cap-len,fmt,args);
+    va_end(args);
+}
+
+static void probe_file_map(char *out,size_t cap,int fd,size_t page,
+                           int writable_first) {
+    int prot=writable_first?(PROT_READ|PROT_WRITE):PROT_READ;
+    void *p=mmap(NULL,page,prot,MAP_PRIVATE,fd,0);
+    if(p==MAP_FAILED) {
+        int error=errno;
+        append_map(out,cap,"%s_MAP_ERR=%d (%s); ",
+                   writable_first?"PRIVATE_RW":"PRIVATE_R",error,strerror(error));
+        return;
+    }
+    if(writable_first) {
+        /* Explicitly dirty a MAP_PRIVATE page; the file itself is untouched. */
+        volatile unsigned char *b=(volatile unsigned char *)p;
+        b[0]=(unsigned char)(b[0]^1u);
+    }
+    if(mprotect(p,page,PROT_READ|PROT_EXEC)<0) {
+        int error=errno;
+        append_map(out,cap,"%s_TO_RX_DENIED=%d (%s); ",
+                   writable_first?"PRIVATE_RW":"PRIVATE_R",error,strerror(error));
+    } else {
+        append_map(out,cap,"%s_TO_RX_OK; ",writable_first?"PRIVATE_RW":"PRIVATE_R");
+    }
+    munmap(p,page);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_drnas_console_NativeHost_nativeExecMappingProbe(JNIEnv *env,jclass clazz,
+                                                          jstring jpath) {
+    (void)clazz;
+    char out[1024]={0};
+    long raw_page=sysconf(_SC_PAGESIZE);
+    if(raw_page<=0 || raw_page>65536) {
+        return (*env)->NewStringUTF(env,"EXECMAP_INVALID_PAGE_SIZE");
+    }
+    size_t page=(size_t)raw_page;
+    /* Anonymous RW -> RX is a control experiment, not executable code. */
+    void *anon=mmap(NULL,page,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+    if(anon==MAP_FAILED) {
+        append_map(out,sizeof(out),"ANON_RW_MAP_ERR=%d; ",errno);
+    } else {
+        if(mprotect(anon,page,PROT_READ|PROT_EXEC)<0)
+            append_map(out,sizeof(out),"ANON_RW_TO_RX_DENIED=%d (%s); ",errno,strerror(errno));
+        else append_map(out,sizeof(out),"ANON_RW_TO_RX_OK; ");
+        munmap(anon,page);
+    }
+    if(!jpath) {
+        append_map(out,sizeof(out),"FILE_PATH_NULL");
+        return (*env)->NewStringUTF(env,out);
+    }
+    const char *path=(*env)->GetStringUTFChars(env,jpath,NULL);
+    if(!path)return NULL;
+    int fd=open(path,O_RDONLY|O_CLOEXEC|O_NOFOLLOW);
+    if(fd<0) {
+        append_map(out,sizeof(out),"FILE_OPEN_ERR=%d (%s)",errno,strerror(errno));
+    } else {
+        struct stat st;
+        if(fstat(fd,&st)<0 || !S_ISREG(st.st_mode) || st.st_size<=0) {
+            append_map(out,sizeof(out),"FILE_NOT_REGULAR_OR_EMPTY");
+        } else {
+            append_map(out,sizeof(out),"FILE_BYTES=%lld; ",(long long)st.st_size);
+            probe_file_map(out,sizeof(out),fd,page,0);
+            probe_file_map(out,sizeof(out),fd,page,1);
+        }
+        close(fd);
+    }
+    (*env)->ReleaseStringUTFChars(env,jpath,path);
+    return (*env)->NewStringUTF(env,out);
 }
