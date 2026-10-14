@@ -1,0 +1,5 @@
+DRNAS includes (in CI-built APKs) Wine Mono 11.3.0 ARM64 MSI
+Source: https://github.com/wine-mono/wine-mono/releases/tag/wine-mono-11.3.0
+SHA-256: b0c47d374efaf22cbff76cb10488ac2d1627b067e085aef7acec573884120e0f
+Copyright and licenses: Wine Mono project and its component licensors.
+See https://github.com/wine-mono/wine-mono for source, license and notices.
