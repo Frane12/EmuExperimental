@@ -27,12 +27,12 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.15: Wine CLI verified on Adreno 840, Wineboot not initialized. " +
-                "RAW trace shows executable PE sections of ntdll.dll fail to obtain RX memory protection. " +
-                "A new native probe compares file-backed R->RX, dirty private RW->RX and anonymous RW->RX " +
-                "mappings without executing guest bytes. Results go to both session and RAW logs. " +
-                "External storage permissions do NOT change Android SELinux executable-memory policy. " +
-                "X11/audio/Turnip ICD and Windows games remain unverified.";
+        return "EXPERIMENTAL v0.5.16: controlled Proton 11.0-2 ARM64EC A/B against " +
+                "v0.5.15 Wine 10. New bionic Wine package advertises anonymous PE-image " +
+                "mapping to address dirty file-backed RW->RX denial under SELinux. " +
+                "On-device tests are mandatory: neither successful Wineboot nor Windows " +
+                "execution is claimed. Original v0.5.15 remains installed separately. " +
+                "X11/audio/Turnip Vulkan ICD and games are NOT verified.";
     }
     private RuntimeProbe() {}
 }
