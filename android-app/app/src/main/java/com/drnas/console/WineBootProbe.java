@@ -296,9 +296,13 @@ public final class WineBootProbe {
         if(wineServer.isFile() && WineLaunchProbe.inspect(wineServer).runnable)
             env.put("WINESERVER",wineServer.getAbsolutePath());
         env.put("LC_ALL","C");
-        env.put("WINEDEBUG","+process,+server"); // bounded output shows wineserver/PE initialization failures
+        env.put("WINEDEBUG","+process,+module,+loaddll"); // focus on PE/DLL module resolution
         env.put("PROTON_NO_NTSYNC","1");
         File wineLib=new File(libdir,"wine");
+        report.accept("WINEDLLPATH="+env.get("WINEDLLPATH"));
+        report.accept("Proton share/wine present="+
+                new File(protonFolder,"share/wine").isDirectory());
+        WineDependencyProbe.inventory(wineLib,isolated,report);
         boolean pePresent=inspectWinebootArtifacts(wineLib,isolated,report);
         report.accept("At least one Wineboot PE candidate="+pePresent+
                 "; missing candidates are not automatically proof of failure");
@@ -330,16 +334,31 @@ public final class WineBootProbe {
             return new Result("WINEBOOT_LINKER_DENIED",-1,0);
         }
         Thread output=new Thread(()->{
-            int count=0;
+            int count=0,emitted=0,highlights=0;
             try(BufferedReader lines=new BufferedReader(new InputStreamReader(
                     child.getInputStream(),StandardCharsets.UTF_8))) {
                 String line;
                 while((line=lines.readLine())!=null) {
-                    if(++count<=MAX_LOG_LINES)
+                    ++count;
+                    String lower=line.toLowerCase(java.util.Locale.ROOT);
+                    boolean important=lower.contains("kernel32") ||
+                            lower.contains("kernelbase") ||lower.contains("ntdll")||
+                            lower.contains("failed") ||lower.contains("error:")||
+                            lower.contains(":err:")||lower.contains(":warn:")||
+                            lower.contains("c0000135") ||lower.contains("wineboot.exe")||
+                            lower.contains("cannot find")||lower.contains("could not load")||
+                            lower.contains("dll not found");
+                    // Keep bounded highlights even if verbose module tracing
+                    // fills the first MAX_LOG_LINES lines.
+                    if((count<=25 || important) && emitted<MAX_LOG_LINES &&
+                            (!important || highlights<80)) {
                         report.accept("[wineboot] "+line.substring(0,Math.min(line.length(),480)));
+                        emitted++;
+                        if(important) highlights++;
+                    }
                 }
-                if(count>MAX_LOG_LINES)
-                    report.accept("[wineboot] Suppressed "+(count-MAX_LOG_LINES)+" additional lines");
+                report.accept("[wineboot] output total="+count+", retained="+emitted+
+                        ", priority="+highlights);
             }catch(IOException ex) {
                 report.accept("[wineboot] output stream closed: "+ex.getClass().getSimpleName());
             }
