@@ -5,6 +5,8 @@ from pathlib import Path
 COMMIT = '95b9fcabd8533aa6e598587566618461b8b1c698'
 BASE = f'https://raw.githubusercontent.com/utkarshdalal/GameNative/{COMMIT}/'
 FILES = {
+ 'libsndfile.so':'f7ab9d12b1a5c60c7d4f11c535c6d0312ac74f92',
+ 'libltdl.so':'5cd08c89d30222a867ad3b0fcdc119d5e328c00b',
  'libpulse.so':'3443f4d4c87da7fc1249a0dad248282783e82104',
  'libpulseaudio.so':'bccfd71c8aa052f91d2901c9bceaa3ae4f3bb9de',
  'libpulsecommon-13.0.so':'f09b73d0fd0d9459b91fc2c3f43258eafa7f4dbb',
@@ -40,5 +42,15 @@ def main(root):
     license_dir=root/'assets/licenses'; license_dir.mkdir(parents=True,exist_ok=True)
     (license_dir/'GameNative-GPL-3.0.txt').write_bytes(download('LICENSE','5ae980bfc612213f0f8a6457978575b3ead3eae2'))
     (license_dir/'PulseAudio-NOTICE.txt').write_text('PulseAudio Android binaries and AAudio modules from GameNative commit '+COMMIT+'\nSource: https://github.com/utkarshdalal/GameNative/tree/'+COMMIT+'\nPulseAudio: LGPL-2.1-or-later; upstream https://www.freedesktop.org/wiki/Software/PulseAudio/\nGameNative modifications: GPL-3.0; see bundled license and source repository.\n')
+    # Wine may dlopen either SONAME; use the same Android client ABI as the server.
+    gui=root/'assets/gui-runtime-v1.zip'
+    with zipfile.ZipFile(gui) as z: entries={n:z.read(n) for n in z.namelist()}
+    manifest=json.loads(entries['manifest.json'])
+    pulse=(native/'libpulse.so').read_bytes()
+    entries['lib/libpulse.so.0']=pulse
+    manifest['files']['libpulse.so.0']=hashlib.sha256(pulse).hexdigest()
+    entries['manifest.json']=json.dumps(manifest,indent=2).encode()
+    with zipfile.ZipFile(gui,'w',zipfile.ZIP_DEFLATED) as z:
+        for name,data in entries.items(): z.writestr(name,data)
     print('Bundled PulseAudio + AAudio:',len(modules),'modules')
 if __name__=='__main__': main(sys.argv[1])
