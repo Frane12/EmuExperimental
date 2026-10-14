@@ -9,8 +9,8 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 12
-        versionName = "0.4.6-cpu-assist-no-npu"
+        versionCode = 13
+        versionName = "0.4.7-accelerator-discovery"
     }
     ndkVersion = "27.2.12479018"
     externalNativeBuild {
