@@ -1,0 +1,45 @@
+name: EmuExperimental - Android APK V0.2
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "android-app/**"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android platform SDK
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build real Android debug APK
+        working-directory: android-app
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify APK binary and Android manifest
+        run: |
+          test -s android-app/app/build/outputs/apk/debug/app-debug.apk
+          file android-app/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Drnas-Console-FEX-Bridge-V0.2-debug-apk
+          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
