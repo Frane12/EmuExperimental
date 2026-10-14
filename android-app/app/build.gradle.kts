@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 34
-        versionName = "0.5.19-desktop-audio-reset"
+        versionCode = 35
+        versionName = "0.5.20-prefix-deps-live-rdrive"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -50,7 +50,7 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".labv0519"
+                applicationIdSuffix = ".labv0520"
                 manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }
