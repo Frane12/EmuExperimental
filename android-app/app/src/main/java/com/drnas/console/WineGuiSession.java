@@ -16,9 +16,14 @@ final class WineGuiSession implements AutoCloseable {
     private volatile WineServerDiagnostics.ManagedServer server;
 
     static List<String> command(File linker,File wine) {
+        return command(linker,wine,"config");
+    }
+    static List<String> command(File linker,File wine,String app) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         args.set(args.size()-1,"explorer.exe");
-        args.add("/desktop=DRNAS,1024x768");args.add("winecfg.exe");
+        args.add("/desktop=DRNAS,1024x768");
+        // Wine's built-in ARM64 PE file manager does not require an x86 translator.
+        args.add("files".equals(app) ? "winefile.exe" : "winecfg.exe");
         return args;
     }
     static void displayEnvironment(Map<String,String> env) {
@@ -28,6 +33,9 @@ final class WineGuiSession implements AutoCloseable {
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
+        run(context,log,raw,"config");
+    }
+    void run(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(
                 new File(base,"boot-plan.json").toPath()),StandardCharsets.UTF_8));
@@ -43,6 +51,7 @@ final class WineGuiSession implements AutoCloseable {
         File prefix=new File(base,"wineboot-probe/template/.wine").getCanonicalFile();
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
+        SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
         File lib=new File(proton,plan.optString("protonLibPath","lib")).getCanonicalFile();
@@ -82,8 +91,10 @@ final class WineGuiSession implements AutoCloseable {
             if(stopped)return;
             WineBootProbe.configureChildExeRelay(env,nativeDir,wine);
             WineBootProbe.configureSecondStage(env);
-            log.accept("Launching explorer virtual desktop + winecfg; Canvas X11 renderer, 5 minute session.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine)).directory(proton).redirectErrorStream(true);
+            log.accept("Launching Wine virtual desktop + "+
+                    ("files".equals(app)?"Wine's built-in file manager (R: available)":"winecfg")+
+                    "; Canvas X11 renderer, 5 minute session. Turnip/Vulkan acceleration NOT yet verified.");
+            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
