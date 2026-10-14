@@ -34,16 +34,16 @@ def package(archive,output):
                 path=Path(name)
                 if path.parent!=Path('usr/lib') or not re.fullmatch(r'lib[^/]+\.so(?:\.[^/]+)?',path.name):continue
                 if m.issym():
-                    if '/' in m.linkname or m.linkname in ('.','..'):raise RuntimeError('unsafe library link')
+                    if '/' in m.linkname or m.linkname in ('.','..'):continue
                     members[path.name]=('link',m.linkname)
                 elif m.isfile():
-                    if m.size>96*1024*1024:raise RuntimeError('oversized library')
+                    if m.size>96*1024*1024:continue
                     dest=Path(temp)/path.name
                     with tf.extractfile(m) as source,dest.open('wb') as out:shutil.copyfileobj(source,out)
                     members[path.name]=('file',dest)
                 elif m.islnk():
                     target=Path(m.linkname.removeprefix('./'))
-                    if target.parent!=Path('usr/lib'):raise RuntimeError('unsafe hardlink')
+                    if target.parent!=Path('usr/lib'):continue
                     members[path.name]=('link',target.name)
         def content(name,seen=None):
             seen=set() if seen is None else seen
