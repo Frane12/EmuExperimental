@@ -66,7 +66,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.0");
+        append("DRNAS CONSOLE · Runtime Core v0.5.1");
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -161,7 +161,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.0 PE LOADER LAB",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.1 BOOTSTRAP LAB",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -214,7 +214,7 @@ public final class MainActivity extends Activity {
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
-        note(bootPanel,"Wineserver connects and processes real requests. Wineboot now diagnoses kernel32/kernelbase/ntdll PE architecture and DLL resolution (c0000135). No GUI or games yet.");
+        note(bootPanel,"Wine's kernel32 ARM64 PE exists but was rejected during initialization (c0000135). Isolated wineboot now explicitly enables upstream WINEBOOTSTRAPMODE for builtin DLL fallback. No GUI or game execution.");
 
         LinearLayout panel=card();
         panel.addView(label("REAL ANDROID SESSION TEST",11,ACCENT,true),pad(0,9));

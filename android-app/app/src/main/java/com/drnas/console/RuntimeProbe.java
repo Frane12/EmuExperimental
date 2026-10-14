@@ -27,7 +27,7 @@ public final class RuntimeProbe {
     }
 
     public static String windowsRuntimeStatus() {
-        return "EXPERIMENTAL v0.5.0: active wineserver + kernel32, kernelbase and NTDLL Wine PE loader diagnostics. " +
+        return "EXPERIMENTAL v0.5.1: isolated Wine native bootstrap-mode A/B for missing kernel32 PE mapping. " +
                 "X server, PulseAudio or Vulkan loader is wired to Android. " +
                 "Start container attempts Wine --version via Android linker64 PROGRAM --version only for verified Bionic ARM64 ELF. Opt-in wineboot attempts disposable prefix initialization; real success needs exit 0 and registry changes. X11/audio/Turnip ICD and games are not connected.";
     }

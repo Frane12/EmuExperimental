@@ -43,6 +43,13 @@ public class WineBootProbeTest {
                 new File("/system/bin/linker64"),new File("wine")));
     }
 
+    @Test public void isolatedBootstrapModeSetsWineNativeFlagOnlyOnProvidedEnv() {
+        java.util.Map<String,String> winebootEnv=new java.util.HashMap<>();
+        WineBootProbe.configureBootstrapMode(winebootEnv);
+        assertEquals("1",winebootEnv.get("WINEBOOTSTRAPMODE"));
+        assertEquals(1,winebootEnv.size());
+    }
+
     @Test public void skipsOnlyWinebootReexecViaWineSecondStageFlag() {
         java.util.Map<String,String> childEnv=new java.util.HashMap<>();
         WineBootProbe.configureSecondStage(childEnv);

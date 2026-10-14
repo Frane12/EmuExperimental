@@ -40,6 +40,12 @@ public final class WineBootProbe {
         }
     }
 
+    static void configureBootstrapMode(Map<String,String> environment) {
+        // Wine ntdll/loader.c load_global_options() uses *presence*, not
+        // equality against 1, to set is_prefix_bootstrap.
+        environment.put("WINEBOOTSTRAPMODE","1");
+    }
+
     static List<String> command(File linker,File wine) {
         List<String> result=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         result.set(result.size()-1,"wineboot.exe");
@@ -298,6 +304,13 @@ public final class WineBootProbe {
         env.put("LC_ALL","C");
         env.put("WINEDEBUG","+process,+module,+loaddll"); // focus on PE/DLL module resolution
         env.put("PROTON_NO_NTSYNC","1");
+        // Wine's dlls/ntdll/loader.c checks WINEBOOTSTRAPMODE before allowing
+        // built-in kernel32/kernelbase lookup when prefix/system32 is empty.
+        // The imported prefix template contains registry files but no PE
+        // system DLLs, so force bootstrap mode only inside this disposable
+        // wineboot experiment (never in the normal Wine CLI or main prefix).
+        configureBootstrapMode(env);
+        report.accept("WINEBOOTSTRAPMODE=1 (enable Wine builtin PE fallback during isolated prefix initialization)");
         File wineLib=new File(libdir,"wine");
         report.accept("WINEDLLPATH="+env.get("WINEDLLPATH"));
         report.accept("Proton share/wine present="+
