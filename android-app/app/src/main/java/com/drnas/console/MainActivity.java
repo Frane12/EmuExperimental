@@ -120,7 +120,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS EMU · Runtime Core v0.5.19");
+        append("DRNAS EMU · Runtime Core v0.5.20");
         wineReady=readyForDesktop();
         if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
