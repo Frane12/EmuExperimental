@@ -2,7 +2,7 @@
 """Package only X11/font client libraries from a pinned Bionic rootfs.
 No Wine, Microsoft fonts, GPU drivers or redirect shims are copied.
 """
-import hashlib,json,re,subprocess,sys,tarfile,tempfile,urllib.request,zipfile
+import hashlib,json,re,shutil,subprocess,sys,tarfile,tempfile,zipfile
 from pathlib import Path
 URL='https://downloads.gamenative.app/imagefs_bionic.txz'
 FALLBACK_URL='https://pub-9fcd5294bd0d4b85a9d73615bf98f3b5.r2.dev/imagefs_bionic.txz'
@@ -24,27 +24,40 @@ def package(archive,output):
         else:raise RuntimeError('Neither public upstream mirror supplied the pinned rootfs')
     if hashlib.sha256(archive.read_bytes()).hexdigest()!=SHA256:
         raise RuntimeError('Bionic rootfs checksum changed: refuse unreviewed runtime')
-    with tempfile.TemporaryDirectory() as temp,tarfile.open(archive,'r:xz') as tf:
-        members={m.name.removeprefix('./'):m for m in tf.getmembers()}
+    # One streaming pass: tar.xz random seeks otherwise decompress the entire
+    # image repeatedly for each dependency. Stage only top-level ELF libraries.
+    with tempfile.TemporaryDirectory() as temp:
+        members={}
+        with tarfile.open(archive,'r|xz') as tf:
+            for m in tf:
+                name=m.name.removeprefix('./')
+                path=Path(name)
+                if path.parent!=Path('usr/lib') or not re.fullmatch(r'lib[^/]+\.so(?:\.[^/]+)?',path.name):continue
+                if m.issym():
+                    if '/' in m.linkname or m.linkname in ('.','..'):raise RuntimeError('unsafe library link')
+                    members[path.name]=('link',m.linkname)
+                elif m.isfile():
+                    if m.size>96*1024*1024:raise RuntimeError('oversized library')
+                    dest=Path(temp)/path.name
+                    with tf.extractfile(m) as source,dest.open('wb') as out:shutil.copyfileobj(source,out)
+                    members[path.name]=('file',dest)
+                elif m.islnk():
+                    target=Path(m.linkname.removeprefix('./'))
+                    if target.parent!=Path('usr/lib'):raise RuntimeError('unsafe hardlink')
+                    members[path.name]=('link',target.name)
         def content(name,seen=None):
             seen=set() if seen is None else seen
             if name in seen:raise RuntimeError('cyclic archive link')
-            seen.add(name);m=members[name]
-            if m.issym():
-                target=str(Path(name).parent/m.linkname)
-                if '..' in Path(target).parts or target.startswith('/'):raise RuntimeError('unsafe link')
-                return content(target,seen)
-            if m.islnk():return content(m.linkname.removeprefix('./'),seen)
-            if not m.isfile():raise RuntimeError('not a regular library')
-            return tf.extractfile(m).read()
+            seen.add(name);kind,value=members[name]
+            return content(value,seen) if kind=='link' else value.read_bytes()
         libs={};pending=list(ROOTS)
         while pending:
             soname=pending.pop()
             if soname in SYSTEM or soname in libs:continue
-            data=content('usr/lib/'+soname)
+            data=content(soname)
             if data[:5]!=b'\x7fELF\x02' or int.from_bytes(data[18:20],'little')!=183:
                 raise RuntimeError('not AArch64 ELF: '+soname)
-            path=Path(temp)/soname;path.write_bytes(data)
+            path=Path(temp)/('probe-'+soname);path.write_bytes(data)
             dynamic=subprocess.check_output(['readelf','-d',str(path)],text=True)
             deps=re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic)
             libs[soname]=data;pending.extend(deps)
