@@ -43,6 +43,18 @@ public class WineBootProbeTest {
                 new File("/system/bin/linker64"),new File("wine")));
     }
 
+    @Test public void loaderRelayNeverRunsWithoutPackagedNativeShim() throws Exception {
+        Path root=Files.createTempDirectory("drnas-no-exec-shim");
+        try {
+            java.util.Map<String,String> environment=new java.util.HashMap<>();
+            assertThrows(java.io.IOException.class,()->WineBootProbe.configureChildExeRelay(
+                    environment,root.toFile(),new File("/nonexistent/wine")));
+            assertTrue(environment.isEmpty());
+        } finally {
+            WineBootProbe.removeWithoutFollowingLinks(root.toFile());
+        }
+    }
+
     @Test public void isolatedBootstrapModeSetsWineNativeFlagOnlyOnProvidedEnv() {
         java.util.Map<String,String> winebootEnv=new java.util.HashMap<>();
         WineBootProbe.configureBootstrapMode(winebootEnv);

@@ -17,8 +17,8 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 16
-        versionName = "0.5.1-prefix-bootstrap-mode"
+        versionCode = 17
+        versionName = "0.5.2-wine-child-exec"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

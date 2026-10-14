@@ -40,6 +40,22 @@ public final class WineBootProbe {
         }
     }
 
+    static void configureChildExeRelay(Map<String,String> environment,
+                                       File nativeLibDir,File approvedWine) throws IOException {
+        File relay=new File(nativeLibDir,"libdrnas_wine_child_exec.so");
+        if(!relay.isFile() || relay.length()<4096 ||
+                java.nio.file.Files.isSymbolicLink(relay.toPath()))
+            throw new IOException("Packaged native Wine child-exec relay missing");
+        if(!approvedWine.isFile() ||
+                !WineLaunchProbe.inspect(approvedWine).runnable)
+            throw new IOException("Cannot relay an unverified Wine binary");
+        String absolute=approvedWine.getCanonicalPath();
+        if(!absolute.startsWith("/data/"))
+            throw new IOException("Wine must be verified app-private staged ELF");
+        environment.put("LD_PRELOAD",relay.getCanonicalPath());
+        environment.put("DRNAS_WINE_CHILD_EXE",absolute);
+    }
+
     static void configureBootstrapMode(Map<String,String> environment) {
         // Wine ntdll/loader.c load_global_options() uses *presence*, not
         // equality against 1, to set is_prefix_bootstrap.
@@ -335,6 +351,15 @@ public final class WineBootProbe {
             return new Result("WINESERVER_PRESTART_FAILED",-1,0);
         }
         try {
+        // Only the Wineboot CHILD receives the loader relay. The separate
+        // prestarted wineserver keeps its own earlier NLS compatibility shim.
+        try {
+            configureChildExeRelay(env,nativeLibraryDir,wine);
+        } catch(IOException problem) {
+            report.accept("Wine child exec adapter unavailable: "+problem.getMessage());
+            return new Result("WINE_CHILD_EXEC_RELAY_MISSING",-1,0);
+        }
+        report.accept("Wine child execv relay enabled (verified Wine ELF only; Android linker64).");
         // Isolate the Wine second-stage bypass to this controlled experiment.
         configureSecondStage(env);
         report.accept("WINELOADERNOEXEC=1 (second-stage handoff experiment)");
@@ -360,7 +385,11 @@ public final class WineBootProbe {
                             lower.contains(":err:")||lower.contains(":warn:")||
                             lower.contains("c0000135") ||lower.contains("wineboot.exe")||
                             lower.contains("cannot find")||lower.contains("could not load")||
-                            lower.contains("dll not found");
+                            lower.contains("dll not found") ||
+                            lower.contains("[drnas child]") ||
+                            lower.contains("permission denied") ||
+                            lower.contains("access denied") ||
+                            lower.contains("child-process");
                     // Keep bounded highlights even if verbose module tracing
                     // fills the first MAX_LOG_LINES lines.
                     if((count<=25 || important) && emitted<MAX_LOG_LINES &&

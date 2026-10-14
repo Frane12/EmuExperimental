@@ -11,3 +11,9 @@ add_library(drnas_wine_nls SHARED wine_nls_compat.c)
 target_compile_features(drnas_wine_nls PRIVATE c_std_11)
 target_compile_options(drnas_wine_nls PRIVATE -Wall -Wextra -Werror -fstack-protector-strong)
 target_link_libraries(drnas_wine_nls PRIVATE dl)
+
+# Scoped Wine child-process execv relay, isolated to the Wineboot lab.
+add_library(drnas_wine_child_exec SHARED wine_child_exec_compat.c)
+target_compile_features(drnas_wine_child_exec PRIVATE c_std_11)
+target_compile_options(drnas_wine_child_exec PRIVATE -Wall -Wextra -Werror -fstack-protector-strong)
+target_link_libraries(drnas_wine_child_exec PRIVATE dl)
