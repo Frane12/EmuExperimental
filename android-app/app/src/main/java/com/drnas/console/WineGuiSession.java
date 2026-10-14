@@ -15,6 +15,7 @@ final class WineGuiSession implements AutoCloseable {
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
     private volatile PulseAudioRuntime audio;
+    private volatile Thread folderWatcher;
 
     static void stopActive() throws Exception {
         WineGuiSession current;
@@ -84,6 +85,7 @@ final class WineGuiSession implements AutoCloseable {
         File prefix=new File(base,"wineboot-probe/template/.wine").getCanonicalFile();
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
+        WinePrefixLayout.ensure(prefix,log);
         SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
@@ -130,6 +132,11 @@ final class WineGuiSession implements AutoCloseable {
             if(stopped)return;
             WineBootProbe.configureChildExeRelay(env,nativeDir,wine);
             WineBootProbe.configureSecondStage(env);
+            // The desktop is held until one-time prerequisite installers complete.
+            // A missing MSI/EXE never masquerades as an installed dependency.
+            WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            if(stopped)return;
+            startFolderWatcher(context,log);
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
@@ -158,8 +165,27 @@ final class WineGuiSession implements AutoCloseable {
             launcher.getInputStream().close();
         } finally {close();}
     }
+    private void startFolderWatcher(Context context,Consumer<String> log) {
+        if(SharedFolderDrive.selectedTree(context)==null)return;
+        folderWatcher=new Thread(()->{
+            while(!stopped && !Thread.currentThread().isInterrupted()) {
+                try {
+                    String summary=SharedFolderDrive.importSelected(context,s->{});
+                    if(!summary.startsWith("R: imported 0 file(s)"))
+                        log.accept("[R: live refresh] "+summary);
+                } catch(Exception e) {
+                    if(!stopped)log.accept("R: live refresh failed: "+e.getMessage());
+                }
+                try {Thread.sleep(20000);}
+                catch(InterruptedException interrupted){return;}
+            }
+        },"drnas-r-drive-refresh");
+        folderWatcher.setDaemon(true);
+        folderWatcher.start();
+    }
     @Override public void close() {
         stopped=true;
+        Thread watcher=folderWatcher;if(watcher!=null)watcher.interrupt();
         PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
