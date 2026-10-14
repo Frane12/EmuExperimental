@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Drnas Console V0 Game Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "gameId",
+    "name",
+    "windowsRuntime",
+    "cpuTranslator",
+    "graphics",
+    "audio",
+    "input",
+    "frameCap",
+    "maxFrameLatency",
+    "experimental"
+  ],
+  "properties": {
+    "schema": {
+      "const": 1
+    },
+    "gameId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "windowsRuntime": {
+      "type": "string"
+    },
+    "cpuTranslator": {
+      "type": "string"
+    },
+    "graphics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api",
+        "wrapper",
+        "driver"
+      ],
+      "properties": {
+        "api": {
+          "enum": [
+            "d3d11",
+            "d3d12",
+            "opengl"
+          ]
+        },
+        "wrapper": {
+          "type": "string"
+        },
+        "driver": {
+          "type": "string"
+        }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "latency"
+      ],
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "latency": {
+          "enum": [
+            "low",
+            "balanced",
+            "compatibility"
+          ]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyboardAndMouse",
+        "pointerOwnerRouting"
+      ],
+      "properties": {
+        "keyboardAndMouse": {
+          "type": "boolean"
+        },
+        "pointerOwnerRouting": {
+          "const": true
+        }
+      }
+    },
+    "frameCap": {
+      "type": "integer",
+      "minimum": 15,
+      "maximum": 240
+    },
+    "maxFrameLatency": {
+      "type": "boolean"
+    },
+    "experimental": {
+      "type": "boolean"
+    }
+  }
+}
