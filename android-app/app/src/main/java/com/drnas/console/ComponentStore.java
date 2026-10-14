@@ -46,6 +46,7 @@ public final class ComponentStore {
             boolean success = false;
             String message;
             File tmp = null;
+            File newlyCommittedArchive = null;
             try {
                 File root = new File(context.getFilesDir(), "wcp-vault");
                 if (!root.isDirectory() && !root.mkdirs())
@@ -80,8 +81,8 @@ public final class ComponentStore {
                     throw new IllegalArgumentException("Unsupported/unknown archive format");
                 String sha = hex(digest.digest());
                 File dst = new File(root, sha + ".wcp");
-                if (!dst.exists() && !tmp.renameTo(dst))
-                    throw new IllegalStateException("Could not move package into content store");
+                // Inspect the temporary file first: invalid FEX packages must
+                // never leave an orphaned SHA-named archive in the vault.
                 JSONObject meta = new JSONObject();
                 meta.put("name", originalName);
                 meta.put("bytes", total);
@@ -94,7 +95,7 @@ public final class ComponentStore {
                         throw new IllegalArgumentException("FEXCore bridge validation currently supports XZ packages only");
                     if (total > 32L * 1024L * 1024L)
                         throw new IllegalArgumentException("FEXCore package unusually large");
-                    JSONObject verified = FexBridgePackage.inspectXz(dst, root, sha);
+                    JSONObject verified = FexBridgePackage.inspectXz(tmp, root, sha);
                     if (verified == null)
                         throw new IllegalArgumentException("Selected archive is not a FEXCore package");
                     meta.put("componentType","FEXCore");
@@ -103,6 +104,11 @@ public final class ComponentStore {
                     meta.put("status","fex_bridge_pair_verified_not_activated");
                 }
                 meta.put("importTimeUtcMs", System.currentTimeMillis());
+                if (!dst.exists()) {
+                    if (!tmp.renameTo(dst))
+                        throw new IllegalStateException("Could not move package into content store");
+                    newlyCommittedArchive = dst;
+                }
                 File file = new File(root, sha + ".json");
                 try (FileOutputStream out = new FileOutputStream(file)) {
                     out.write(meta.toString(2).getBytes(StandardCharsets.UTF_8));
@@ -116,6 +122,9 @@ public final class ComponentStore {
                             ? " · FEX bridges VERIFIED (not activated)"
                             : " · manifest NOT validated; cannot execute");
             } catch (Exception e) {
+                // Avoid orphaned content when metadata writes fail. Never
+                // remove packages that already existed before this import.
+                if (newlyCommittedArchive != null) newlyCommittedArchive.delete();
                 message = "Import failed: " + e.getMessage();
             } finally {
                 if (tmp != null && tmp.exists()) tmp.delete();
