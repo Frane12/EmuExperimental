@@ -1,0 +1,32 @@
+name: EmuExperimental - Contract and Importer Tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'contracts/**'
+      - 'profiles/**'
+      - 'tests/**'
+      - 'tools/**'
+      - 'web-prototype/**'
+      - '.github/workflows/test-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run session/input ownership contract tests
+        run: |
+          python3 tests/contract_smoke.py
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Verify browser concept JavaScript
+        run: python3 tools/check_web.py
+      - name: Verify source structure
+        run: |
+          test -s README.md
+          test -s docs/ARCHITECTURE.md
+          test -s android-app/app/src/main/java/com/drnas/console/FexBridgePackage.java
+          grep -q 'setPointerCapture' web-prototype/index.html
