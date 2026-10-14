@@ -15,15 +15,20 @@ final class WineGuiSession implements AutoCloseable {
     private volatile Process launcher;
     private volatile WineServerDiagnostics.ManagedServer server;
 
+    static final int DESKTOP_WIDTH=1280;
+    static final int DESKTOP_HEIGHT=720;
     static List<String> command(File linker,File wine) {
-        return command(linker,wine,"config");
+        return command(linker,wine,"desktop");
     }
     static List<String> command(File linker,File wine,String app) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        // Explorer is the persistent guest desktop. Do not start winecfg by
+        // default; keep it available for explicit maintenance only.
         args.set(args.size()-1,"explorer.exe");
-        args.add("/desktop=DRNAS,1024x768");
-        // Wine's built-in ARM64 PE file manager does not require an x86 translator.
-        args.add("files".equals(app) ? "winefile.exe" : "winecfg.exe");
+        args.add("/desktop=DRNAS,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
+        if ("files".equals(app)) args.add("winefile.exe");
+        else if ("config".equals(app)) args.add("winecfg.exe");
+        else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
     }
     static void displayEnvironment(Map<String,String> env) {
@@ -33,7 +38,7 @@ final class WineGuiSession implements AutoCloseable {
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
-        run(context,log,raw,"config");
+        run(context,log,raw,"desktop");
     }
     void run(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
         File base=new File(context.getFilesDir(),"containers/default");
@@ -92,15 +97,17 @@ final class WineGuiSession implements AutoCloseable {
             if(stopped)return;
             WineBootProbe.configureChildExeRelay(env,nativeDir,wine);
             WineBootProbe.configureSecondStage(env);
-            log.accept("Launching Wine virtual desktop + "+
-                    ("files".equals(app)?"Wine's built-in file manager (R: available)":"winecfg")+
-                    "; Canvas X11 renderer, 5 minute session. Turnip/Vulkan acceleration NOT yet verified.");
+            log.accept("Launching Wine explorer.exe virtual desktop "+
+                    DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
+                    ("files".equals(app)?" with winefile.exe":
+                     "config".equals(app)?" with winecfg.exe":" as default desktop")+
+                    "; embedded software X11 renderer.");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw);
-            long until=System.nanoTime()+TimeUnit.MINUTES.toNanos(5);
+            long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
             while(!stopped && server.alive() && System.nanoTime()<until) {
                 // Explorer can delegate its window to a child and return.
