@@ -26,14 +26,17 @@ public final class WineGuiActivity extends Activity {
         super.onCreate(saved);
         LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);
         layout.setBackgroundColor(0xff0a101b);
+        SystemBarInsets.apply(layout);
         LinearLayout bar=new LinearLayout(this);
         Button keyboard=new Button(this);keyboard.setText("Keyboard");
         Button export=new Button(this);export.setText("Export GUI TXT");
         Button back=new Button(this);back.setText("Stop / Back");
-        bar.addView(keyboard);bar.addView(export);bar.addView(back);layout.addView(bar);
+        bar.addView(keyboard);bar.addView(export);bar.addView(back);
+        HorizontalScrollView toolbar=new HorizontalScrollView(this);
+        toolbar.setHorizontalScrollBarEnabled(false);toolbar.addView(bar);layout.addView(toolbar);
         status=new TextView(this);status.setTextColor(Color.WHITE);
         status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setText("Starting embedded X11 · software Canvas · Wine GUI test");
+        status.setText("DRNAS 0.5.8 · Starting X11 / Wine GUI test");
         layout.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
         logView=new StableLogView(this,0xff7be4c3);
         layout.addView(logView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));
@@ -67,11 +70,9 @@ public final class WineGuiActivity extends Activity {
             ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(
                     xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
         });
-        export.setOnClickListener(v->{
-            Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/plain");
-            i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-GUI.txt");
-            startActivityForResult(i,601);
-        });
+        export.setText("Save GUI TXT");
+        export.setOnClickListener(v->saveGuiLog(export));
+        export.setOnLongClickListener(v->{openSaveAs();return true;});
         back.setOnClickListener(v->finish());
         status.postDelayed(()->{
             if(!destroyed && xserver.mappedWindowCount()==0)
@@ -91,6 +92,33 @@ public final class WineGuiActivity extends Activity {
             runOnUiThread(()->{if(!destroyed)status.setText(line);});
     }
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
+    private void saveGuiLog(Button button) {
+        if(raw==null){Toast.makeText(this,"GUI log is unavailable",Toast.LENGTH_LONG).show();return;}
+        if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
+        button.setEnabled(false);
+        Toast.makeText(this,"Saving to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
+        log("GUI TXT export clicked: direct Downloads save requested.");
+        new Thread(()->{
+            try {
+                String name=GuiLogExport.save(this,raw::copyTo);
+                log("Saved Downloads/DRNAS/"+name);
+                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,
+                        "Saved: Downloads/DRNAS/"+name,Toast.LENGTH_LONG).show();});
+            } catch(Exception e) {
+                log("GUI export FAILED: "+e.getClass().getSimpleName()+": "+e.getMessage());
+                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,
+                        "Save failed: "+e.getMessage()+". Long-press Save GUI TXT for Save as.",Toast.LENGTH_LONG).show();});
+            } finally {runOnUiThread(()->{if(!destroyed)button.setEnabled(true);});}
+        },"drnas-gui-downloads").start();
+    }
+    private void openSaveAs() {
+        log("Opening Android Save as dialog for GUI TXT.");
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/plain");
+        i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-GUI.txt");
+        try {startActivityForResult(i,601);}
+        catch(Exception e){log("Android document picker failed: "+e.getMessage());
+            Toast.makeText(this,"Save as unavailable: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+    }
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(request!=601 || result!=RESULT_OK || data==null || data.getData()==null)return;

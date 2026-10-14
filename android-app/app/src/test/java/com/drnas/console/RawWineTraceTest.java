@@ -9,6 +9,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class RawWineTraceTest {
+    @Test public void exportsFlushedSnapshotWhileRecordingAndAfterClose() throws Exception {
+        Path dir=Files.createTempDirectory("drnas-raw-export");
+        RawWineTrace trace=new RawWineTrace(dir.toFile(),"latest-wine-gui-raw.txt");
+        try {
+            trace.write("GUI","first line");
+            java.io.ByteArrayOutputStream first=new java.io.ByteArrayOutputStream();
+            trace.copyTo(first);
+            assertTrue(first.toString("UTF-8").contains("first line"));
+            trace.write("GUI","second line");trace.close();
+            java.io.ByteArrayOutputStream second=new java.io.ByteArrayOutputStream();
+            trace.copyTo(second);
+            assertTrue(second.toString("UTF-8").contains("second line"));
+            assertFalse(first.toString("UTF-8").contains("second line"));
+            assertFalse(Files.exists(dir.resolve(RawWineTrace.LATEST)));
+        } finally {trace.close();WineBootProbe.removeWithoutFollowingLinks(dir.toFile());}
+    }
     @Test public void preservesEveryLineBeyond80LineUiFilter() throws Exception {
         Path dir=Files.createTempDirectory("drnas-raw-trace");
         try {

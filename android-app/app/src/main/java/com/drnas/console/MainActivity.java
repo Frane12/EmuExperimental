@@ -58,6 +58,8 @@ public final class MainActivity extends Activity {
     private ContainerBootstrap container;
     private String section = "Console";
     private String currentGame = "Far Cry 3";
+    private boolean resumed;
+    private boolean autoGuiPending;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -74,6 +76,11 @@ public final class MainActivity extends Activity {
             @Override public void onComplete(boolean guestStarted,String status) {
                 runOnUiThread(()->{
                     append("Container status: "+status);
+                    if(status.startsWith("WINEBOOT_PREFIX_INITIALIZED") ||
+                            status.startsWith("WINEBOOT_COMPLETED_GUEST_VERIFIED")) {
+                        autoGuiPending=true;
+                        launchPendingGui();
+                    }
                 });
             }
         });
@@ -84,7 +91,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.7");
+        append("DRNAS CONSOLE · Runtime Core v0.5.8");
         append("Full session log recorded separately from trimmed on-screen diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
@@ -93,6 +100,16 @@ public final class MainActivity extends Activity {
     @Override public void onConfigurationChanged(Configuration cfg) {
         super.onConfigurationChanged(cfg);
         render();
+    }
+    @Override protected void onResume() {
+        super.onResume();resumed=true;launchPendingGui();
+    }
+    @Override protected void onPause() {resumed=false;super.onPause();}
+    private void launchPendingGui() {
+        if(!resumed || !autoGuiPending || isFinishing())return;
+        autoGuiPending=false;
+        append("Initialization succeeded; opening Wine GUI automatically.");
+        openWineGui();
     }
 
     private int dp(float value) { return Math.round(getResources().getDisplayMetrics().density * value); }
@@ -174,6 +191,7 @@ public final class MainActivity extends Activity {
         liveLog=null;stateBadge=null;
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;renderedSection=section;
+        SystemBarInsets.apply(scroll);
         scroll.setFillViewport(true);
         scroll.setBackgroundColor(BACK);
         content=column();
@@ -186,7 +204,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.7 RAW TRACE",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.8 RAW TRACE",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 

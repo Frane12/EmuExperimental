@@ -39,7 +39,7 @@ jobs:
           sha256sum "$RUNNER_TEMP/signable/"*
       - uses: actions/upload-artifact@v4
         with:
-          name: DRNAS-v0.5.7-UNTRUSTED-TRANSIENT-for-offline-signing
+          name: DRNAS-v0.5.8-UNTRUSTED-TRANSIENT-for-offline-signing
           path: ${{ runner.temp }}/signable/
           if-no-files-found: error
           retention-days: 1
