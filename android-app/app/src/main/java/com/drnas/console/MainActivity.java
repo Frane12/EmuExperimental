@@ -150,22 +150,11 @@ public final class MainActivity extends Activity {
             }
         },"drnas-saf-mirror").start();
     }
-    /** Offline bundle install is performed on a worker: no document picker or tap. */
+    /** ContainerBootstrap verifies embedded archives on its own worker,
+     * including when the user manually presses Init. Never race with it. */
     private void autoInstallAndBoot() {
-        append("Checking embedded Proton 10 + FEX 2609 + DXVK 1.10.3; automatic boot enabled.");
-        new Thread(()->{
-            try {
-                BundledComponents.install(this,this::append);
-                runOnUiThread(()->{
-                    append("All bundled archives installed. Starting isolated Wine initialization automatically.");
-                    startWineboot();
-                });
-            } catch(Exception error) {
-                append("Automatic runtime installation FAILED: "+error.getClass().getSimpleName()+
-                        ": "+error.getMessage());
-                append("No automatic boot attempted. Existing manual component import remains available.");
-            }
-        },"drnas-offline-bundle-first-run").start();
+        append("Starting self-contained Wine initialization (offline APK components).");
+        startWineboot();
     }
     @Override public void onConfigurationChanged(Configuration cfg) {
         super.onConfigurationChanged(cfg);
@@ -547,7 +536,7 @@ public final class MainActivity extends Activity {
     private void startWineboot() {
         if(!container.startWineboot()) append("Container bootstrap already in progress");
         else {
-            append("Wineboot init test requested in an isolated disposable prefix (50s watchdog)");
+            append("Bundled runtime verification + Wineboot requested; please wait for status before opening GUI.");
             showSection("Diagnostics");
         }
     }
