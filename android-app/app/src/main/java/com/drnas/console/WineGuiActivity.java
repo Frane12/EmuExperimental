@@ -1,141 +1,192 @@
 package com.drnas.console;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.*;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.Toast;
 import java.io.*;
 import au.com.darkside.xserver.XServer;
 
-/** Embedded X11 diagnostic screen. No external X server app or root required. */
+/**
+ * Clean Windows desktop surface. Keep full RAW diagnostics privately for
+ * troubleshooting, but never put text or session logs over the framebuffer.
+ * The v0.5.16 working Winecfg path remains available with an explicit intent.
+ */
 public final class WineGuiActivity extends Activity {
     private XServer xserver;
     private WineGuiSession session;
     private RawWineTrace raw;
-    private TextView status;
-    private StableLogView logView;
-    private final StringBuilder visibleLog=new StringBuilder();
-    private boolean started;
+    private volatile boolean started;
     private volatile boolean destroyed;
-    private int notices;
+
+    private int dp(int value) {
+        return Math.round(value*getResources().getDisplayMetrics().density);
+    }
+
+    private void immersive() {
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+    }
+
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
-        LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setBackgroundColor(0xff0a101b);
-        SystemBarInsets.apply(layout);
-        LinearLayout bar=new LinearLayout(this);
-        Button keyboard=new Button(this);keyboard.setText("Keyboard");
-        Button export=new Button(this);export.setText("Export GUI TXT");
-        Button back=new Button(this);back.setText("Stop / Back");
-        bar.addView(keyboard);bar.addView(export);bar.addView(back);
-        HorizontalScrollView toolbar=new HorizontalScrollView(this);
-        toolbar.setHorizontalScrollBarEnabled(false);toolbar.addView(bar);layout.addView(toolbar);
-        status=new TextView(this);status.setTextColor(Color.WHITE);
-        status.setSingleLine(true);status.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        status.setText("DRNAS 0.5.12 · Starting X11 / Wine GUI test");
-        layout.addView(status,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(24)));
-        logView=new StableLogView(this,0xff7be4c3);
-        layout.addView(logView,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,dp(88)));
-        Button latest=new Button(this);latest.setText("Latest log");bar.addView(latest);
-        latest.setOnClickListener(v->logView.showLatest());
-        try {raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");}
-        catch(IOException e){status.setText("GUI logging unavailable: "+e.getMessage());setContentView(layout);return;}
-        session=new WineGuiSession();
-        final String launchApp="files".equals(getIntent().getStringExtra("DRNAS_GUI_APP")) ? "files" : "config";
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        immersive();
+
+        FrameLayout layout=new FrameLayout(this);
+        layout.setBackgroundColor(Color.BLACK);
         xserver=new XServer(this,6012,null);
+        xserver.getScreen().setGuestResolution(
+                WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+        xserver.getScreen().setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+        xserver.getScreen().setFocusableInTouchMode(true);
+        layout.addView(xserver.getScreen(),new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // The sole on-screen control is a small, translucent menu.
+        // Long-press to save a log only if debugging is necessary.
+        Button menu=new Button(this);
+        menu.setText("⋮");
+        menu.setTextColor(Color.WHITE);
+        menu.setTextSize(19);
+        menu.setAllCaps(false);
+        menu.setMinWidth(0);
+        menu.setMinHeight(0);
+        menu.setPadding(0,0,0,0);
+        menu.setAlpha(0.60f);
+        FrameLayout.LayoutParams ml=new FrameLayout.LayoutParams(
+                dp(46),dp(46),Gravity.TOP|Gravity.END);
+        ml.topMargin=dp(5);ml.rightMargin=dp(5);
+        layout.addView(menu,ml);
+        menu.setOnClickListener(v->new AlertDialog.Builder(this)
+                .setItems(new String[]{"Keyboard","Exit desktop"},(dialog,which)->{
+                    if(which==0)showKeyboard();
+                    else finish();
+                }).show());
+        menu.setOnLongClickListener(v->{saveGuiLog();return true;});
+
+        setContentView(layout);
+        try {
+            raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
+        } catch(IOException e) {
+            Toast.makeText(this,"Wine desktop log unavailable: "+e.getMessage(),
+                    Toast.LENGTH_LONG).show();
+            finish();
+            return;
+        }
+
+        session=new WineGuiSession();
+        String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
+        // Default always starts Explorer, never Wine configuration.
+        final String launchApp="files".equals(requested) ? "files":
+                "config".equals(requested) ? "config":"desktop";
         xserver.setDiagnosticListener(this::log);
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
             @Override public void onStart() {
-                if(started || destroyed)return;started=true;
-                log("Embedded X11 server listening only on 127.0.0.1:6012; screen="+
-                        xserver.getScreen().getWidth()+"x"+xserver.getScreen().getHeight());
+                if(started || destroyed)return;
+                started=true;
+                log("X11 live; guest resolution "+
+                        xserver.getScreen().getGuestWidth()+"x"+
+                        xserver.getScreen().getGuestHeight());
                 new Thread(()->{
-                    try {session.run(WineGuiActivity.this, WineGuiActivity.this::log,raw,launchApp);}
-                    catch(Throwable e){log("GUI BLOCKED: "+e.getClass().getSimpleName()+": "+e.getMessage());}
-                    finally {session.close();try{raw.close();}catch(IOException ignored){}}
-                },"drnas-wine-gui").start();
+                    try {session.run(WineGuiActivity.this,WineGuiActivity.this::log,raw,launchApp);}
+                    catch(Throwable e) {
+                        log("Desktop stopped: "+e.getClass().getSimpleName()+": "+e.getMessage());
+                        runOnUiThread(()->{
+                            if(!destroyed)Toast.makeText(WineGuiActivity.this,
+                                    "Windows desktop could not start. Long-press ⋮ to save log.",
+                                    Toast.LENGTH_LONG).show();
+                        });
+                    } finally {
+                        session.close();
+                        try {raw.close();}catch(IOException ignored){}
+                    }
+                },"drnas-desktop").start();
             }
         });
-        // Software View also renders the X11 root and Wine GDI bitmap updates.
-        xserver.getScreen().setLayerType(View.LAYER_TYPE_SOFTWARE,null);
-        xserver.getScreen().setFocusableInTouchMode(true);
-        layout.addView(xserver.getScreen(),new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,0,1));
-        setContentView(layout);
-        keyboard.setOnClickListener(v->{
-            xserver.getScreen().requestFocus();
-            ((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).showSoftInput(
-                    xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
-        });
-        export.setText("Save GUI TXT");
-        export.setOnClickListener(v->saveGuiLog(export));
-        export.setOnLongClickListener(v->{openSaveAs();return true;});
-        back.setOnClickListener(v->finish());
-        status.postDelayed(()->{
+        // Report absence of a mapped window only to the private session log.
+        xserver.getScreen().postDelayed(()->{
             if(!destroyed && xserver.mappedWindowCount()==0)
-                log("No Wine window mapped after 20s. Export GUI TXT for X11 driver/dependency errors.");
+                log("No Windows window mapped after 20 seconds; use hidden log export if needed.");
         },20000);
     }
+
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
-        runOnUiThread(()->{
-            if(destroyed)return;
-            if(visibleLog.length()>30000)visibleLog.delete(0,Math.min(12000,visibleLog.length()));
-            visibleLog.append(line).append('\n');logView.setSnapshot(visibleLog.toString());
-        });
-        // Full trace stays on disk; update status only for milestones/errors.
-        if(line.contains("mapped window") || line.contains("Canvas drew") || line.contains("BLOCKED") || line.contains("VERIFIED") ||
-                line.contains("ended") || line.contains("No Wine window") || notices++<3)
-            runOnUiThread(()->{if(!destroyed)status.setText(line);});
     }
-    private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
-    private void saveGuiLog(Button button) {
-        if(raw==null){Toast.makeText(this,"GUI log is unavailable",Toast.LENGTH_LONG).show();return;}
+
+    private void showKeyboard() {
+        xserver.getScreen().requestFocus();
+        InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+        if(imm!=null)imm.showSoftInput(xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
+    }
+
+    private void saveGuiLog() {
+        if(raw==null){Toast.makeText(this,"No GUI log yet",Toast.LENGTH_SHORT).show();return;}
         if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
-        button.setEnabled(false);
-        Toast.makeText(this,"Saving to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
-        log("GUI TXT export clicked: direct Downloads save requested.");
+        Toast.makeText(this,"Saving GUI TXT to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             try {
                 String name=GuiLogExport.save(this,raw::copyTo);
-                log("Saved Downloads/DRNAS/"+name);
-                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,
-                        "Saved: Downloads/DRNAS/"+name,Toast.LENGTH_LONG).show();});
+                runOnUiThread(()->{
+                    if(!destroyed)Toast.makeText(this,"Saved: Downloads/DRNAS/"+name,
+                            Toast.LENGTH_LONG).show();
+                });
             } catch(Exception e) {
-                log("GUI export FAILED: "+e.getClass().getSimpleName()+": "+e.getMessage());
-                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,
-                        "Save failed: "+e.getMessage()+". Long-press Save GUI TXT for Save as.",Toast.LENGTH_LONG).show();});
-            } finally {runOnUiThread(()->{if(!destroyed)button.setEnabled(true);});}
-        },"drnas-gui-downloads").start();
+                log("GUI save error: "+e.getClass().getSimpleName()+": "+e.getMessage());
+                runOnUiThread(()->{
+                    if(!destroyed)openSaveAs();
+                });
+            }
+        },"drnas-desktop-log-export").start();
     }
+
     private void openSaveAs() {
-        log("Opening Android Save as dialog for GUI TXT.");
-        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/plain");
-        i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-GUI.txt");
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.setType("text/plain");
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-GUI.txt");
         try {startActivityForResult(i,601);}
-        catch(Exception e){log("Android document picker failed: "+e.getMessage());
-            Toast.makeText(this,"Save as unavailable: "+e.getMessage(),Toast.LENGTH_LONG).show();}
+        catch(Exception e){Toast.makeText(this,
+                "Could not export session log.",Toast.LENGTH_LONG).show();}
     }
+
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
         if(request!=601 || result!=RESULT_OK || data==null || data.getData()==null)return;
         final android.net.Uri uri=data.getData();
         new Thread(()->{
             try(OutputStream out=getContentResolver().openOutputStream(uri,"w")) {
-                if(out==null)throw new IOException("No document output");raw.copyTo(out);
-                log("GUI TXT exported.");
-            }catch(IOException e){log("GUI export failed: "+e.getMessage());}
-        },"drnas-gui-export").start();
+                if(out==null)throw new IOException("No document output");
+                raw.copyTo(out);
+            } catch(IOException e){log("GUI export failed: "+e.getMessage());}
+        },"drnas-desktop-save-as").start();
     }
+
+    @Override protected void onWindowFocusChanged(boolean focused) {
+        super.onWindowFocusChanged(focused);
+        if(focused)immersive();
+    }
+
     @Override protected void onDestroy() {
         destroyed=true;
         if(xserver!=null)xserver.stop();
-        if(session!=null)new Thread(session::close,"drnas-gui-stop").start();
+        if(session!=null)new Thread(session::close,"drnas-desktop-stop").start();
         super.onDestroy();
     }
 }
-
