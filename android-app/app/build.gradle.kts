@@ -17,8 +17,8 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        versionCode = 25
-        versionName = "0.5.10-x11-linker-aliases"
+        versionCode = 26
+        versionName = "0.5.11-bundled-offline-autostart"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
