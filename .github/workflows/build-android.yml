@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.2 Stable Signed
+name: EmuExperimental - Android APK v0.5.3 Stable Signed
 on:
   push:
     branches:
@@ -69,7 +69,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.2-Stable-Signed-debug-apk
+          name: Drnas-Console-v0.5.3-Stable-Signed-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

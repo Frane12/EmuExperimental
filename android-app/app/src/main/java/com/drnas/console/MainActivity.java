@@ -15,6 +15,10 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -27,6 +31,7 @@ import java.util.Locale;
  */
 public final class MainActivity extends Activity {
     private static final int PICK_WCP = 301;
+    private static final int EXPORT_SESSION_LOG = 302;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -39,6 +44,8 @@ public final class MainActivity extends Activity {
     private TextView liveLog;
     private TextView stateBadge;
     private final StringBuilder log = new StringBuilder();
+    private SessionLogStore completeLog;
+    private String logWriteIssue;
     private SessionManager sessions;
     private ComponentStore vault;
     private ContainerBootstrap container;
@@ -49,6 +56,11 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(BACK);
         getWindow().setNavigationBarColor(BACK);
+        try {
+            completeLog=new SessionLogStore(new java.io.File(getFilesDir(),"logs"));
+        } catch(IOException e) {
+            logWriteIssue=e.getMessage();
+        }
         vault = new ComponentStore(this);
         container = new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
             @Override public void onLog(String msg) { runOnUiThread(()->append(msg)); }
@@ -66,7 +78,9 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS CONSOLE · Runtime Core v0.5.2");
+        append("DRNAS CONSOLE · Runtime Core v0.5.3");
+        append("Full session log recorded separately from trimmed on-screen diagnostics.");
+        if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
         append("ARM64 NDK native host + controlled Bionic Wine --version CLI probe.");
         render();
     }
@@ -161,7 +175,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS CONSOLE",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.2 WINE CHILD EXEC",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.3 EXPORT TXT",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -214,6 +228,7 @@ public final class MainActivity extends Activity {
         bootPanel.addView(label("Stages Proton 10 WCP, verified FEX 2609, DXVK WCP and Turnip ZIP in an isolated prefix. Logs exact boot blockers.",13,MUTED,false),pad(0,10));
         addButton(bootPanel,"▶ Start container (Wine CLI)",true,v->startContainer());
         addButton(bootPanel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
+        addButton(bootPanel,"⬇ Export complete session log (.txt)",false,v->exportSessionLog());
         note(bootPanel,"Wine loaded kernel32/kernelbase ARM64 PE. Isolated wineboot now tests a narrowly scoped Wine child execv relay through Android linker64. No GUI or game execution yet.");
 
         LinearLayout panel=card();
@@ -264,7 +279,9 @@ public final class MainActivity extends Activity {
         liveLog.setPadding(dp(12),dp(11),dp(12),dp(11));
         liveLog.setBackground(box(0xFF07101B,BORDER,11));
         panel.addView(liveLog,pad(0,10));
-        addButton(panel,"▶ Start container (Wine CLI)",true,v->startContainer());
+        note(panel,"Old on-screen lines may be trimmed, but all emitted session events are kept in a private TXT file until you export it. Wine's internally suppressed debug lines are not part of the app event log.");
+        addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
+        addButton(panel,"▶ Start container (Wine CLI)",false,v->startContainer());
         addButton(panel,"▶ Test wineboot --init (isolated)",false,v->startWineboot());
         addButton(panel,"▶ Start native smoke test",false,v->{
             if(!sessions.startAndroidSmokeTest()) append("Start rejected: another session active");
@@ -276,11 +293,63 @@ public final class MainActivity extends Activity {
         });
     }
     private void append(String message) {
+        if(android.os.Looper.myLooper()!=android.os.Looper.getMainLooper()) {
+            runOnUiThread(()->append(message));
+            return;
+        }
         String time=new SimpleDateFormat("HH:mm:ss",Locale.US).format(new Date());
         String msg="["+time+"] "+message+"\n";
+        if(completeLog!=null) {
+            try {
+                completeLog.appendLine(msg);
+            } catch(IOException e) {
+                logWriteIssue=e.getMessage();
+                try {completeLog.close();}catch(IOException ignored){}
+                completeLog=null;
+            }
+        }
         if(log.length()>30000)log.delete(0,Math.min(12000,log.length()));
         log.append(msg);
         if(liveLog!=null)liveLog.setText(log.toString());
+    }
+
+    private void exportSessionLog() {
+        if(completeLog==null) {
+            append("Export unavailable: full session log file could not be written.");
+            Toast.makeText(this,"Full log unavailable; not exporting incomplete text.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        // Android's Storage Access Framework lets the user choose Downloads,
+        // Documents or another provider. No broad storage permission needed.
+        Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("text/plain");
+        String name="DRNAS-Console-"+new SimpleDateFormat(
+                "yyyy-MM-dd_HH-mm-ss",Locale.US).format(new Date())+".txt";
+        i.putExtra(Intent.EXTRA_TITLE,name);
+        i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        try {
+            startActivityForResult(i,EXPORT_SESSION_LOG);
+        } catch(android.content.ActivityNotFoundException e) {
+            append("TXT export unavailable: no document-saving provider installed.");
+            Toast.makeText(this,"No Android document picker found.",Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void completeSessionLogExport(Uri uri) {
+        if(completeLog==null) {
+            append("Export failed: full session logging is unavailable.");
+            return;
+        }
+        try(OutputStream destination=getContentResolver().openOutputStream(uri,"w")) {
+            if(destination==null)throw new IOException("Document provider returned no output stream");
+            long bytes=completeLog.copyTo(destination);
+            append("Exported session event log: "+bytes+" UTF-8 bytes to selected TXT file.");
+            Toast.makeText(this,"DRNAS TXT log saved ("+bytes+" bytes)",Toast.LENGTH_LONG).show();
+        } catch(Exception e) {
+            append("TXT export FAILED: "+e.getClass().getSimpleName()+": "+e.getMessage());
+            Toast.makeText(this,"Could not export TXT log",Toast.LENGTH_LONG).show();
+        }
     }
     private void startContainer() {
         if(!container.start()) append("Container bootstrap already in progress");
@@ -301,8 +370,13 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
-        if(request!=PICK_WCP||result!=RESULT_OK||data==null||data.getData()==null)return;
+        if(result!=RESULT_OK||data==null||data.getData()==null)return;
         Uri uri=data.getData();
+        if(request==EXPORT_SESSION_LOG) {
+            completeSessionLogExport(uri);
+            return;
+        }
+        if(request!=PICK_WCP)return;
         append("Importing selected WCP into private staged vault...");
         vault.importUri(uri,(message,success)->{
             append(message);
@@ -312,6 +386,9 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         sessions.stop();
         vault.close();
+        if(completeLog!=null) {
+            try {completeLog.close();} catch(IOException ignored){}
+        }
         super.onDestroy();
     }
 }
