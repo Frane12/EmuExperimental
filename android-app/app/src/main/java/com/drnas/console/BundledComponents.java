@@ -6,7 +6,6 @@ import org.json.JSONObject;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.HashSet;
 import java.util.Locale;
@@ -114,9 +113,11 @@ final class BundledComponents {
                 meta.put("bundledFromApk", true);
                 meta.put("importTimeUtcMs", System.currentTimeMillis());
 
-                if (!archive.isFile() && !partial.renameTo(archive))
-                    throw new IOException("Cannot commit bundled archive: " + name);
-                moved = true;
+                if (!archive.isFile()) {
+                    if (!partial.renameTo(archive))
+                        throw new IOException("Cannot commit bundled archive: " + name);
+                    moved = true;
+                }
                 File temporaryMeta = new File(vault, "." + sha + ".json.tmp");
                 try (FileOutputStream out = new FileOutputStream(temporaryMeta)) {
                     out.write(meta.toString(2).getBytes(StandardCharsets.UTF_8));
