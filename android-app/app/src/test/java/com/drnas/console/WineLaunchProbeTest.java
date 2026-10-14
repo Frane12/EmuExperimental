@@ -100,6 +100,45 @@ public class WineLaunchProbeTest {
         assertFalse(env.get("WINEDLLPATH").endsWith("/aarch64-unix"));
     }
 
+    @Test public void privateSandboxWriteReadWorksWithoutExternalStorageGrant() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-private-io");
+        try {
+            java.util.ArrayList<String> messages=new java.util.ArrayList<>();
+            assertNull(WineLaunchProbe.checkPrivateReadWrite(root.toFile(),messages::add));
+            assertTrue(messages.toString().contains("APP_PRIVATE_RW_OK"));
+            try(java.util.stream.Stream<java.nio.file.Path> list=Files.list(root)) {
+                assertEquals(0L,list.count()); // probe leaves no files behind
+            }
+        } finally {
+            Files.deleteIfExists(root);
+        }
+    }
+
+    @Test public void ntdllPreflightSeparatesMissingFromReadableELF() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-native-ntdll");
+        try {
+            java.util.ArrayList<String> messages=new java.util.ArrayList<>();
+            assertEquals("WINE_NTDLL_MISSING",
+                    WineLaunchProbe.checkUnixNtdll(root.toFile(),messages::add));
+            java.nio.file.Path arch=root.resolve("wine/aarch64-unix");
+            Files.createDirectories(arch);
+            java.nio.file.Path target=arch.resolve("ntdll.so");
+            Files.write(target,"not-a-native-binary".getBytes(StandardCharsets.US_ASCII));
+            assertEquals("WINE_NTDLL_INVALID_ELF",
+                    WineLaunchProbe.checkUnixNtdll(root.toFile(),messages::add));
+            Files.copy(nativeElf("/system/bin/linker64").toPath(),target,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            assertNull(WineLaunchProbe.checkUnixNtdll(root.toFile(),messages::add));
+            assertTrue(messages.toString().contains("WINE_NTDLL_READ_OK"));
+        } finally {
+            try(java.util.stream.Stream<java.nio.file.Path> files=Files.walk(root)) {
+                files.sorted(java.util.Comparator.reverseOrder()).forEach(p->{
+                    try {Files.deleteIfExists(p);} catch(Exception ignored){}
+                });
+            }
+        }
+    }
+
     @Test public void linkerDirectInvocationDoesNotUseGnuFlags() {
         java.util.List<String> args=WineLaunchProbe.linkerCommand(
                 new File("/system/bin/linker64"),
