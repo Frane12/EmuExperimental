@@ -10,6 +10,7 @@
         android:usesCleartextTraffic="false"
         android:theme="@style/DrnasTheme">
         <activity android:name=".WineGuiActivity" android:exported="false"
+            android:hardwareAccelerated="true"
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|screenSize|keyboardHidden" />

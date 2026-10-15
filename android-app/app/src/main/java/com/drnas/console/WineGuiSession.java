@@ -48,7 +48,10 @@ final class WineGuiSession implements AutoCloseable {
     }
     static void displayEnvironment(Map<String,String> env) {
         env.put("DISPLAY","127.0.0.1:12.0");
-        env.put("WINEDLLOVERRIDES","winex11.drv=b;wineandroid.drv=d;winewayland.drv=d");
+        // Prefer native DXVK DLLs in the isolated Wine prefix; without this,
+        // d3d9.dll can silently fall back to WineD3D and mask missing Vulkan.
+        env.put("WINEDLLOVERRIDES","winex11.drv=b;wineandroid.drv=d;winewayland.drv=d;"+
+                "d3d9=n,b;dxgi=n,b;d3d11=n,b;d3d10core=n,b");
         // Avoid high-volume per-module / X11 tracing on every GUI operation.
         // Full logs can still be exported from the app when needed.
         env.put("WINEDEBUG","-all");
@@ -102,6 +105,15 @@ final class WineGuiSession implements AutoCloseable {
         for(File dir:new File[]{lib,new File(lib,"wine/aarch64-unix"),new File(lib,"wine")})
             if(dir.isDirectory())libs.append(":").append(dir.getAbsolutePath());
         env.put("LD_LIBRARY_PATH",libs.toString());
+        // A log without device enumeration is not proof of a DXVK adapter.
+        env.put("DXVK_LOG_LEVEL","info");
+        env.put("DXVK_LOG_PATH",tmp.getAbsolutePath());
+        for(String dll:new String[]{"d3d9.dll","dxgi.dll","d3d11.dll"}) {
+            File x64=new File(prefix,"drive_c/windows/system32/"+dll);
+            File x86=new File(prefix,"drive_c/windows/syswow64/"+dll);
+            log.accept("DXVK staged "+dll+" x64="+(x64.isFile()?x64.length()+" bytes":"MISSING")+
+                    " x86="+(x86.isFile()?x86.length()+" bytes":"MISSING"));
+        }
         env.put("WINEDLLPATH",new File(lib,"wine").getAbsolutePath());
         env.put("WINELOADER",wine.getAbsolutePath());
         File serverElf=new File(proton,"bin/wineserver");

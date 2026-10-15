@@ -27,13 +27,16 @@ public class WineGuiSessionTest {
         assertThrows(IllegalArgumentException.class,
                 ()->WineGuiSession.command(LINKER,WINE,"arbitrary.exe"));
     }
-    @Test public void softwareDisplayDoesNotEnableCustomVulkan() {
+    @Test public void nativeDxvkPreferenceDoesNotFakeVulkan() {
         Map<String,String> env=new HashMap<>();
         WineGuiSession.displayEnvironment(env);
         assertEquals("127.0.0.1:12.0",env.get("DISPLAY"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("winex11.drv=b"));
         assertFalse(env.containsKey("VK_ICD_FILENAMES"));
         assertEquals("-all",env.get("WINEDEBUG"));
+        assertTrue(env.get("WINEDLLOVERRIDES").contains("d3d9=n,b"));
+        assertTrue(env.get("WINEDLLOVERRIDES").contains("dxgi=n,b"));
+        assertTrue(env.get("WINEDLLOVERRIDES").contains("d3d11=n,b"));
     }
 }
 

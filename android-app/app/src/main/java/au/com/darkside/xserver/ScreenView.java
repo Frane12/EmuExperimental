@@ -270,6 +270,15 @@ public class ScreenView extends View {
         return size*getResources().getDisplayMetrics().density;
     }
 
+    public interface CursorOverlayListener {
+        void onCursorUpdated(Bitmap bitmap,int x,int y,int hotspotX,int hotspotY);
+    }
+    private volatile CursorOverlayListener cursorOverlayListener;
+    public void setCursorOverlayListener(CursorOverlayListener listener) {
+        cursorOverlayListener=listener;
+    }
+    private boolean compositorReported;
+
     private Cursor _currentCursor;
     private int _currentCursorX;
     private int _currentCursorY;
@@ -746,6 +755,12 @@ public class ScreenView extends View {
         }
 
         synchronized (_xServer) {
+            if (!compositorReported) {
+                compositorReported=true;
+                _xServer.diagnostic("Android X11 Canvas hardwareAccelerated="+
+                        (isHardwareAccelerated() && canvas.isHardwareAccelerated())+
+                        "; cursor isolated from CPU desktop redraw; Vulkan DRI3/Present not implemented");
+            }
             if (_isBlanked) {
                 canvas.drawColor(0xff000000);
                 return;
@@ -764,7 +779,8 @@ public class ScreenView extends View {
             }
             _rootWindow.draw(canvas, _paint);
             _xServer.canvasDrawn();
-            canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
+            if (cursorOverlayListener==null && _currentCursor!=null)
+                canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
             canvas.restoreToCount(checkpoint);
 
             _drawnCursor = _currentCursor;
@@ -869,7 +885,9 @@ public class ScreenView extends View {
     }
 
     private void movePointer(int x, int y, Cursor cursor) {
-        if (_drawnCursor != null) {
+        // With the independent GPU cursor, do not repaint X11 window bitmaps
+        // on pointer motion. Keep the original path as a safe fallback.
+        if (cursorOverlayListener==null && _drawnCursor != null) {
             int left = _drawnCursorX - _drawnCursor.getHotspotX();
             int top = _drawnCursorY - _drawnCursor.getHotspotY();
             Bitmap bm = _drawnCursor.getBitmap();
@@ -882,11 +900,13 @@ public class ScreenView extends View {
         _currentCursorX = x;
         _currentCursorY = y;
 
-        int left = x - cursor.getHotspotX();
-        int top = y - cursor.getHotspotY();
-        Bitmap bm = cursor.getBitmap();
-
-        invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
+        Bitmap bm=cursor.getBitmap();
+        CursorOverlayListener listener=cursorOverlayListener;
+        if (listener!=null)listener.onCursorUpdated(bm,x,y,cursor.getHotspotX(),cursor.getHotspotY());
+        else {
+            int left=x-cursor.getHotspotX(),top=y-cursor.getHotspotY();
+            invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
+        }
     }
 
     /**
