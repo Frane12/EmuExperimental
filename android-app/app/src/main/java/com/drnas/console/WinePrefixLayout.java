@@ -44,7 +44,38 @@ final class WinePrefixLayout {
                 made++;
             }
         }
+        // The imported Winlator/Proton prefix can contain an absolute c: symlink
+        // that the archive extractor correctly defers for sandbox safety.
+        // Wine's Windows C: must be mapped back to OUR staged drive_c.
+        ensureSystemDriveMapping(base, log);
         log.accept("Wine profile repaired: C:\\users\\xuser\\Documents (+ My Games), created "+made+" folders.");
+    }
+
+
+    /** Restore only the local Wine C: mapping, never remap or overwrite R:. */
+    private static void ensureSystemDriveMapping(Path base, Consumer<String> log) throws IOException {
+        Path drive=base.resolve("drive_c");
+        Path dos=base.resolve("dosdevices");
+        if(Files.isSymbolicLink(dos))
+            throw new IOException("Wine dosdevices is an unsafe symlink");
+        if(Files.exists(dos,LinkOption.NOFOLLOW_LINKS)) {
+            if(!Files.isDirectory(dos,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Wine dosdevices is not a directory");
+        } else {
+            Files.createDirectories(dos);
+        }
+        Path c=dos.resolve("c:");
+        if(Files.isSymbolicLink(c)) {
+            Path target=Files.readSymbolicLink(c);
+            Path resolved=(target.isAbsolute()?target:dos.resolve(target)).normalize();
+            if(!resolved.equals(drive))
+                throw new IOException("C: points outside this Wine drive_c; refusing to overwrite existing mapping");
+        } else if(Files.exists(c,LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("C: already exists as a non-symlink; refusing to overwrite it");
+        } else {
+            Files.createSymbolicLink(c,java.nio.file.Paths.get("../drive_c"));
+            log.accept("Restored Wine C: -> ../drive_c (R: stays shared Android storage)");
+        }
     }
 
     private WinePrefixLayout(){}
