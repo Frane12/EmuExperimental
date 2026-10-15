@@ -89,6 +89,7 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        DxvkRuntime.install(new File(base,"prefix"),prefix,log);
         SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");

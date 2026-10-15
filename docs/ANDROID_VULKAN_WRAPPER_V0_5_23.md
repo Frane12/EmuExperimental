@@ -9,6 +9,12 @@ Mesa Bionic wrapper distributed by Bannerlator. The loader's ICD is the
 wrapper, while ADRENOTOOLS_DRIVER_PATH/NAME select the Drnas Turnip backend.
 ADRENOTOOLS_HOOKS_PATH points at the bundled, hash-verified hooks.
 
+Bootstrap previously applied DXVK only to containers/default/prefix, whereas
+WineGuiSession launches wineboot-probe/template/.wine. DxvkRuntime now copies
+the verified package DLLs for both architectures to that active prefix after
+wineboot. It validates PE architecture, preserves builtin links as backups
+without modifying their targets, and skips unchanged files on later boots.
+
 The existing TCP X server cannot pass DRI3 buffer file descriptors.
 MESA_VK_WSI_DEBUG=sw,noshm selects Mesa's CPU image presentation path:
 GPU rendering, GPU-to-host copy, X11 PutImage. This incurs bandwidth and
