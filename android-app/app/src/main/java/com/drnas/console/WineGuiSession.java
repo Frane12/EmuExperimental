@@ -56,7 +56,9 @@ final class WineGuiSession implements AutoCloseable {
                 "d3d9=n,b;dxgi=n,b;d3d11=n,b;d3d10core=n,b");
         // Avoid high-volume per-module / X11 tracing on every GUI operation.
         // Full logs can still be exported from the app when needed.
-        env.put("WINEDEBUG","-all,err+all,+seh,+timestamp,+pid");
+        // Process creation/termination traces identify which guest PID dies:
+        // Explorer can remain alive even when a game exits immediately.
+        env.put("WINEDEBUG","-all,err+all,+seh,+process,+timestamp,+pid");
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
@@ -98,6 +100,14 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
+        // An invalid/locked game.cfg must not prevent the whole Wine desktop.
+        try {
+            CrysisWindowedGuard.prepareIfInstalled(
+                    new File(context.getFilesDir(),"windows-drives/shared"),prefix,log);
+        } catch(IOException error) {
+            log.accept("Crysis fullscreen guard unavailable: "+error.getMessage());
+        }
         DxvkRuntime.install(new File(base,"prefix"),prefix,log);
         SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
@@ -132,6 +142,11 @@ final class WineGuiSession implements AutoCloseable {
         displayEnvironment(env);
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
+        File gl=new File(guiRuntime,"lib/libGL.so.1");
+        log.accept(gl.isFile()
+                ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
+                : "Wine X11 OpenGL libGL.so.1 unavailable; Vulkan DXVK path remains preferred.");
+        log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
         TurnipRuntime.configureWine(context,plan,env,log);
         TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
