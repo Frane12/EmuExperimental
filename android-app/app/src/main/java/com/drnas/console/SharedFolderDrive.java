@@ -16,8 +16,10 @@ import java.util.function.Consumer;
  * Android 11+ forbids a tree grant to the root Download directory; a selected
  * subfolder (e.g. Download/DRNAS) or Documents folder is supported.
  *
- * Synchronization is explicitly user initiated, import only (never deletes
- * local Wine files or writes back to the Android folder).
+ * Import-only mirror: the user can refresh manually, and while the Wine GUI
+ * runs it polls the persisted SAF grant so newly created directories appear
+ * without selecting the Android folder again. Wine files are never deleted or
+ * written back to the Android provider. This is NOT a live filesystem mount.
  */
 final class SharedFolderDrive {
     private static final String PREF = "drnas_drive";
@@ -56,7 +58,7 @@ final class SharedFolderDrive {
         report.accept("Mapped R: to app-private DRNAS Shared (user-selected SAF files are copied here)");
     }
 
-    static String importSelected(Context ctx,Consumer<String> report) throws Exception {
+    static synchronized String importSelected(Context ctx,Consumer<String> report) throws Exception {
         Uri tree=selectedTree(ctx);
         if(tree==null) throw new IOException("Select a shared Android folder first");
         File root=mirror(ctx);
@@ -90,6 +92,8 @@ final class SharedFolderDrive {
                         DocumentsContract.Document.COLUMN_SIZE},null,null,null)) {
             if(cursor==null)throw new IOException("Selected Android provider did not return folder contents");
             while(cursor.moveToNext()) {
+                if(Thread.currentThread().isInterrupted())
+                    throw new InterruptedIOException("R: import interrupted");
                 if(budget.files+budget.skipped>=MAX_FILES) {
                     budget.skipped++;return;
                 }
@@ -124,6 +128,8 @@ final class SharedFolderDrive {
                         byte[] buf=new byte[128*1024];
                         int n;long nFile=0;
                         while((n=in.read(buf))!=-1) {
+                            if(Thread.currentThread().isInterrupted())
+                                throw new InterruptedIOException("R: import interrupted");
                             if(n==0)continue;
                             nFile+=n;
                             if(budget.bytes+nFile>MAX_COPY)

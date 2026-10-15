@@ -42,6 +42,8 @@ public final class MainActivity extends Activity {
     private static final int EXPORT_SESSION_LOG = 302;
     private static final int EXPORT_RAW_WINE_LOG = 303;
     private static final int PICK_SHARED_FOLDER = 304;
+    private static final int PICK_MONO = 305;
+    private static final int PICK_VC = 306;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -118,7 +120,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS EMU · Runtime Core v0.5.19");
+        append("DRNAS EMU · Runtime Core v0.5.20");
         wineReady=readyForDesktop();
         if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
@@ -379,6 +381,7 @@ public final class MainActivity extends Activity {
         folder.addView(label("ANDROID FILES",12,ACCENT,true),pad(0,8));
         addButton(folder,"Select Android folder for R:",false,v->requestSharedFolder());
         addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
+        note(folder,"While the desktop is running, R: checks for new Android folders every 20 seconds. SAF uses a private import-only mirror, not a real Android filesystem mount.");
         addButton(folder,"Wine configuration",false,v->startConfig());
     }
 
@@ -389,6 +392,9 @@ public final class MainActivity extends Activity {
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
+        addButton(panel,"Import Wine Mono (.msi)",false,v->selectPrerequisite(PICK_MONO));
+        addButton(panel,"Import VC++ Redist x64 (.exe)",false,v->selectPrerequisite(PICK_VC));
+        note(panel,"Imported prerequisite installers run automatically ONCE per SHA-256 in each persistent Wine prefix. No installer is marked successful until its Wine process exits 0 (or 3010). Supply a genuine Wine Mono MSI and Microsoft VC++ x64 EXE. An APK-bundled wine-mono.msi is used automatically if present.");
         LinearLayout sharing=card();
         sharing.addView(label("WINDOWS R: · ANDROID SHARED FILES",11,ACCENT,true),pad(0,9));
         sharing.addView(label("Android folder grant: "+
@@ -656,6 +662,12 @@ public final class MainActivity extends Activity {
             Toast.makeText(this,"Could not start Wine initialization.",Toast.LENGTH_LONG).show();
         } else append("User started Wine initialization; phase progress enabled.");
     }
+    private void selectPrerequisite(int code) {
+        Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType("*/*");
+        startActivityForResult(i,code);
+    }
     private void selectWcp() {
         Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -693,6 +705,15 @@ public final class MainActivity extends Activity {
         }
         if(request==EXPORT_RAW_WINE_LOG) {
             completeRawWineExport(uri);
+            return;
+        }
+        if(request==PICK_MONO || request==PICK_VC) {
+            String kind=request==PICK_MONO?WinePrerequisites.MONO:WinePrerequisites.VC;
+            append("Copying selected Wine prerequisite into private installer vault...");
+            new Thread(()->{
+                try {append(WinePrerequisites.importUri(this,uri,kind));}
+                catch(Exception error){append("Prerequisite import failed: "+error.getMessage());}
+            },"drnas-prerequisite-import").start();
             return;
         }
         if(request!=PICK_WCP)return;
