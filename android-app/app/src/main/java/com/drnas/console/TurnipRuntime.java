@@ -116,8 +116,8 @@ final class TurnipRuntime {
             if(!ended)p.destroyForcibly();
             output.join(1000);
             if(ended && p.exitValue()==0)
-                log.accept("Turnip physical device verified with Wine's Bionic loader. X11 Vulkan presentation/Direct3D adapters are NOT verified.");
-            else log.accept("Turnip not verified (exit="+(ended?p.exitValue():-1)+"). Native Vulkan may still exist; inspect [Wine Vulkan] GPU lines. Direct3D is not yet verified.");
+                log.accept("Native Vulkan physical device enumeration PASSED. Inspect '[Wine Vulkan]' for vendor/device and Turnip marker. DXVK Windows adapter and X11 DRI3/Present are NOT verified.");
+            else log.accept("Native Vulkan enumeration FAILED (exit="+(ended?p.exitValue():-1)+"); DXVK adapter cannot be assumed. Inspect [Wine Vulkan] for details.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
     }
