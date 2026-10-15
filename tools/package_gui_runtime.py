@@ -10,7 +10,7 @@ SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
 ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        'libXcursor.so.1','libXi.so.6','libXinerama.so.1','libXfixes.so.3',
        'libXcomposite.so.1','libXxf86vm.so.1','libfreetype.so.6','libfontconfig.so.1',
-       'libvulkan.so.1']
+       'libvulkan.so.1','libGL.so.1']
 SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so','libnativewindow.so'}
 # Immutable upstream Mesa Bionic WSI wrapper + AdrenoTools hooks. Keep the
 # Khronos loader separate: its ICD is this wrapper, whose backend is Turnip.
