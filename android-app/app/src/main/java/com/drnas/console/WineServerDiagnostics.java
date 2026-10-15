@@ -66,7 +66,7 @@ public final class WineServerDiagnostics {
         Thread reader=new Thread(()->{
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
-                String line;int n=0,priority=0;
+                String line;int n=0,priority=0,processEvents=0;
                 while((line=br.readLine())!=null) {
                     if(raw!=null)raw.write(prefix.startsWith("[server B]")?
                             "wineserver":"server",line);
@@ -74,7 +74,18 @@ public final class WineServerDiagnostics {
                         log.accept(prefix+line.substring(0,Math.min(line.length(),350)));
                     else {
                         if(n==limit+1)log.accept(prefix+"routine trace display limit reached; errors still shown");
-                        if((line.contains(":err:")||line.contains("dlerror")||line.contains("cannot find")||line.contains("Failed to")) && priority++<80)
+                        // Preserve meaningful process lifecycle evidence even
+                        // after the initial 60 lines of Wine startup noise.
+                        // Child PIDs are Wine PIDs, not Android Linux PIDs.
+                        boolean exitOrCreate=line.contains(":trace:process:") &&
+                                (line.contains("NtCreateUserProcess") ||
+                                 line.contains("NtTerminateProcess") ||
+                                 line.contains("RtlExitUserProcess"));
+                        if(exitOrCreate && processEvents++<120)
+                            log.accept(prefix+"[guest process] "+line.substring(0,Math.min(line.length(),650)));
+                        else if((line.contains(":err:")||line.contains("dlerror")||
+                                line.contains("cannot find")||line.contains("Failed to")||
+                                line.contains("X connection to")) && priority++<80)
                             log.accept(prefix+line.substring(0,Math.min(line.length(),800)));
                     }
                 }
