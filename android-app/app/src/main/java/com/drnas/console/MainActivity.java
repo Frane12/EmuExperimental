@@ -120,7 +120,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onLog(String line) { append(line); }
         });
-        append("DRNAS EMU · Runtime Core v0.5.20");
+        append("DRNAS EMU · Runtime Core v0.5.21");
         wineReady=readyForDesktop();
         if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
@@ -293,7 +293,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS EMU",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.18 · 1280 × 720",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.21 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
