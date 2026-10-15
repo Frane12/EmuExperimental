@@ -11,6 +11,10 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
+import android.view.KeyCharacterMap;
+import android.view.KeyEvent;
+import android.text.InputType;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -34,6 +38,7 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean desktopFailed;
     private Button shareLog;
     private boolean keyboardPending;
+    private int keyboardAttempts;
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -117,10 +122,12 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
-                        ((AlertDialog)dialog).setOnDismissListener(d->showKeyboard());
+                        keyboardAttempts=0;
+                        ((AlertDialog)dialog).setOnDismissListener(d ->
+                                xserver.getScreen().postDelayed(this::showKeyboard,120));
                     }
                     else if(which==1) {
                         cpuCanvasFallback=!cpuCanvasFallback;
@@ -146,6 +153,7 @@ public final class WineGuiActivity extends Activity {
                     else if(which==4)shareGuiLog();
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
+                    else if(which==9)openTextFallback();
                     else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
@@ -155,6 +163,20 @@ public final class WineGuiActivity extends Activity {
         FrameLayout.LayoutParams tl=new FrameLayout.LayoutParams(dp(144),dp(46),Gravity.TOP|Gravity.END);
         tl.topMargin=dp(5);tl.rightMargin=dp(192);
         layout.addView(tasks,tl);tasks.setOnClickListener(v->openTaskManager());
+        // An always-visible keyboard button remains usable if a Wine game changes focus.
+        Button keyboard=new Button(this);
+        keyboard.setText("⌨");
+        keyboard.setContentDescription("Prikaži Android tipkovnicu za Wine");
+        keyboard.setTextSize(20);
+        keyboard.setAllCaps(false);
+        FrameLayout.LayoutParams kl=new FrameLayout.LayoutParams(dp(64),dp(46),Gravity.TOP|Gravity.END);
+        kl.topMargin=dp(5);kl.rightMargin=dp(343);
+        layout.addView(keyboard,kl);
+        keyboard.setOnClickListener(v->{
+            keyboardPending=true;
+            keyboardAttempts=0;
+            showKeyboard();
+        });
         setContentView(layout);
         try {
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
@@ -254,18 +276,86 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void showKeyboard() {
-        if(destroyed || !keyboardPending || !getWindow().getDecorView().hasWindowFocus())return;
-        keyboardPending=false;
+        if(destroyed || !keyboardPending || xserver==null)return;
+        // Dialog dismissal and Android IME focus restoration are asynchronous.
+        // Keep the request pending until the window regains focus.
+        if(!getWindow().getDecorView().hasWindowFocus())return;
         xserver.getScreen().post(()->{
-            if(destroyed)return;
-            xserver.getScreen().requestFocus();
+            if(destroyed || !keyboardPending)return;
+            boolean focused=xserver.getScreen().requestFocus();
+            if(!focused && !xserver.getScreen().hasFocus())
+                focused=xserver.getScreen().requestFocusFromTouch();
             InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-            if(imm!=null) {
-                imm.restartInput(xserver.getScreen());
-                boolean accepted=imm.showSoftInput(xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
-                log("Android keyboard show request accepted="+accepted);
+            if(imm==null) {
+                keyboardPending=false;
+                log("Android IME service unavailable; use the Text → Wine fallback.");
+                return;
+            }
+            if(keyboardAttempts==0)imm.restartInput(xserver.getScreen());
+            boolean accepted=imm.showSoftInput(xserver.getScreen(),
+                    InputMethodManager.SHOW_IMPLICIT);
+            log("Android IME request accepted="+accepted+" focus="+
+                    xserver.getScreen().hasFocus()+" attempt="+(keyboardAttempts+1));
+            if(accepted) {
+                keyboardPending=false;
+                keyboardAttempts=0;
+            } else if(++keyboardAttempts<3) {
+                xserver.getScreen().postDelayed(this::showKeyboard,240);
+            } else {
+                keyboardPending=false;
+                keyboardAttempts=0;
+                Toast.makeText(this,"Tipkovnica nije otvorena. Probaj ⋮ → Tekst → Wine.",
+                        Toast.LENGTH_LONG).show();
             }
         });
+    }
+
+    /**
+     * A text dialog uses a genuine Android EditText instead of relying on
+     * the non-editable X11 framebuffer receiving IME composition events.
+     * It submits only after the dialog closes and X11 has focus again.
+     * Keystrokes are delivered to the guest; typed text is never logged.
+     */
+    private void openTextFallback() {
+        EditText input=new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setHint("Upiši tekst za Wine prozor");
+        new AlertDialog.Builder(this)
+                .setTitle("Tekst → Wine")
+                .setMessage("Unos za aktivni Wine prozor; dijakritici ovise o X11 tipkovnici.")
+                .setView(input)
+                .setNegativeButton("Odustani",null)
+                .setPositiveButton("Pošalji",(d,which)->{
+                    final String value=input.getText().toString();
+                    xserver.getScreen().postDelayed(()->sendTextToWine(value),200);
+                }).show();
+    }
+
+    private void sendTextToWine(String value) {
+        if(destroyed || value.isEmpty() || xserver.mappedWindowCount()==0) {
+            if(!value.isEmpty())Toast.makeText(this,"Wine prozor nije spreman.",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        KeyEvent[] events=KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
+                .getEvents(value.toCharArray());
+        if(events==null) {
+            Toast.makeText(this,"Neki znakovi nisu podržani u Android → X11 rasporedu.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        xserver.getScreen().requestFocus();
+        int delivered=0;
+        for(KeyEvent event:events) {
+            if(event.getAction()==KeyEvent.ACTION_DOWN) {
+                xserver.getScreen().onKeyDown(event.getKeyCode(),event);
+                delivered++;
+            } else if(event.getAction()==KeyEvent.ACTION_UP) {
+                xserver.getScreen().onKeyUp(event.getKeyCode(),event);
+            }
+        }
+        log("X11 manual-text fallback delivered "+delivered+" keystrokes; content not logged.");
     }
 
     private void shareGuiLog() {
