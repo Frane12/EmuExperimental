@@ -29,6 +29,7 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean started;
     private volatile boolean destroyed;
     private TextView startupStatus;
+    private boolean cpuCanvasFallback;
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -55,9 +56,23 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         xserver.getScreen().setRelativeTouchMode(true);
-        xserver.getScreen().setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+        // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
+        // This does NOT implement X11 DRI3/Present or Wine Vulkan WSI.
+        xserver.getScreen().setLayerType(View.LAYER_TYPE_NONE,null);
+        logEarlyRendererIntent();
         xserver.getScreen().setFocusableInTouchMode(true);
         layout.addView(xserver.getScreen(),new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Cursor is a separate accelerated Android layer. Dragging the pointer
+        // no longer requests a redraw of every mapped Wine window bitmap.
+        CursorOverlayView cursorOverlay=new CursorOverlayView(this,
+                WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+        xserver.getScreen().setCursorOverlayListener(cursorOverlay::setCursor);
+        cursorOverlay.setClickable(false);
+        cursorOverlay.setFocusable(false);
+        layout.addView(cursorOverlay,new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -88,9 +103,20 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Reset Wine","Exit desktop"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop"},(dialog,which)->{
                     if(which==0)showKeyboard();
                     else if(which==1) {
+                        cpuCanvasFallback=!cpuCanvasFallback;
+                        xserver.getScreen().setLayerType(cpuCanvasFallback?
+                                View.LAYER_TYPE_SOFTWARE:View.LAYER_TYPE_NONE,null);
+                        xserver.getScreen().postInvalidateOnAnimation();
+                        log("Android X11 desktop Canvas mode: "+(cpuCanvasFallback?
+                                "SOFTWARE fallback":"HWUI hardware-accelerated candidate")+
+                                " (Wine Vulkan DRI3/Present still unimplemented)");
+                        Toast.makeText(this,cpuCanvasFallback?
+                                "CPU Canvas fallback":"GPU Canvas enabled",Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==2) {
                         Intent restart=new Intent(this,WineGuiActivity.class);
                         new Thread(()->{
                             try {
@@ -155,6 +181,10 @@ public final class WineGuiActivity extends Activity {
             if(!destroyed && xserver.mappedWindowCount()==0)
                 log("No Windows window mapped after 20 seconds; use hidden log export if needed.");
         },20000);
+    }
+
+    private void logEarlyRendererIntent() {
+        android.util.Log.i("DRNAS-HWUI","Trying Android GPU Canvas + split cursor; Wine Vulkan WSI is not yet supported");
     }
 
     private synchronized void log(String line) {

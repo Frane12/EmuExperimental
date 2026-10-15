@@ -100,7 +100,10 @@ final class TurnipRuntime {
 
     static void probeWine(Context context,File gui,Map<String,String> env,
                           Consumer<String> log,RawWineTrace raw) {
-        if(!env.containsKey("VK_DRIVER_FILES"))return;
+        // Probe even without a bundled Turnip selection: distinguish Vulkan
+        // enumeration from an X11 WSI/Direct3D adapter failure.
+        if(!env.containsKey("VK_DRIVER_FILES"))
+            log.accept("No Turnip ICD override; probing native system Vulkan availability.");
         Process p=null;
         try {
             File nativeDir=new File(context.getApplicationInfo().nativeLibraryDir);
@@ -112,8 +115,9 @@ final class TurnipRuntime {
             boolean ended=p.waitFor(8,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
-            if(ended && p.exitValue()==0)log.accept("Turnip physical device verified with Wine's Bionic loader. X11 Vulkan presentation is not verified by this probe.");
-            else log.accept("Turnip activation not verified; device test required. Wine desktop can still use software X11.");
+            if(ended && p.exitValue()==0)
+                log.accept("Turnip physical device verified with Wine's Bionic loader. X11 Vulkan presentation/Direct3D adapters are NOT verified.");
+            else log.accept("Turnip not verified (exit="+(ended?p.exitValue():-1)+"). Native Vulkan may still exist; inspect [Wine Vulkan] GPU lines. Direct3D is not yet verified.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
     }
