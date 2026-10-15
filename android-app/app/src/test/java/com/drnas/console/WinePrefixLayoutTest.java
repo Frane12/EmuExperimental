@@ -18,6 +18,11 @@ public class WinePrefixLayoutTest {
         File docs=new File(prefix,"drive_c/users/xuser/Documents");
         assertTrue(docs.isDirectory());
         assertTrue(new File(prefix,"drive_c/users/xuser/Documents/My Games").isDirectory());
+        Path legacy=new File(prefix,"drive_c/users/xuser/My Documents").toPath();
+        assertTrue("Old games need My Documents",Files.isSymbolicLink(legacy));
+        assertEquals(new File(prefix,"drive_c/users/xuser/Documents").toPath().toAbsolutePath().normalize(),
+                legacy.getParent().resolve(Files.readSymbolicLink(legacy)).normalize());
+        assertTrue(new File(prefix,"drive_c/users/xuser/My Documents/My Games").isDirectory());
         assertTrue(new File(prefix,"drive_c/users/xuser/AppData/Roaming").isDirectory());
         Path cMapping=new File(prefix,"dosdevices/c:").toPath();
         assertTrue("C: must be visible to Wine", Files.isSymbolicLink(cMapping));
@@ -27,6 +32,20 @@ public class WinePrefixLayoutTest {
         Files.write(save.toPath(),new byte[]{1,2,3});
         WinePrefixLayout.ensure(prefix,s->{});
         assertArrayEquals(new byte[]{1,2,3},Files.readAllBytes(save.toPath()));
+    }
+
+    @Test public void preservesExistingLegacyDocumentsDirectory() throws Exception {
+        File prefix=tmp.newFolder("legacyUser");
+        assertTrue(new File(prefix,"drive_c/windows").mkdirs());
+        File legacy=new File(prefix,"drive_c/users/xuser/My Documents");
+        assertTrue(legacy.mkdirs());
+        File existing=new File(legacy,"existing.sav");
+        Files.write(existing.toPath(),new byte[]{42});
+        WinePrefixLayout.ensure(prefix,s->{});
+        assertTrue(legacy.isDirectory());
+        assertFalse(Files.isSymbolicLink(legacy.toPath()));
+        assertTrue(new File(legacy,"My Games").isDirectory());
+        assertArrayEquals(new byte[]{42},Files.readAllBytes(existing.toPath()));
     }
 
     @Test public void rejectsForeignCDriveMappingWithoutChangingIt() throws Exception {
