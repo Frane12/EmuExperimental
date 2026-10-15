@@ -48,6 +48,7 @@ final class WinePrefixLayout {
         // that the archive extractor correctly defers for sandbox safety.
         // Wine's Windows C: must be mapped back to OUR staged drive_c.
         ensureSystemDriveMapping(base, log);
+        ensureMyDocumentsAlias(base, log);
         log.accept("Wine profile repaired: C:\\users\\xuser\\Documents (+ My Games), created "+made+" folders.");
     }
 
@@ -75,6 +76,31 @@ final class WinePrefixLayout {
         } else {
             Files.createSymbolicLink(c,java.nio.file.Paths.get("../drive_c"));
             log.accept("Restored Wine C: -> ../drive_c (R: stays shared Android storage)");
+        }
+    }
+
+
+    /** XP-era games may address My Documents rather than Documents directly. */
+    private static void ensureMyDocumentsAlias(Path base, Consumer<String> log) throws IOException {
+        Path user=base.resolve("drive_c/users/xuser");
+        Path docs=user.resolve("Documents");
+        Path legacy=user.resolve("My Documents");
+        if(Files.isSymbolicLink(legacy)) {
+            Path target=Files.readSymbolicLink(legacy);
+            Path resolved=(target.isAbsolute()?target:user.resolve(target)).normalize();
+            if(!resolved.equals(docs))
+                log.accept("My Documents points elsewhere; preserved existing user mapping.");
+        } else if(Files.exists(legacy,LinkOption.NOFOLLOW_LINKS)) {
+            if(!Files.isDirectory(legacy,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("My Documents is not a directory");
+            Path games=legacy.resolve("My Games");
+            if(!Files.exists(games,LinkOption.NOFOLLOW_LINKS))
+                Files.createDirectory(games);
+            else if(!Files.isDirectory(games,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("My Documents/My Games is not a directory");
+        } else {
+            Files.createSymbolicLink(legacy,java.nio.file.Paths.get("Documents"));
+            log.accept("Restored legacy My Documents -> Documents for older Windows games");
         }
     }
 
