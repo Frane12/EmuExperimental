@@ -518,11 +518,12 @@ public class ScreenView extends View {
                                 mode.finish();
                                 return true;
                             case ACTION_KEYBOARD:
-                                InputMethodManager imm = (InputMethodManager) _xServer.getContext().getSystemService(Service.INPUT_METHOD_SERVICE);
-                                requestFocus();
-                                imm.hideSoftInputFromWindow(getWindowToken(), 0);
-                                imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
                                 mode.finish();
+                                postDelayed(() -> {
+                                    requestFocus();
+                                    InputMethodManager imm = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                                    if(imm!=null)imm.showSoftInput(ScreenView.this,InputMethodManager.SHOW_IMPLICIT);
+                                },150);
                                 return true;
                             case ACTION_CANCEL:
                                 mode.finish();
@@ -557,11 +558,37 @@ public class ScreenView extends View {
     /**
      * needed make softkeyboard work in landscape mode and to capture backspace.
      */
+    @Override public boolean onCheckIsTextEditor() { return true; }
+
     @Override
     public InputConnection onCreateInputConnection(EditorInfo outAttrs){
-        outAttrs.inputType = InputType.TYPE_TEXT_VARIATION_NORMAL;
-        outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_FULLSCREEN;
-        return null;
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
+        outAttrs.imeOptions = EditorInfo.IME_ACTION_NONE | EditorInfo.IME_FLAG_NO_FULLSCREEN
+                | EditorInfo.IME_FLAG_NO_EXTRACT_UI;
+        return new android.view.inputmethod.BaseInputConnection(this,false) {
+            @Override public boolean sendKeyEvent(KeyEvent event) {
+                if(event.getAction()==KeyEvent.ACTION_DOWN)return onKeyDown(event.getKeyCode(),event);
+                if(event.getAction()==KeyEvent.ACTION_UP)return onKeyUp(event.getKeyCode(),event);
+                return false;
+            }
+            @Override public boolean commitText(CharSequence text,int newCursorPosition) {
+                android.view.KeyCharacterMap map=android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
+                KeyEvent[] events=map.getEvents(text.toString().toCharArray());
+                if(events==null)return false;
+                for(KeyEvent event:events)sendKeyEvent(event);
+                return true;
+            }
+            @Override public boolean deleteSurroundingText(int before,int after) {
+                if(before<0 || after<0 || before>256 || after>256)return false;
+                for(int i=0;i<before;i++)press(KeyEvent.KEYCODE_DEL);
+                for(int i=0;i<after;i++)press(KeyEvent.KEYCODE_FORWARD_DEL);
+                return true;
+            }
+            private void press(int code) {
+                sendKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,code));
+                sendKeyEvent(new KeyEvent(KeyEvent.ACTION_UP,code));
+            }
+        };
     }
     
 
@@ -2002,3 +2029,4 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+

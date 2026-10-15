@@ -38,7 +38,7 @@ public class WineGuiSessionTest {
         assertEquals("127.0.0.1:12.0",env.get("DISPLAY"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("winex11.drv=b"));
         assertFalse(env.containsKey("VK_ICD_FILENAMES"));
-        assertEquals("-all,err+all",env.get("WINEDEBUG"));
+        assertEquals("-all,err+all,+seh,+timestamp,+pid",env.get("WINEDEBUG"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("d3d9=n,b"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("dxgi=n,b"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("d3d11=n,b"));

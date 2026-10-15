@@ -56,7 +56,7 @@ final class WineGuiSession implements AutoCloseable {
                 "d3d9=n,b;dxgi=n,b;d3d11=n,b;d3d10core=n,b");
         // Avoid high-volume per-module / X11 tracing on every GUI operation.
         // Full logs can still be exported from the app when needed.
-        env.put("WINEDEBUG","-all,err+all");
+        env.put("WINEDEBUG","-all,err+all,+seh,+timestamp,+pid");
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {

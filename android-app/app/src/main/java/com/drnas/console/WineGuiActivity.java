@@ -33,6 +33,7 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
     private Button shareLog;
+    private boolean keyboardPending;
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -52,6 +53,7 @@ public final class WineGuiActivity extends Activity {
         super.onCreate(saved);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
 
         FrameLayout layout=new FrameLayout(this);
         layout.setBackgroundColor(Color.BLACK);
@@ -116,7 +118,10 @@ public final class WineGuiActivity extends Activity {
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
                 .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)"},(dialog,which)->{
-                    if(which==0)showKeyboard();
+                    if(which==0) {
+                        keyboardPending=true;
+                        ((AlertDialog)dialog).setOnDismissListener(d->showKeyboard());
+                    }
                     else if(which==1) {
                         cpuCanvasFallback=!cpuCanvasFallback;
                         xserver.getScreen().setLayerType(cpuCanvasFallback?
@@ -249,9 +254,18 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void showKeyboard() {
-        xserver.getScreen().requestFocus();
-        InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-        if(imm!=null)imm.showSoftInput(xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
+        if(destroyed || !keyboardPending || !getWindow().getDecorView().hasWindowFocus())return;
+        keyboardPending=false;
+        xserver.getScreen().post(()->{
+            if(destroyed)return;
+            xserver.getScreen().requestFocus();
+            InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+            if(imm!=null) {
+                imm.restartInput(xserver.getScreen());
+                boolean accepted=imm.showSoftInput(xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
+                log("Android keyboard show request accepted="+accepted);
+            }
+        });
     }
 
     private void shareGuiLog() {
@@ -333,7 +347,7 @@ public final class WineGuiActivity extends Activity {
 
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
-        if(focused)immersive();
+        if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
     }
 
     @Override protected void onDestroy() {

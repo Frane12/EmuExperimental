@@ -11,6 +11,7 @@ final class DiagnosticLogBundle {
     static void write(File files,RawWineTrace raw,OutputStream out) throws IOException {
         title(out,"LIVE WINE GUI / VULKAN");
         raw.copyTo(out);
+        GameLogSnapshot.write(files,out);
         copy(new File(files,"logs/"+RawWineTrace.LATEST),out,8L*1024*1024);
         File[] dxvk=new File(files,"containers/default/gui-tmp").listFiles(
                 (dir,name)->name.endsWith(".log"));
