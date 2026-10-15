@@ -52,6 +52,8 @@ final class WineGuiSession implements AutoCloseable {
         // Avoid high-volume per-module / X11 tracing on every GUI operation.
         // Full logs can still be exported from the app when needed.
         env.put("WINEDEBUG","-all");
+        // The 1280x720 X11 ROOT is immutable; DXVK client swapchains can
+        // temporarily be smaller (e.g. 160x23) without resizing the display.
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
@@ -135,6 +137,13 @@ final class WineGuiSession implements AutoCloseable {
             // The desktop is held until one-time prerequisite installers complete.
             // A missing MSI/EXE never masquerades as an installed dependency.
             WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            if(stopped)return;
+            // Install a proper Wine Explorer wallpaper, not an Android view overlay.
+            // First-run registry import is bounded and never prevents desktop launch.
+            try {WineDesktopWallpaper.apply(prefix,linker,wine,proton,env,log,raw);}
+            catch(Exception wallpaperError) {
+                log.accept("Desktop wallpaper unavailable: "+wallpaperError.getMessage());
+            }
             if(stopped)return;
             startFolderWatcher(context,log);
             log.accept("Launching Wine explorer.exe virtual desktop "+
