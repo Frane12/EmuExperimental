@@ -8,9 +8,9 @@ on:
       - feat/explorer-desktop-1280x720-v0.5.17
       - feat/wine-power-progress-taskbar-touch-v0.5.18
       - feat/desktop-audio-turnip-reset-v0.5.19
-      - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.27
-      - feat/hwui-cursor-dxvk-probe-v0.5.27
-      - feat/keyboard-crash-logs-v0.5.27
+      - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.26
+      - feat/hwui-cursor-dxvk-probe-v0.5.26
+      - feat/keyboard-crash-logs-v0.5.26
       - feat/ime-fallback-focus-v0.5.27
     paths:
       - "android-app/**"
