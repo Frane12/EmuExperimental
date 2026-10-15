@@ -5,8 +5,176 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Same Bionic loader and environment as Wine; never equate env vars with activation. */
+/* Opaque Xlib ABI, dynamically loaded from the exact Wine dependency path.
+ * No compile-time dependency on host Xlib headers or host Vulkan libraries. */
+typedef struct _XDisplay Display;
+typedef unsigned long Window;
+typedef struct {
+    VkStructureType sType;
+    const void *pNext;
+    VkFlags flags;
+    Display *dpy;
+    Window window;
+} XlibSurfaceInfo;
+typedef VkResult (VKAPI_PTR *CreateXlibSurface)(VkInstance,const XlibSurfaceInfo *,const VkAllocationCallbacks *,VkSurfaceKHR *);
+
+static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu) {
+    int status=20;
+    void *xlib=dlopen("libX11.so.6",RTLD_NOW|RTLD_LOCAL);
+    if(!xlib){fprintf(stderr,"Xlib: %s\n",dlerror());return status;}
+    Display *(*open_display)(const char *)=(Display *(*)(const char *))dlsym(xlib,"XOpenDisplay");
+    Window (*root_window)(Display *)=(Window (*)(Display *))dlsym(xlib,"XDefaultRootWindow");
+    Window (*create_window)(Display *,Window,int,int,unsigned,unsigned,unsigned,unsigned long,unsigned long)=
+        (Window (*)(Display *,Window,int,int,unsigned,unsigned,unsigned,unsigned long,unsigned long))dlsym(xlib,"XCreateSimpleWindow");
+    int (*map_window)(Display *,Window)=(int (*)(Display *,Window))dlsym(xlib,"XMapWindow");
+    int (*sync_display)(Display *,int)=(int (*)(Display *,int))dlsym(xlib,"XSync");
+    int (*destroy_window)(Display *,Window)=(int (*)(Display *,Window))dlsym(xlib,"XDestroyWindow");
+    int (*close_display)(Display *)=(int (*)(Display *))dlsym(xlib,"XCloseDisplay");
+    if(!open_display||!root_window||!create_window||!map_window||!sync_display||!destroy_window||!close_display){dlclose(xlib);return 21;}
+    Display *display=open_display(NULL);
+    if(!display){dlclose(xlib);return 22;}
+    Window window=create_window(display,root_window(display),0,0,64,64,0,0,0);
+    map_window(display,window);sync_display(display,0);
+    VkSurfaceKHR surface=VK_NULL_HANDLE;
+    VkDevice device=VK_NULL_HANDLE;
+    VkSwapchainKHR chain=VK_NULL_HANDLE;
+    VkCommandPool pool=VK_NULL_HANDLE;
+    VkFence fence=VK_NULL_HANDLE;
+    PFN_vkDestroyDevice destroy_device=NULL;
+    PFN_vkDestroySwapchainKHR destroy_chain=NULL;
+    PFN_vkDestroyCommandPool destroy_pool=NULL;
+    PFN_vkDestroyFence destroy_fence=NULL;
+    PFN_vkDeviceWaitIdle idle=NULL;
+#define INSTANCE(type,name) type name=(type)get(instance,#name)
+    INSTANCE(CreateXlibSurface,vkCreateXlibSurfaceKHR);
+    INSTANCE(PFN_vkDestroySurfaceKHR,vkDestroySurfaceKHR);
+    INSTANCE(PFN_vkGetPhysicalDeviceSurfaceSupportKHR,vkGetPhysicalDeviceSurfaceSupportKHR);
+    INSTANCE(PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
+    INSTANCE(PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,vkGetPhysicalDeviceSurfaceFormatsKHR);
+    INSTANCE(PFN_vkGetPhysicalDeviceQueueFamilyProperties,vkGetPhysicalDeviceQueueFamilyProperties);
+    INSTANCE(PFN_vkCreateDevice,vkCreateDevice);
+    INSTANCE(PFN_vkGetDeviceProcAddr,vkGetDeviceProcAddr);
+    if(!vkCreateXlibSurfaceKHR||!vkDestroySurfaceKHR||!vkGetPhysicalDeviceSurfaceSupportKHR||
+       !vkGetPhysicalDeviceSurfaceCapabilitiesKHR||!vkGetPhysicalDeviceSurfaceFormatsKHR||
+       !vkGetPhysicalDeviceQueueFamilyProperties||!vkCreateDevice||!vkGetDeviceProcAddr)goto done;
+    XlibSurfaceInfo si={.sType=VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,.dpy=display,.window=window};
+    VkResult result=vkCreateXlibSurfaceKHR(instance,&si,NULL,&surface);
+    printf("X11 Vulkan surface create=%d\n",result);
+    if(result!=VK_SUCCESS){status=23;goto done;}
+    uint32_t n=0,family=UINT32_MAX;
+    vkGetPhysicalDeviceQueueFamilyProperties(gpu,&n,NULL);
+    if(!n||n>64){status=24;goto done;}
+    VkQueueFamilyProperties queues[64];vkGetPhysicalDeviceQueueFamilyProperties(gpu,&n,queues);
+    for(uint32_t i=0;i<n;i++){
+        VkBool32 supported=VK_FALSE;
+        result=vkGetPhysicalDeviceSurfaceSupportKHR(gpu,i,surface,&supported);
+        if(result==VK_SUCCESS&&supported&&(queues[i].queueFlags&VK_QUEUE_GRAPHICS_BIT)){family=i;break;}
+    }
+    if(family==UINT32_MAX){status=25;goto done;}
+    float priority=1.0f;
+    VkDeviceQueueCreateInfo qi={.sType=VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,.queueFamilyIndex=family,.queueCount=1,.pQueuePriorities=&priority};
+    const char *extension="VK_KHR_swapchain";
+    VkDeviceCreateInfo di={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi,.enabledExtensionCount=1,.ppEnabledExtensionNames=&extension};
+    result=vkCreateDevice(gpu,&di,NULL,&device);
+    printf("Vulkan logical device create=%d\n",result);
+    if(result!=VK_SUCCESS){status=26;goto done;}
+#define DEVICE(type,name) type name=(type)vkGetDeviceProcAddr(device,#name)
+    destroy_device=(PFN_vkDestroyDevice)vkGetDeviceProcAddr(device,"vkDestroyDevice");
+    destroy_chain=(PFN_vkDestroySwapchainKHR)vkGetDeviceProcAddr(device,"vkDestroySwapchainKHR");
+    destroy_pool=(PFN_vkDestroyCommandPool)vkGetDeviceProcAddr(device,"vkDestroyCommandPool");
+    destroy_fence=(PFN_vkDestroyFence)vkGetDeviceProcAddr(device,"vkDestroyFence");
+    idle=(PFN_vkDeviceWaitIdle)vkGetDeviceProcAddr(device,"vkDeviceWaitIdle");
+    DEVICE(PFN_vkGetDeviceQueue,vkGetDeviceQueue);
+    DEVICE(PFN_vkCreateSwapchainKHR,vkCreateSwapchainKHR);
+    DEVICE(PFN_vkGetSwapchainImagesKHR,vkGetSwapchainImagesKHR);
+    DEVICE(PFN_vkAcquireNextImageKHR,vkAcquireNextImageKHR);
+    DEVICE(PFN_vkCreateCommandPool,vkCreateCommandPool);
+    DEVICE(PFN_vkAllocateCommandBuffers,vkAllocateCommandBuffers);
+    DEVICE(PFN_vkBeginCommandBuffer,vkBeginCommandBuffer);
+    DEVICE(PFN_vkCmdPipelineBarrier,vkCmdPipelineBarrier);
+    DEVICE(PFN_vkCmdClearColorImage,vkCmdClearColorImage);
+    DEVICE(PFN_vkEndCommandBuffer,vkEndCommandBuffer);
+    DEVICE(PFN_vkCreateFence,vkCreateFence);
+    DEVICE(PFN_vkWaitForFences,vkWaitForFences);
+    DEVICE(PFN_vkQueueSubmit,vkQueueSubmit);
+    DEVICE(PFN_vkQueuePresentKHR,vkQueuePresentKHR);
+    if(!destroy_device||!destroy_chain||!destroy_pool||!destroy_fence||!idle||!vkGetDeviceQueue||
+       !vkCreateSwapchainKHR||!vkGetSwapchainImagesKHR||!vkAcquireNextImageKHR||!vkCreateCommandPool||
+       !vkAllocateCommandBuffers||!vkBeginCommandBuffer||!vkCmdPipelineBarrier||!vkCmdClearColorImage||
+       !vkEndCommandBuffer||!vkCreateFence||!vkWaitForFences||!vkQueueSubmit||!vkQueuePresentKHR){status=27;goto done;}
+    VkSurfaceCapabilitiesKHR cap;
+    result=vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu,surface,&cap);
+    if(result!=VK_SUCCESS){status=28;goto done;}
+    n=0;result=vkGetPhysicalDeviceSurfaceFormatsKHR(gpu,surface,&n,NULL);
+    if(result!=VK_SUCCESS||!n||n>256){status=29;goto done;}
+    VkSurfaceFormatKHR formats[256];result=vkGetPhysicalDeviceSurfaceFormatsKHR(gpu,surface,&n,formats);
+    if(result!=VK_SUCCESS){status=30;goto done;}
+    VkSurfaceFormatKHR format=formats[0];
+    if(format.format==VK_FORMAT_UNDEFINED)format.format=VK_FORMAT_B8G8R8A8_UNORM;
+    VkExtent2D extent=cap.currentExtent;
+    if(extent.width==UINT32_MAX){extent.width=64;extent.height=64;}
+    uint32_t count=cap.minImageCount+1;
+    if(cap.maxImageCount&&count>cap.maxImageCount)count=cap.maxImageCount;
+    if(!(cap.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_DST_BIT)){status=31;goto done;}
+    VkCompositeAlphaFlagBitsKHR alpha=(VkCompositeAlphaFlagBitsKHR)(cap.supportedCompositeAlpha&(~cap.supportedCompositeAlpha+1));
+    VkSwapchainCreateInfoKHR sci={.sType=VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,.surface=surface,
+        .minImageCount=count,.imageFormat=format.format,.imageColorSpace=format.colorSpace,.imageExtent=extent,
+        .imageArrayLayers=1,.imageUsage=VK_IMAGE_USAGE_TRANSFER_DST_BIT,.imageSharingMode=VK_SHARING_MODE_EXCLUSIVE,
+        .preTransform=cap.currentTransform,.compositeAlpha=alpha,.presentMode=VK_PRESENT_MODE_FIFO_KHR,.clipped=VK_TRUE};
+    result=vkCreateSwapchainKHR(device,&sci,NULL,&chain);
+    printf("X11 Vulkan swapchain create=%d\n",result);
+    if(result!=VK_SUCCESS){status=32;goto done;}
+    n=0;result=vkGetSwapchainImagesKHR(device,chain,&n,NULL);
+    if(result!=VK_SUCCESS||!n||n>16){status=33;goto done;}
+    VkImage images[16];result=vkGetSwapchainImagesKHR(device,chain,&n,images);
+    if(result!=VK_SUCCESS){status=34;goto done;}
+    VkFenceCreateInfo fi={.sType=VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    result=vkCreateFence(device,&fi,NULL,&fence);
+    if(result!=VK_SUCCESS){status=35;goto done;}
+    uint32_t index;
+    result=vkAcquireNextImageKHR(device,chain,2000000000ULL,VK_NULL_HANDLE,fence,&index);
+    if(result!=VK_SUCCESS&&result!=VK_SUBOPTIMAL_KHR){status=36;goto done;}
+    if(index>=n||vkWaitForFences(device,1,&fence,VK_TRUE,2000000000ULL)!=VK_SUCCESS){status=37;goto done;}
+    VkCommandPoolCreateInfo pi={.sType=VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,.queueFamilyIndex=family};
+    if(vkCreateCommandPool(device,&pi,NULL,&pool)!=VK_SUCCESS){status=38;goto done;}
+    VkCommandBufferAllocateInfo ai={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,.commandPool=pool,.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY,.commandBufferCount=1};
+    VkCommandBuffer cmd;
+    if(vkAllocateCommandBuffers(device,&ai,&cmd)!=VK_SUCCESS){status=39;goto done;}
+    VkCommandBufferBeginInfo bi={.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,.flags=VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+    if(vkBeginCommandBuffer(cmd,&bi)!=VK_SUCCESS){status=40;goto done;}
+    VkImageSubresourceRange range={.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT,.levelCount=1,.layerCount=1};
+    VkImageMemoryBarrier barrier={.sType=VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,.dstAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT,
+        .oldLayout=VK_IMAGE_LAYOUT_UNDEFINED,.newLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        .srcQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.dstQueueFamilyIndex=VK_QUEUE_FAMILY_IGNORED,.image=images[index],.subresourceRange=range};
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,0,0,NULL,0,NULL,1,&barrier);
+    VkClearColorValue color={.float32={0.04f,0.2f,0.4f,1.0f}};
+    vkCmdClearColorImage(cmd,images[index],VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,&color,1,&range);
+    barrier.srcAccessMask=VK_ACCESS_TRANSFER_WRITE_BIT;barrier.dstAccessMask=0;
+    barrier.oldLayout=VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;barrier.newLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,0,0,NULL,0,NULL,1,&barrier);
+    if(vkEndCommandBuffer(cmd)!=VK_SUCCESS){status=41;goto done;}
+    VkQueue queue;vkGetDeviceQueue(device,family,0,&queue);
+    VkSubmitInfo submit={.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO,.commandBufferCount=1,.pCommandBuffers=&cmd};
+    if(vkQueueSubmit(queue,1,&submit,VK_NULL_HANDLE)!=VK_SUCCESS||idle(device)!=VK_SUCCESS){status=42;goto done;}
+    VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.swapchainCount=1,.pSwapchains=&chain,.pImageIndices=&index};
+    result=vkQueuePresentKHR(queue,&present);
+    printf("X11 Vulkan clear/present=%d\n",result);
+    status=(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)?0:43;
+    if(!status)puts("DRNAS_GPU_X11_SWAPCHAIN_PRESENT_VERIFIED");
+done:
+    if(device&&idle)idle(device);
+    if(device&&fence&&destroy_fence)destroy_fence(device,fence,NULL);
+    if(device&&pool&&destroy_pool)destroy_pool(device,pool,NULL);
+    if(device&&chain&&destroy_chain)destroy_chain(device,chain,NULL);
+    if(device&&destroy_device)destroy_device(device,NULL);
+    if(surface&&vkDestroySurfaceKHR)vkDestroySurfaceKHR(instance,surface,NULL);
+    destroy_window(display,window);sync_display(display,0);close_display(display);dlclose(xlib);
+    if(status)printf("DRNAS_X11_PRESENT_PROBE_FAILED stage=%d\n",status);
+    return status;
+}
+
 int main(int argc,char **argv) {
+    setvbuf(stdout,NULL,_IONBF,0);setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=2)return 2;
     void *loader=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);
     if(!loader){fprintf(stderr,"Vulkan loader failed: %s\n",dlerror());return 3;}
@@ -14,28 +182,30 @@ int main(int argc,char **argv) {
     if(!get)return 4;
     PFN_vkCreateInstance create=(PFN_vkCreateInstance)get(VK_NULL_HANDLE,"vkCreateInstance");
     if(!create)return 5;
-    VkApplicationInfo app={.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO,.pApplicationName="DRNAS Wine Vulkan probe",.apiVersion=VK_API_VERSION_1_1};
-    VkInstanceCreateInfo ci={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&app};
+    const char *extensions[]={"VK_KHR_surface","VK_KHR_xlib_surface"};
+    VkApplicationInfo app={.sType=VK_STRUCTURE_TYPE_APPLICATION_INFO,.pApplicationName="DRNAS GPU X11 probe",.apiVersion=VK_API_VERSION_1_1};
+    VkInstanceCreateInfo ci={.sType=VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,.pApplicationInfo=&app,.enabledExtensionCount=2,.ppEnabledExtensionNames=extensions};
     VkInstance instance=VK_NULL_HANDLE;VkResult result=create(&ci,NULL,&instance);
-    if(result!=VK_SUCCESS){fprintf(stderr,"vkCreateInstance=%d\n",result);return 6;}
+    if(result!=VK_SUCCESS){fprintf(stderr,"vkCreateInstance(X11)=%d\n",result);return 6;}
     PFN_vkEnumeratePhysicalDevices enumerate=(PFN_vkEnumeratePhysicalDevices)get(instance,"vkEnumeratePhysicalDevices");
-    PFN_vkGetPhysicalDeviceProperties properties=(PFN_vkGetPhysicalDeviceProperties)get(instance,"vkGetPhysicalDeviceProperties");
+    PFN_vkGetPhysicalDeviceProperties2 properties=(PFN_vkGetPhysicalDeviceProperties2)get(instance,"vkGetPhysicalDeviceProperties2");
     PFN_vkDestroyInstance destroy=(PFN_vkDestroyInstance)get(instance,"vkDestroyInstance");
     if(!enumerate||!properties||!destroy)return 7;
     uint32_t count=0;result=enumerate(instance,&count,NULL);
-    if(result!=VK_SUCCESS||!count){destroy(instance,NULL);return 8;}
-    VkPhysicalDevice *devices=calloc(count,sizeof(*devices));
-    if(!devices){destroy(instance,NULL);return 9;}
-    result=enumerate(instance,&count,devices);int turnip=0;
+    if(result!=VK_SUCCESS||!count||count>64){destroy(instance,NULL);return 8;}
+    VkPhysicalDevice devices[64];result=enumerate(instance,&count,devices);
+    int status=10;
     if(result==VK_SUCCESS)for(uint32_t i=0;i<count;i++) {
-        VkPhysicalDeviceProperties p;properties(devices[i],&p);
-        printf("Vulkan device: %s | vendor=%04x device=%04x driver=%u\n",p.deviceName,p.vendorID,p.deviceID,p.driverVersion);
-        if(strstr(p.deviceName,"Turnip")||strstr(p.deviceName,"turnip"))turnip=1;
+        VkPhysicalDeviceDriverProperties driver={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+        VkPhysicalDeviceProperties2 p={.sType=VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,.pNext=&driver};
+        properties(devices[i],&p);
+        printf("Vulkan device: %s | vendor=%04x device=%04x | driverID=%d %s %s\n",
+            p.properties.deviceName,p.properties.vendorID,p.properties.deviceID,driver.driverID,driver.driverName,driver.driverInfo);
+        puts(driver.driverID==VK_DRIVER_ID_MESA_TURNIP?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_NATIVE_VULKAN_DEVICE_PRESENT__TURNIP_NOT_VERIFIED");
+        if(p.properties.deviceType==VK_PHYSICAL_DEVICE_TYPE_CPU){puts("CPU Vulkan device rejected");continue;}
+        status=present_probe(get,instance,devices[i]);
+        if(!status)break;
     }
-    free(devices);destroy(instance,NULL);dlclose(loader);
-    // A real Qualcomm system Vulkan GPU is a valid enumerated device, even
-    // when this particular loader ignores custom Turnip ICD environment vars.
-    // Keep the Turnip claim separate from the basic GPU enumeration result.
-    puts(turnip?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_NATIVE_VULKAN_DEVICE_PRESENT__TURNIP_NOT_VERIFIED");
-    return result==VK_SUCCESS?0:10;
+    destroy(instance,NULL);dlclose(loader);
+    return status;
 }

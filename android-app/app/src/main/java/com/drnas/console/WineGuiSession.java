@@ -159,7 +159,7 @@ final class WineGuiSession implements AutoCloseable {
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
                      "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
-                    "; GPU-composited Android HWUI cursor; DRI3/Present Vulkan WSI not implemented.");
+                    "; HWUI desktop + Mesa Vulkan X11 readback presentation (experimental).");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
@@ -209,5 +209,6 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 
 

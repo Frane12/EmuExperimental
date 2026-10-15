@@ -71,6 +71,9 @@ final class TurnipRuntime {
 
     static void configureWine(Context ctx,JSONObject plan,Map<String,String> env,
                               Consumer<String> log) throws Exception {
+        File gui=new File(ctx.getFilesDir(),"gui-runtime/v1/lib");
+        configureWrapper(gui,env);
+        log.accept("Wine Vulkan bridge: Khronos loader -> Mesa X11 wrapper -> AdrenoTools/driver. X11 presentation uses GPU readback + PutImage while DRI3 is unavailable.");
         if(!plan.has("turnipIcd")||plan.isNull("turnipIcd")) {
             log.accept("No matching bundled Drnas Turnip; Wine uses system Vulkan.");
             return;
@@ -86,16 +89,35 @@ final class TurnipRuntime {
         if(!driver.toPath().startsWith(vault.toPath()) || !driver.isFile() ||
                 Files.isSymbolicLink(driver.toPath()))
             throw new IOException("Turnip ICD references unavailable library");
-        env.put("VK_ICD_FILENAMES",icd.getAbsolutePath());
-        env.put("VK_DRIVER_FILES",icd.getAbsolutePath());
-        env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParentFile().getAbsolutePath());
+        // The desktop ICD must remain the X11 wrapper. The Android-only
+        // Turnip ICD is the backend selected through AdrenoTools instead.
+        env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParentFile().getAbsolutePath()+"/");
         env.put("ADRENOTOOLS_DRIVER_NAME",driver.getName());
         env.put("DRNAS_TURNIP_PREFERRED","1");
         env.put("LD_LIBRARY_PATH",driver.getParentFile().getAbsolutePath()+":"+
                 env.getOrDefault("LD_LIBRARY_PATH",""));
-        log.accept("Requested Drnas Turnip by default for Wine via ICD override: "+
-                driver.getName()+". Actual Vulkan device usage requires an in-guest GPU probe; "+
-                "Android's system Vulkan loader may ignore ICD env vars without AdrenoTools.");
+        log.accept("Drnas Turnip backend requested through AdrenoTools: "+driver.getName()+"; native device/swapchain probe follows.");
+    }
+
+    static void configureWrapper(File lib,Map<String,String> env) throws Exception {
+        File wrapper=new File(lib,"libvulkan_wrapper.so");
+        if(!wrapper.isFile() || !new File(lib,"libmain_hook.so").isFile())
+            throw new IOException("Bundled Vulkan wrapper/hooks missing");
+        JSONObject icd=new JSONObject().put("file_format_version","1.0.0")
+                .put("ICD",new JSONObject().put("library_path",wrapper.getAbsolutePath()).put("api_version","1.3.0"));
+        File descriptor=new File(lib.getParentFile(),"drnas-wrapper-icd.json");
+        Files.write(descriptor.toPath(),icd.toString(2).getBytes(StandardCharsets.UTF_8));
+        env.put("VK_DRIVER_FILES",descriptor.getAbsolutePath());
+        env.put("VK_ICD_FILENAMES",descriptor.getAbsolutePath());
+        env.put("ADRENOTOOLS_HOOKS_PATH",lib.getAbsolutePath()+"/");
+        env.remove("ADRENOTOOLS_DRIVER_PATH");env.remove("ADRENOTOOLS_DRIVER_NAME");
+        env.put("DRNAS_TURNIP_PREFERRED","0");
+        // sw selects CPU *presentation*, not software shader execution. The
+        // real driver still renders; Mesa copies its image to X11 PutImage.
+        // Our TCP X server has neither fd passing/DRI3 nor MIT-SHM.
+        env.put("MESA_VK_WSI_DEBUG","sw,noshm");
+        env.put("WRAPPER_EMULATE_BCN","0");
+        env.put("WRAPPER_LOG_LEVEL","error");
     }
 
     static void probeWine(Context context,File gui,Map<String,String> env,
@@ -112,11 +134,11 @@ final class TurnipRuntime {
                     new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath()).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
-            boolean ended=p.waitFor(8,java.util.concurrent.TimeUnit.SECONDS);
+            boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
             if(ended && p.exitValue()==0)
-                log.accept("Native Vulkan physical device enumeration PASSED. Inspect '[Wine Vulkan]' for vendor/device and Turnip marker. DXVK Windows adapter and X11 DRI3/Present are NOT verified.");
+                log.accept("Native Vulkan GPU + X11 swapchain present PASSED. Inspect '[Wine Vulkan]' for actual driver/vendor/device. Windows DXVK adapter/game execution still requires the device test.");
             else log.accept("Native Vulkan enumeration FAILED (exit="+(ended?p.exitValue():-1)+"); DXVK adapter cannot be assumed. Inspect [Wine Vulkan] for details.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
@@ -124,4 +146,5 @@ final class TurnipRuntime {
 
     private TurnipRuntime(){}
 }
+
 

@@ -1,0 +1,23 @@
+DRNAS Vulkan bridge v0.5.23
+
+This build redistributes the upstream Mesa Bionic Vulkan wrapper and
+libadrenotools/hooks unchanged. The DRNAS changes select the wrapper as
+Wine's ICD, select the per-GPU Drnas Turnip as the AdrenoTools backend,
+and use Mesa's existing sw,noshm X11 presentation path.
+
+Binary distribution:
+https://github.com/The412Banner/Bannerlator/tree/e91d93bb23b0f2dde953864484b6f620f72d9cad/app/src/main/assets/graphics_driver
+wrapper.tzst SHA256:
+2005169d30ab7558b0c404ff8a3d781cddfde2f012531e097ccc95c423a706a5
+
+Related source projects and authors:
+Mesa contributors: https://gitlab.freedesktop.org/mesa/mesa
+Bruno / Winlator: https://github.com/brunodev85/winlator
+Pipetto-crypto: https://github.com/Pipetto-crypto/winlator
+StevenMXZ: https://github.com/StevenMXZ/Winlator-Ludashi
+leegao: https://github.com/leegao/bionic-vulkan-wrapper
+AdrenoTools: https://github.com/bylaws/libadrenotools
+Bannerlator distribution: https://github.com/The412Banner/Bannerlator
+
+See the accompanying Mesa and AdrenoTools license texts. This integration
+does not claim authorship of the upstream wrapper or its presentation code.
