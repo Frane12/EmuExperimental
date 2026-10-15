@@ -20,7 +20,7 @@ public final class VulkanWrapperEnvironmentTest {
             env.put("ADRENOTOOLS_DRIVER_PATH","old-driver");
             env.put("ADRENOTOOLS_DRIVER_NAME","old.so");
             TurnipRuntime.configureWrapper(lib,env);
-            JSONObject icd=new JSONObject(Files.readString(new File(env.get("VK_DRIVER_FILES")).toPath()));
+            JSONObject icd=new JSONObject(new String(Files.readAllBytes(new File(env.get("VK_DRIVER_FILES")).toPath()),java.nio.charset.StandardCharsets.UTF_8));
             assertEquals(new File(lib,"libvulkan_wrapper.so").getAbsolutePath(),
                     icd.getJSONObject("ICD").getString("library_path"));
             assertEquals(env.get("VK_DRIVER_FILES"),env.get("VK_ICD_FILENAMES"));
