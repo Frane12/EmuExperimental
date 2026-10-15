@@ -175,7 +175,9 @@ done:
 
 int main(int argc,char **argv) {
     setvbuf(stdout,NULL,_IONBF,0);setvbuf(stderr,NULL,_IONBF,0);
-    if(argc!=2)return 2;
+    if(argc!=2&&argc!=3)return 2;
+    int enumerate_only=argc==3&&strcmp(argv[2],"--enumerate-only")==0;
+    if(argc==3&&!enumerate_only)return 2;
     void *loader=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);
     if(!loader){fprintf(stderr,"Vulkan loader failed: %s\n",dlerror());return 3;}
     PFN_vkGetInstanceProcAddr get=(PFN_vkGetInstanceProcAddr)dlsym(loader,"vkGetInstanceProcAddr");
@@ -203,7 +205,7 @@ int main(int argc,char **argv) {
             p.properties.deviceName,p.properties.vendorID,p.properties.deviceID,driver.driverID,driver.driverName,driver.driverInfo);
         puts(driver.driverID==VK_DRIVER_ID_MESA_TURNIP?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_NATIVE_VULKAN_DEVICE_PRESENT__TURNIP_NOT_VERIFIED");
         if(p.properties.deviceType==VK_PHYSICAL_DEVICE_TYPE_CPU){puts("CPU Vulkan device rejected");continue;}
-        status=present_probe(get,instance,devices[i]);
+        status=enumerate_only?0:present_probe(get,instance,devices[i]);
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);

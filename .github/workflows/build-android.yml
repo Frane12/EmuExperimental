@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.23 Vulkan Wrapper
+name: EmuExperimental - Android APK v0.5.24 Visible Log Sharing
 on:
   push:
     branches:
@@ -8,9 +8,9 @@ on:
       - feat/explorer-desktop-1280x720-v0.5.17
       - feat/wine-power-progress-taskbar-touch-v0.5.18
       - feat/desktop-audio-turnip-reset-v0.5.19
-      - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.23
-      - feat/hwui-cursor-dxvk-probe-v0.5.23
-      - feat/vulkan-wrapper-gpu-v0.5.23
+      - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.24
+      - feat/hwui-cursor-dxvk-probe-v0.5.24
+      - feat/visible-log-share-v0.5.24
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -112,17 +112,17 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.23-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.23\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.24-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.24\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.23-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.23 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0523 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.24-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.24 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0524 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.23-APK-ZIP
+          name: Drnas-Console-v0.5.24-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14

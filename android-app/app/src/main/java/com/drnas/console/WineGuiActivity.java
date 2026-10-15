@@ -30,6 +30,9 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean destroyed;
     private TextView startupStatus;
     private boolean cpuCanvasFallback;
+    private volatile boolean desktopLaunchRequested;
+    private volatile boolean desktopFailed;
+    private Button shareLog;
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -87,8 +90,17 @@ public final class WineGuiActivity extends Activity {
         layout.addView(startupStatus,new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,dp(56),Gravity.CENTER));
 
-        // The sole on-screen control is a small, translucent menu.
-        // Long-press to save a log only if debugging is necessary.
+        // Android controls remain reachable even if Wine has no mapped window.
+        shareLog=new Button(this);
+        shareLog.setText("Pošalji log");
+        shareLog.setAllCaps(false);
+        shareLog.setTextColor(Color.WHITE);
+        shareLog.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xE025465A));
+        shareLog.setContentDescription("Pošalji dijagnostički TXT log");
+        FrameLayout.LayoutParams sl=new FrameLayout.LayoutParams(dp(132),dp(46),Gravity.TOP|Gravity.END);
+        sl.topMargin=dp(5);sl.rightMargin=dp(56);
+        layout.addView(shareLog,sl);
+        shareLog.setOnClickListener(v->shareGuiLog());
         Button menu=new Button(this);
         menu.setText("⋮");
         menu.setTextColor(Color.WHITE);
@@ -103,7 +115,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log"},(dialog,which)->{
                     if(which==0)showKeyboard();
                     else if(which==1) {
                         cpuCanvasFallback=!cpuCanvasFallback;
@@ -125,7 +137,9 @@ public final class WineGuiActivity extends Activity {
                                 runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
                             } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
                         },"drnas-desktop-reset").start();
-                    } else finish();
+                    } else if(which==3)finish();
+                    else if(which==4)shareGuiLog();
+                    else saveGuiLog();
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
@@ -155,11 +169,13 @@ public final class WineGuiActivity extends Activity {
                 new Thread(()->{
                     try {session.run(WineGuiActivity.this,WineGuiActivity.this::log,raw,launchApp);}
                     catch(Throwable e) {
+                        desktopFailed=true;
                         log("Desktop stopped: "+e.getClass().getSimpleName()+": "+e.getMessage());
                         runOnUiThread(()->{
-                            if(!destroyed)Toast.makeText(WineGuiActivity.this,
-                                    "Windows desktop could not start. Long-press ⋮ to save log.",
-                                    Toast.LENGTH_LONG).show();
+                            if(!destroyed) {
+                                startupStatus.setText("Windows se nije pokrenuo. Pritisni Pošalji log.\n"+e.getClass().getSimpleName()+": "+e.getMessage());
+                                startupStatus.setVisibility(View.VISIBLE);
+                            }
                         });
                     } finally {
                         session.close();
@@ -172,14 +188,18 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null)return;
-                if(xserver.mappedWindowCount()>0)startupStatus.setVisibility(View.GONE);
+                if(!desktopFailed && desktopLaunchRequested && xserver.mappedWindowCount()>0)
+                    startupStatus.setVisibility(View.GONE);
                 else xserver.getScreen().postDelayed(this,700);
             }
         },700);
         // Report absence of a mapped window only to the private session log.
         xserver.getScreen().postDelayed(()->{
-            if(!destroyed && xserver.mappedWindowCount()==0)
-                log("No Windows window mapped after 20 seconds; use hidden log export if needed.");
+            if(!destroyed && !desktopFailed && (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
+                log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
+                startupStatus.setText("Windows se još pokreće… Pošalji log ako ekran ostane siv.");
+                startupStatus.setVisibility(View.VISIBLE);
+            }
         },20000);
     }
 
@@ -189,6 +209,7 @@ public final class WineGuiActivity extends Activity {
 
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
+        if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
         if(line.startsWith("Installing Wine Mono") ||
                 line.startsWith("Installing Microsoft VC++") ||
                 line.startsWith("Launching Wine explorer")) {
@@ -206,13 +227,48 @@ public final class WineGuiActivity extends Activity {
         if(imm!=null)imm.showSoftInput(xserver.getScreen(),InputMethodManager.SHOW_IMPLICIT);
     }
 
+    private void shareGuiLog() {
+        if(raw==null){Toast.makeText(this,"Log se još priprema",Toast.LENGTH_SHORT).show();return;}
+        if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
+        if(!shareLog.isEnabled())return;
+        shareLog.setEnabled(false);shareLog.setText("Pripremam…");
+        new Thread(()->{
+            try {
+                Intent intent=GuiLogExport.share(this,this::writeDiagnosticLog);
+                runOnUiThread(()->{
+                    if(destroyed)return;
+                    shareLog.setEnabled(true);shareLog.setText("Pošalji log");
+                    try {startActivity(Intent.createChooser(intent,"Pošalji DRNAS log"));}
+                    catch(Exception e){Toast.makeText(this,"Log je spremljen u Downloads/DRNAS. Dijeljenje nije dostupno.",Toast.LENGTH_LONG).show();}
+                });
+            } catch(Exception e) {
+                log("Log share failed: "+e.getMessage());
+                runOnUiThread(()->{
+                    if(destroyed)return;
+                    shareLog.setEnabled(true);shareLog.setText("Pošalji log");
+                    openSaveAs();
+                });
+            }
+        },"drnas-log-share").start();
+    }
+
+    private void writeDiagnosticLog(OutputStream out) throws IOException {
+        String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
+                "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
+                "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
+                "\nDesktop launch requested: "+desktopLaunchRequested+
+                "\nDesktop failed: "+desktopFailed+"\n\n";
+        out.write(header.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        DiagnosticLogBundle.write(getFilesDir(),raw,out);
+    }
+
     private void saveGuiLog() {
         if(raw==null){Toast.makeText(this,"No GUI log yet",Toast.LENGTH_SHORT).show();return;}
         if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
         Toast.makeText(this,"Saving GUI TXT to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             try {
-                String name=GuiLogExport.save(this,raw::copyTo);
+                String name=GuiLogExport.save(this,this::writeDiagnosticLog);
                 runOnUiThread(()->{
                     if(!destroyed)Toast.makeText(this,"Saved: Downloads/DRNAS/"+name,
                             Toast.LENGTH_LONG).show();
@@ -243,7 +299,7 @@ public final class WineGuiActivity extends Activity {
         new Thread(()->{
             try(OutputStream out=getContentResolver().openOutputStream(uri,"w")) {
                 if(out==null)throw new IOException("No document output");
-                raw.copyTo(out);
+                writeDiagnosticLog(out);
             } catch(IOException e){log("GUI export failed: "+e.getMessage());}
         },"drnas-desktop-save-as").start();
     }
@@ -260,4 +316,5 @@ public final class WineGuiActivity extends Activity {
         super.onDestroy();
     }
 }
+
 

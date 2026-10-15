@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 38
-        versionName = "0.5.23-vulkan-wrapper"
+        versionCode = 39
+        versionName = "0.5.24-visible-log-share"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -50,7 +50,7 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".labv0523"
+                applicationIdSuffix = ".labv0524"
                 manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }

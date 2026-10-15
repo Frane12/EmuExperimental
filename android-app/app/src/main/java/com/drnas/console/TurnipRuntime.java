@@ -131,14 +131,14 @@ final class TurnipRuntime {
             File nativeDir=new File(context.getApplicationInfo().nativeLibraryDir);
             File loader=new File(gui,"lib/libvulkan.so.1");
             ProcessBuilder pb=new ProcessBuilder("/system/bin/linker64",
-                    new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath()).redirectErrorStream(true);
+                    new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath(),"--enumerate-only").redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
             boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
             if(ended && p.exitValue()==0)
-                log.accept("Native Vulkan GPU + X11 swapchain present PASSED. Inspect '[Wine Vulkan]' for actual driver/vendor/device. Windows DXVK adapter/game execution still requires the device test.");
+                log.accept("Native Vulkan GPU enumeration PASSED. No test X11 window or swapchain is created during desktop startup. Windows DXVK adapter/presentation remain unverified.");
             else log.accept("Native Vulkan enumeration FAILED (exit="+(ended?p.exitValue():-1)+"); DXVK adapter cannot be assumed. Inspect [Wine Vulkan] for details.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
