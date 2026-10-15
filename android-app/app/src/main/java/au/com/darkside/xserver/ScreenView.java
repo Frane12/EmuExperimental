@@ -569,17 +569,21 @@ public class ScreenView extends View {
             @Override public boolean sendKeyEvent(KeyEvent event) {
                 if(event.getAction()==KeyEvent.ACTION_DOWN)return onKeyDown(event.getKeyCode(),event);
                 if(event.getAction()==KeyEvent.ACTION_UP)return onKeyUp(event.getKeyCode(),event);
+                // BaseInputConnection emits ACTION_MULTIPLE for committed strings.
+                // Translate those to real X11 key events, including modifier pairs.
+                if(event.getAction()==KeyEvent.ACTION_MULTIPLE && event.getCharacters()!=null) {
+                    android.view.KeyCharacterMap map=android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
+                    KeyEvent[] events=map.getEvents(event.getCharacters().toCharArray());
+                    if(events==null)return false;
+                    for(KeyEvent key:events)sendKeyEvent(key);
+                    return true;
+                }
                 return false;
-            }
-            @Override public boolean commitText(CharSequence text,int newCursorPosition) {
-                android.view.KeyCharacterMap map=android.view.KeyCharacterMap.load(android.view.KeyCharacterMap.VIRTUAL_KEYBOARD);
-                KeyEvent[] events=map.getEvents(text.toString().toCharArray());
-                if(events==null)return false;
-                for(KeyEvent event:events)sendKeyEvent(event);
-                return true;
             }
             @Override public boolean deleteSurroundingText(int before,int after) {
                 if(before<0 || after<0 || before>256 || after>256)return false;
+                if(getEditable()!=null && getEditable().length()>0)
+                    return super.deleteSurroundingText(before,after);
                 for(int i=0;i<before;i++)press(KeyEvent.KEYCODE_DEL);
                 for(int i=0;i<after;i++)press(KeyEvent.KEYCODE_FORWARD_DEL);
                 return true;
