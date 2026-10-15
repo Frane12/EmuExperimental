@@ -27,6 +27,11 @@ public class WineGuiSessionTest {
         assertThrows(IllegalArgumentException.class,
                 ()->WineGuiSession.command(LINKER,WINE,"arbitrary.exe"));
     }
+    @Test public void taskManagerJoinsSameShellDesktop() {
+        assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
+                "explorer.exe","/desktop=shell,1280x720","taskmgr.exe"),
+                WineGuiSession.command(LINKER,WINE,"tasks"));
+    }
     @Test public void nativeDxvkPreferenceDoesNotFakeVulkan() {
         Map<String,String> env=new HashMap<>();
         WineGuiSession.displayEnvironment(env);

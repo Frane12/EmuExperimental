@@ -15,7 +15,8 @@ final class WineGuiSession implements AutoCloseable {
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
     private volatile PulseAudioRuntime audio;
-    private volatile Thread folderWatcher;
+    private volatile Thread sessionThread;
+    private volatile GuestTools guestTools;
 
     static void stopActive() throws Exception {
         WineGuiSession current;
@@ -43,6 +44,7 @@ final class WineGuiSession implements AutoCloseable {
         args.add("/desktop=shell,"+DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT);
         if ("files".equals(app) || "desktop".equals(app)) args.add("winefile.exe");
         else if ("config".equals(app)) args.add("winecfg.exe");
+        else if ("tasks".equals(app)) args.add("taskmgr.exe");
         else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
     }
@@ -73,6 +75,13 @@ final class WineGuiSession implements AutoCloseable {
         }
     }
     private void runOwned(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
+        sessionThread=Thread.currentThread();
+        if(SharedFolderDrive.selectedTree(context)!=null) {
+            log.accept("Pripremam disk R: provjeravam sve datoteke prije desktopa…");
+            SharedFolderDrive.importSelected(context,log);
+            log.accept("R: import complete; background copying disabled for this desktop session.");
+        }
+        if(stopped)return;
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(
                 new File(base,"boot-plan.json").toPath()),StandardCharsets.UTF_8));
@@ -155,7 +164,7 @@ final class WineGuiSession implements AutoCloseable {
             try { WineWallpaper.ensure(prefix,linker,wine,proton,env,log,raw); }
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
-            startFolderWatcher(context,log);
+            guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
@@ -184,27 +193,29 @@ final class WineGuiSession implements AutoCloseable {
             launcher.getInputStream().close();
         } finally {close();}
     }
-    private void startFolderWatcher(Context context,Consumer<String> log) {
-        if(SharedFolderDrive.selectedTree(context)==null)return;
-        folderWatcher=new Thread(()->{
-            while(!stopped && !Thread.currentThread().isInterrupted()) {
-                try {
-                    String summary=SharedFolderDrive.importSelected(context,s->{});
-                    if(!summary.startsWith("R: imported 0 file(s)"))
-                        log.accept("[R: live refresh] "+summary);
-                } catch(Exception e) {
-                    if(!stopped)log.accept("R: live refresh failed: "+e.getMessage());
-                }
-                try {Thread.sleep(20000);}
-                catch(InterruptedException interrupted){return;}
-            }
-        },"drnas-r-drive-refresh");
-        folderWatcher.setDaemon(true);
-        folderWatcher.start();
+    private static final class GuestTools {
+        final File linker,wine,proton;
+        final Map<String,String> env;
+        final Consumer<String> log;
+        final RawWineTrace raw;
+        GuestTools(File linker,File wine,File proton,Map<String,String> env,Consumer<String> log,RawWineTrace raw) {
+            this.linker=linker;this.wine=wine;this.proton=proton;this.env=env;this.log=log;this.raw=raw;
+        }
     }
-    @Override public void close() {
+    synchronized void openTaskManager() throws IOException {
+        GuestTools tools=guestTools;
+        if(stopped || tools==null)throw new IOException("Windows desktop još nije spreman");
+        ProcessBuilder pb=new ProcessBuilder(command(tools.linker,tools.wine,"tasks"))
+                .directory(tools.proton).redirectErrorStream(true);
+        pb.environment().clear();pb.environment().putAll(tools.env);
+        Process task=pb.start();
+        WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw);
+        tools.log.accept("Task Manager requested in existing shell desktop and Wine prefix.");
+    }
+    @Override public synchronized void close() {
         stopped=true;
-        Thread watcher=folderWatcher;if(watcher!=null)watcher.interrupt();
+        guestTools=null;
+        Thread worker=sessionThread;if(worker!=null && worker!=Thread.currentThread())worker.interrupt();
         PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();

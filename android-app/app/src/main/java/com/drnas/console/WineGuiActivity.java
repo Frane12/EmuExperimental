@@ -115,7 +115,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)"},(dialog,which)->{
                     if(which==0)showKeyboard();
                     else if(which==1) {
                         cpuCanvasFallback=!cpuCanvasFallback;
@@ -139,10 +139,17 @@ public final class WineGuiActivity extends Activity {
                         },"drnas-desktop-reset").start();
                     } else if(which==3)finish();
                     else if(which==4)shareGuiLog();
-                    else saveGuiLog();
+                    else if(which==5)saveGuiLog();
+                    else if(which==6)openTaskManager();
+                    else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
+        Button tasks=new Button(this);
+        tasks.setText("Task Manager");tasks.setAllCaps(false);
+        FrameLayout.LayoutParams tl=new FrameLayout.LayoutParams(dp(144),dp(46),Gravity.TOP|Gravity.END);
+        tl.topMargin=dp(5);tl.rightMargin=dp(192);
+        layout.addView(tasks,tl);tasks.setOnClickListener(v->openTaskManager());
         setContentView(layout);
         try {
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
@@ -197,7 +204,8 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(()->{
             if(!destroyed && !desktopFailed && (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
                 log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
-                startupStatus.setText("Windows se još pokreće… Pošalji log ako ekran ostane siv.");
+                if(!startupStatus.getText().toString().startsWith("Pripremam disk R:"))
+                    startupStatus.setText("Windows se još pokreće… Pošalji log ako ekran ostane siv.");
                 startupStatus.setVisibility(View.VISIBLE);
             }
         },20000);
@@ -210,7 +218,7 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
         if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
-        if(line.startsWith("Installing Wine Mono") ||
+        if(line.startsWith("Pripremam disk R:") || line.startsWith("Installing Wine Mono") ||
                 line.startsWith("Installing Microsoft VC++") ||
                 line.startsWith("Launching Wine explorer")) {
             runOnUiThread(()->{
@@ -219,6 +227,25 @@ public final class WineGuiActivity extends Activity {
                             "Opening Windows desktop…":line);
             });
         }
+    }
+
+    private void openTaskManager() {
+        new Thread(()->{
+            try {if(session==null)throw new IOException("Windows još nije spreman");session.openTaskManager();}
+            catch(Exception e){log("Task Manager: "+e.getMessage());runOnUiThread(()->{
+                if(!destroyed)Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
+            });}
+        },"drnas-task-manager").start();
+    }
+
+    private void sendAltKey(int key) {
+        xserver.getScreen().requestFocus();
+        int alt=android.view.KeyEvent.KEYCODE_ALT_LEFT;
+        xserver.getScreen().onKeyDown(alt,new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,alt));
+        xserver.getScreen().onKeyDown(key,new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN,key));
+        xserver.getScreen().onKeyUp(key,new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,key));
+        xserver.getScreen().onKeyUp(alt,new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP,alt));
+        log("Sent Alt+"+(key==android.view.KeyEvent.KEYCODE_TAB?"Tab":"Enter")+" to Wine.");
     }
 
     private void showKeyboard() {

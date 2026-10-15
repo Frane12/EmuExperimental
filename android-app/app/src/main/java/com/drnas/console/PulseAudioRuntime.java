@@ -26,7 +26,7 @@ final class PulseAudioRuntime implements AutoCloseable {
             ZipEntry e;long total=0;byte[] buffer=new byte[16384];
             while((e=zip.getNextEntry())!=null) {
                 if(e.isDirectory() || (!e.getName().equals("manifest.json") &&
-                        !e.getName().matches("modules/module-[A-Za-z0-9_-]+\\.so")) || entries.size()>64)
+                        !e.getName().matches("modules/(?:module-|lib)[A-Za-z0-9_.-]+\\.so")) || entries.size()>64)
                     throw new IOException("Invalid audio bundle entry");
                 ByteArrayOutputStream out=new ByteArrayOutputStream();int n;
                 while((n=zip.read(buffer))!=-1) {
@@ -91,3 +91,4 @@ final class PulseAudioRuntime implements AutoCloseable {
         }
     }
 }
+

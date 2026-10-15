@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pin the Android AAudio PulseAudio build and package only its server modules."""
-import hashlib, io, json, subprocess, sys, tarfile, tempfile, urllib.request, zipfile
+import hashlib, io, json, re, subprocess, sys, tarfile, tempfile, urllib.request, zipfile
 from pathlib import Path
 COMMIT = '95b9fcabd8533aa6e598587566618461b8b1c698'
 BASE = f'https://raw.githubusercontent.com/utkarshdalal/GameNative/{COMMIT}/'
@@ -31,11 +31,21 @@ def main(root):
     with tarfile.open(fileobj=io.BytesIO(tarbytes)) as tf:
         for m in tf:
             p=Path(m.name)
-            if m.isfile() and p.parent.name=='modules' and p.name.startswith('module-') and p.suffix=='.so':
+            if m.isfile() and p.parent.name=='modules' and re.fullmatch(r'(?:module-|lib)[A-Za-z0-9_.-]+\.so',p.name) and p.suffix=='.so':
                 modules[p.name]=tf.extractfile(m).read()
-    required={'module-native-protocol-unix.so','module-aaudio-sink.so'}
+    required={'module-native-protocol-unix.so','module-aaudio-sink.so','libprotocol-native.so'}
     if not required.issubset(modules): raise RuntimeError('Required PulseAudio modules missing: '+str(modules.keys()))
-    out=root/'assets/audio-runtime-v1.zip'; out.parent.mkdir(parents=True,exist_ok=True)
+    # Reject incomplete packages before CI produces an APK. Include private
+    # protocol helpers as well as loadable modules; Android resolves DT_NEEDED.
+    system={'libc.so','libm.so','libdl.so','liblog.so','libaaudio.so'}
+    available=set(FILES)|set(modules)|system
+    with tempfile.TemporaryDirectory() as scratch:
+        for name,blob in modules.items():
+            elf=Path(scratch)/name; elf.write_bytes(blob)
+            needed=re.findall(r'Shared library: \[([^\]]+)\]', subprocess.check_output(['readelf','-d',str(elf)],text=True))
+            missing=set(needed)-available
+            if missing: raise RuntimeError(f'{name}: missing audio dependencies {sorted(missing)}')
+    out=root/'assets/audio-runtime-v1.zip' ; out.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
         for name,data in sorted(modules.items()): z.writestr('modules/'+name,data)
         z.writestr('manifest.json',json.dumps({'commit':COMMIT,'files':{n:hashlib.sha256(d).hexdigest() for n,d in modules.items()}}))
@@ -54,3 +64,4 @@ def main(root):
         for name,data in entries.items(): z.writestr(name,data)
     print('Bundled PulseAudio + AAudio:',len(modules),'modules')
 if __name__=='__main__': main(sys.argv[1])
+

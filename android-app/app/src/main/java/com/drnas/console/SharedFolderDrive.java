@@ -16,16 +16,13 @@ import java.util.function.Consumer;
  * Android 11+ forbids a tree grant to the root Download directory; a selected
  * subfolder (e.g. Download/DRNAS) or Documents folder is supported.
  *
- * Import-only mirror: the user can refresh manually, and while the Wine GUI
- * runs it polls the persisted SAF grant so newly created directories appear
- * without selecting the Android folder again. Wine files are never deleted or
- * written back to the Android provider. This is NOT a live filesystem mount.
+ * Import-only mirror completed before desktop launch. Existing Wine files are
+ * preserved; there is no periodic background copying while a game runs.
  */
 final class SharedFolderDrive {
     private static final String PREF = "drnas_drive";
     private static final String TREE = "user_tree";
-    private static final long MAX_COPY = 4L * 1024 * 1024 * 1024;
-    private static final int MAX_FILES = 4096;
+    private static final long FREE_RESERVE = 256L * 1024 * 1024;
 
     static File mirror(Context ctx) {
         return new File(ctx.getFilesDir(), "windows-drives/shared");
@@ -69,8 +66,9 @@ final class SharedFolderDrive {
         Budget b=new Budget();
         walk(ctx,tree,doc,root,root,0,b,report);
         String summary="R: imported "+b.files+" file(s), "+(b.bytes/(1024*1024))+
-                " MiB; skipped "+b.skipped+" (size/count limits), pre-existing files preserved";
+                " MiB; existing "+b.existing+" preserved; skipped "+b.skipped;
         report.accept(summary);
+        if(b.skipped>0)throw new IOException("R: import incomplete: "+b.skipped+" inaccessible or unsafe entries. "+summary);
         return summary;
     }
 
@@ -78,11 +76,13 @@ final class SharedFolderDrive {
         long bytes;
         int files;
         int skipped;
+        int existing;
+        long lastReport;
         final Set<String> seen=new HashSet<>();
     }
     private static void walk(Context ctx,Uri tree,Uri parent,File destination,File root,
                              int depth,Budget budget,Consumer<String> report) throws Exception {
-        if(depth>8){budget.skipped++;return;}
+        if(depth>64){budget.skipped++;return;}
         String pid=DocumentsContract.getDocumentId(parent);
         Uri children=DocumentsContract.buildChildDocumentsUriUsingTree(tree,pid);
         try(Cursor cursor=ctx.getContentResolver().query(children,
@@ -94,9 +94,6 @@ final class SharedFolderDrive {
             while(cursor.moveToNext()) {
                 if(Thread.currentThread().isInterrupted())
                     throw new InterruptedIOException("R: import interrupted");
-                if(budget.files+budget.skipped>=MAX_FILES) {
-                    budget.skipped++;return;
-                }
                 String did=cursor.getString(0), name=cursor.getString(1);
                 String mime=cursor.getString(2);
                 long declared=cursor.isNull(3)?-1:cursor.getLong(3);
@@ -116,33 +113,24 @@ final class SharedFolderDrive {
                         budget.skipped++;continue;
                     }
                     walk(ctx,tree,child,target,root,depth+1,budget,report);
-                } else if(declared>MAX_COPY-budget.bytes) {
-                    budget.skipped++;
                 } else {
                     // Do not overwrite changes made locally through Wine.
-                    if(target.exists()) {budget.skipped++;continue;}
-                    File part=new File(destination,".drnas-import-"+Long.toHexString(System.nanoTime()));
-                    try(InputStream in=ctx.getContentResolver().openInputStream(child);
-                        FileOutputStream out=new FileOutputStream(part)) {
-                        if(in==null)throw new IOException("Provider refused "+name);
-                        byte[] buf=new byte[128*1024];
-                        int n;long nFile=0;
-                        while((n=in.read(buf))!=-1) {
-                            if(Thread.currentThread().isInterrupted())
-                                throw new InterruptedIOException("R: import interrupted");
-                            if(n==0)continue;
-                            nFile+=n;
-                            if(budget.bytes+nFile>MAX_COPY)
-                                throw new IOException("Shared-folder mirror reached 4 GiB limit");
-                            out.write(buf,0,n);
-                        }
-                        out.getFD().sync();
-                        if(!part.renameTo(target))throw new IOException("Cannot commit "+name);
-                        budget.bytes+=nFile;budget.files++;
-                    } finally {part.delete();}
+                    if(target.isFile()) {budget.existing++;continue;}
+                    if(target.exists())throw new IOException("R: file/folder conflict: "+name);
+                    if(declared>=0 && declared>Math.max(0,root.getUsableSpace()-FREE_RESERVE))
+                        throw new IOException("R: not enough free storage for "+name+" (needs "+declared+" bytes + 256 MiB reserve)");
+                    long copied=DriveFileCopy.copy(ctx.getContentResolver().openInputStream(child),
+                            target,declared,()->Math.max(0,root.getUsableSpace()-FREE_RESERVE));
+                    budget.bytes+=copied;budget.files++;
+                    long now=System.nanoTime();
+                    if(now-budget.lastReport>2_000_000_000L) {
+                        report.accept("Pripremam disk R: "+budget.files+" datoteka, "+(budget.bytes/(1024*1024))+" MiB; postojeće "+budget.existing);
+                        budget.lastReport=now;
+                    }
                 }
             }
         }
     }
     private SharedFolderDrive(){}
 }
+
