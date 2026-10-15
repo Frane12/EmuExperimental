@@ -148,12 +148,18 @@ final class WineGuiSession implements AutoCloseable {
             // A missing MSI/EXE never masquerades as an installed dependency.
             WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
             if(stopped)return;
+            // Wine explorer.exe's /desktop=shell paints a solid background unless
+            // the guest desktop wallpaper is installed and registered. A proper
+            // Windows BMP is staged inside xuser/Pictures; failure never blocks GUI.
+            try { WineWallpaper.ensure(prefix,linker,wine,proton,env,log,raw); }
+            catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
+            if(stopped)return;
             startFolderWatcher(context,log);
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
                      "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
-                    "; embedded software X11 renderer.");
+                    "; GPU-composited Android HWUI cursor; DRI3/Present Vulkan WSI not implemented.");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();

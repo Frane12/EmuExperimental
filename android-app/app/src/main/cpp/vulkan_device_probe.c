@@ -33,6 +33,9 @@ int main(int argc,char **argv) {
         if(strstr(p.deviceName,"Turnip")||strstr(p.deviceName,"turnip"))turnip=1;
     }
     free(devices);destroy(instance,NULL);dlclose(loader);
-    puts(turnip?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_TURNIP_DEVICE_NOT_VERIFIED");
-    return turnip?0:10;
+    // A real Qualcomm system Vulkan GPU is a valid enumerated device, even
+    // when this particular loader ignores custom Turnip ICD environment vars.
+    // Keep the Turnip claim separate from the basic GPU enumeration result.
+    puts(turnip?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_NATIVE_VULKAN_DEVICE_PRESENT__TURNIP_NOT_VERIFIED");
+    return result==VK_SUCCESS?0:10;
 }
