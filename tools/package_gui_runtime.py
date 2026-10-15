@@ -10,7 +10,7 @@ SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
 ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        'libXcursor.so.1','libXi.so.6','libXinerama.so.1','libXfixes.so.3',
        'libXcomposite.so.1','libXxf86vm.so.1','libfreetype.so.6','libfontconfig.so.1',
-       'libvulkan.so.1','libGL.so.1']
+       'libvulkan.so.1']
 SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so','libnativewindow.so'}
 # Immutable upstream Mesa Bionic WSI wrapper + AdrenoTools hooks. Keep the
 # Khronos loader separate: its ICD is this wrapper, whose backend is Turnip.
@@ -75,7 +75,22 @@ def package(archive,output):
         for name,data in wrapped.items():
             dest=Path(temp)/('wrapper-'+name);dest.write_bytes(data)
             members[name]=('file',dest)
-        libs={};pending=list(ROOTS)+list(wrapped)
+        # GLX cannot be substituted with GLES: Wine expects real libGL.so.1.
+        # Some pinned GameNative rootfs archives contain a dangling libGL
+        # symlink (libGL.so.1 -> libGL.so.1.5.0). Never package a broken
+        # library or silently pretend OpenGL is functional.
+        optional_gl=[]
+        if 'libGL.so.1' in members:
+            try:
+                content('libGL.so.1')
+            except KeyError as error:
+                print('WARNING: upstream libGL.so.1 is dangling ('+
+                      str(error)+'); GLX remains unavailable; DXVK Vulkan is unaffected.')
+            else:
+                optional_gl=['libGL.so.1']
+        else:
+            print('WARNING: upstream Bionic libGL.so.1 absent; GLX remains unavailable.')
+        libs={};pending=list(ROOTS)+list(wrapped)+optional_gl
         while pending:
             soname=pending.pop()
             if soname in SYSTEM or soname in libs:continue
