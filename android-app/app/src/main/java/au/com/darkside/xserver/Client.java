@@ -125,10 +125,11 @@ public class Client extends Thread {
         try {
             doComms();
         } catch (IOException e) {
-        }
-
-        synchronized (_xServer) {
-            close();
+            android.util.Log.i("DRNAS-X11", "Client connection ended: " + e);
+        } catch (RuntimeException e) {
+            android.util.Log.e("DRNAS-X11", "X11 request failed", e);
+        } finally {
+            synchronized (_xServer) { close(); }
         }
     }
 

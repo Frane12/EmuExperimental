@@ -5,7 +5,6 @@ import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 
-import android.util.Log;
 
 /**
  * This class handles buffered bi-directional communications.
@@ -313,29 +312,11 @@ public class InputOutput {
         if (n > 0) _outStream.write(PadBytes, 0, n);
     }
 
-    /**
-     * Flush all unwritten output bytes in own background thread.
-     *
-     * @throws IOException
-     */
+    /** Flush in protocol order on the existing X11 client thread. */
     public synchronized void flush() throws IOException {
-        Thread t = new Thread(new Runnable() {
-            public void run() {
-                try {
-                    synchronized(this){
-                        _outStream.flush();
-                    }
-                } catch (IOException e) {
-                    Log.e("FATAL", e.toString());
-                }
-            }
-        });
-        t.start();
-        try{
-            t.join();
-        }catch (InterruptedException e) {
-            Log.e("FATAL", e.toString());
-        }
+        // A new joined thread per reply creates avoidable scheduling pressure
+        // during WSI readback. Propagate socket errors to the owning Client.
+        _outStream.flush();
     }
 
     /**

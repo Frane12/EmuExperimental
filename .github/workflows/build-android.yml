@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.28 Crysis Windowed and Exit Diagnostics
+name: EmuExperimental - Android APK v0.5.29 Turnip and D3D Cube
 on:
   push:
     branches:
@@ -13,11 +13,14 @@ on:
       - feat/keyboard-crash-logs-v0.5.26
       - feat/ime-fallback-focus-v0.5.27
       - feat/crysis-windowed-crash-diagnostics-v0.5.28
+      - feat/turnip-cube-v0.5.29
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
       - "tools/package_bundled_runtime.py"
       - "tools/package_audio_runtime.py"
+      - "tools/graphics-tests/**"
+      - "tests/test_turnip_bundle.py"
       - ".github/workflows/build-android.yml"
   pull_request:
     branches:
@@ -68,6 +71,16 @@ jobs:
           python3 tools/package_audio_runtime.py android-app/app/src/main
           "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/vulkan_device_probe.c -ldl -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_vulkan_probe.so
           readelf -d android-app/app/src/main/jniLibs/arm64-v8a/libpulse*.so | grep NEEDED
+      - name: Build source-owned D3D9 cube diagnostic for Wine WOW64
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686
+          mkdir -p android-app/app/src/main/assets/graphics-tests
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows -static-libgcc tools/graphics-tests/TestD3D.c -ld3d9 -lgdi32 -luser32 -lm -o android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+          python3 -c "import hashlib,pathlib; p=pathlib.Path('android-app/app/src/main/assets/graphics-tests/TestD3D.exe'); p.with_suffix('.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest())"
+          file android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+      - name: Test pinned Turnip packaging policy
+        run: python3 -m unittest discover -s tests -p 'test_turnip_bundle.py'
       - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
@@ -103,6 +116,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep wine-mono.msi
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep graphics-tests/TestD3D.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/proton-11.0-2-arm64ec.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
@@ -114,19 +128,17 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.28-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.28\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.29-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.29\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.28-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.28 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0528 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.29-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.29 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0529 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Drnas-Console-v0.5.28-APK-ZIP
+          name: Drnas-Console-v0.5.29-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
-
-
