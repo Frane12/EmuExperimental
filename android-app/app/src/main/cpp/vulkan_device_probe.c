@@ -18,7 +18,7 @@ typedef struct {
 } XlibSurfaceInfo;
 typedef VkResult (VKAPI_PTR *CreateXlibSurface)(VkInstance,const XlibSurfaceInfo *,const VkAllocationCallbacks *,VkSurfaceKHR *);
 
-static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu) {
+static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu,VkPresentModeKHR requested_mode) {
     int status=20;
     void *xlib=dlopen("libX11.so.6",RTLD_NOW|RTLD_LOCAL);
     if(!xlib){fprintf(stderr,"Xlib: %s\n",dlerror());return status;}
@@ -51,12 +51,13 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     INSTANCE(PFN_vkGetPhysicalDeviceSurfaceSupportKHR,vkGetPhysicalDeviceSurfaceSupportKHR);
     INSTANCE(PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR,vkGetPhysicalDeviceSurfaceCapabilitiesKHR);
     INSTANCE(PFN_vkGetPhysicalDeviceSurfaceFormatsKHR,vkGetPhysicalDeviceSurfaceFormatsKHR);
+    INSTANCE(PFN_vkGetPhysicalDeviceSurfacePresentModesKHR,vkGetPhysicalDeviceSurfacePresentModesKHR);
     INSTANCE(PFN_vkGetPhysicalDeviceQueueFamilyProperties,vkGetPhysicalDeviceQueueFamilyProperties);
     INSTANCE(PFN_vkCreateDevice,vkCreateDevice);
     INSTANCE(PFN_vkGetDeviceProcAddr,vkGetDeviceProcAddr);
     if(!vkCreateXlibSurfaceKHR||!vkDestroySurfaceKHR||!vkGetPhysicalDeviceSurfaceSupportKHR||
        !vkGetPhysicalDeviceSurfaceCapabilitiesKHR||!vkGetPhysicalDeviceSurfaceFormatsKHR||
-       !vkGetPhysicalDeviceQueueFamilyProperties||!vkCreateDevice||!vkGetDeviceProcAddr)goto done;
+       !vkGetPhysicalDeviceQueueFamilyProperties||!vkGetPhysicalDeviceSurfacePresentModesKHR||!vkCreateDevice||!vkGetDeviceProcAddr)goto done;
     XlibSurfaceInfo si={.sType=VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,.dpy=display,.window=window};
     VkResult result=vkCreateXlibSurfaceKHR(instance,&si,NULL,&surface);
     printf("X11 Vulkan surface create=%d\n",result);
@@ -109,6 +110,17 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     if(result!=VK_SUCCESS||!n||n>256){status=29;goto done;}
     VkSurfaceFormatKHR formats[256];result=vkGetPhysicalDeviceSurfaceFormatsKHR(gpu,surface,&n,formats);
     if(result!=VK_SUCCESS){status=30;goto done;}
+    uint32_t mode_count=0;
+    result=vkGetPhysicalDeviceSurfacePresentModesKHR(gpu,surface,&mode_count,NULL);
+    if(result!=VK_SUCCESS||mode_count==0||mode_count>32){status=45;goto done;}
+    VkPresentModeKHR modes[32];
+    result=vkGetPhysicalDeviceSurfacePresentModesKHR(gpu,surface,&mode_count,modes);
+    if(result!=VK_SUCCESS){status=46;goto done;}
+    int found_mode=0;
+    for(uint32_t m=0;m<mode_count;m++)if(modes[m]==requested_mode)found_mode=1;
+    printf("DRNAS_WSI_MODE requested=%s supported=%d count=%u\n",
+           requested_mode==VK_PRESENT_MODE_IMMEDIATE_KHR?"IMMEDIATE":"FIFO",found_mode,mode_count);
+    if(!found_mode){status=47;goto done;}
     VkSurfaceFormatKHR format=formats[0];
     if(format.format==VK_FORMAT_UNDEFINED)format.format=VK_FORMAT_B8G8R8A8_UNORM;
     VkExtent2D extent=cap.currentExtent;
@@ -120,7 +132,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     VkSwapchainCreateInfoKHR sci={.sType=VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,.surface=surface,
         .minImageCount=count,.imageFormat=format.format,.imageColorSpace=format.colorSpace,.imageExtent=extent,
         .imageArrayLayers=1,.imageUsage=VK_IMAGE_USAGE_TRANSFER_DST_BIT,.imageSharingMode=VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform=cap.currentTransform,.compositeAlpha=alpha,.presentMode=VK_PRESENT_MODE_FIFO_KHR,.clipped=VK_TRUE};
+        .preTransform=cap.currentTransform,.compositeAlpha=alpha,.presentMode=requested_mode,.clipped=VK_TRUE};
     result=vkCreateSwapchainKHR(device,&sci,NULL,&chain);
     printf("X11 Vulkan swapchain create=%d\n",result);
     if(result!=VK_SUCCESS){status=32;goto done;}
@@ -194,7 +206,8 @@ int main(int argc,char **argv) {
     setvbuf(stdout,NULL,_IONBF,0);setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=2&&argc!=3)return 2;
     int enumerate_only=argc==3&&strcmp(argv[2],"--enumerate-only")==0;
-    if(argc==3&&!enumerate_only)return 2;
+    int immediate=argc==3&&strcmp(argv[2],"--present-immediate")==0;
+    if(argc==3&&!enumerate_only&&!immediate)return 2;
     void *loader=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);
     if(!loader){fprintf(stderr,"Vulkan loader failed: %s\n",dlerror());return 3;}
     PFN_vkGetInstanceProcAddr get=(PFN_vkGetInstanceProcAddr)dlsym(loader,"vkGetInstanceProcAddr");
@@ -227,7 +240,7 @@ int main(int argc,char **argv) {
             puts("DRNAS_TURNIP_REQUEST_NOT_HONORED: system/wrapper device is not proof of Turnip activation");
             status=12;continue;
         }
-        status=enumerate_only?0:present_probe(get,instance,devices[i]);
+        status=enumerate_only?0:present_probe(get,instance,devices[i],immediate?VK_PRESENT_MODE_IMMEDIATE_KHR:VK_PRESENT_MODE_FIFO_KHR);
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);
