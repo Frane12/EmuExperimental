@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r4 - full screen and DXVK Standard/Async
+name: EmuDrnas preAlpha 0.1 r5 - Retro Windows tools and shortcuts
 on:
   push:
     branches:
@@ -22,6 +22,7 @@ on:
       - experiment/first-present-teardown-v0.5.39
       - experiment/wsi-mode-diagnostics-v0.5.44
       - feat/emudrnas-fullscreen-stretch-prealpha-r4
+      - feat/emudrnas-retro-shortcuts-tools-r5
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -30,6 +31,7 @@ on:
       - "tests/test_dxvk_bundle.py"
       - "tests/test_turnip_bundle.py"
       - "tools/graphics-tests/**"
+      - "tools/windows-tools/**"
       - "tests/test_turnip_bundle.py"
       - "tests/test_xinput_build_sources.py"
       - ".github/workflows/build-android.yml"
@@ -115,6 +117,20 @@ jobs:
           i686-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x86/xinput1_3.dll | grep 'XInputGetState'
           x86_64-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x64/xinput1_3.dll | grep 'XInputGetState'
           python3 tests/test_xinput_build_sources.py
+      - name: Build source-owned Retro Paint and RetroPad Windows applications
+        run: |
+          set -euxo pipefail
+          mkdir -p android-app/app/src/main/assets/windows-tools
+          for app in DrnasRetroPaint DrnasRetroPad; do
+            i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              -municode -mwindows -static-libgcc \
+              "tools/windows-tools/${app}.c" -luser32 -lgdi32 -lcomdlg32 \
+              -o "android-app/app/src/main/assets/windows-tools/${app/DrnasRetro/DRNAS}.exe"
+          done
+          test -s android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASPad.exe
+          file android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
+          file android-app/app/src/main/assets/windows-tools/DRNASPad.exe
       - name: Test scoped XCB Present guard
         run: python3 tests/test_xcb_present_guard.py
       - name: Test pinned Turnip packaging policy
@@ -165,6 +181,8 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep wine-mono.msi
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep graphics-tests/TestD3D.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPaint.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPad.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x86/xinput1_3.dll
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x64/xinput1_3.dll
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/XInputProbe.exe
@@ -188,11 +206,11 @@ jobs:
           CERT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]')
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r4-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r5-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r4 - permanently signed private development APK
+          EmuDrnas preAlpha 0.1 r5 - permanently signed private development APK
           Package: com.drnas.console
-          versionCode: 69
+          versionCode: 70
           Signing certificate SHA-256: $CERT
           Signing: persistent project key from protected GitHub Actions secrets, NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
@@ -202,9 +220,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-fullscreen-stretch-prealpha-r4' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-retro-shortcuts-tools-r5' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r4-APK-ZIP
+          name: EmuDrnas-preAlpha-0.1-r5-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -213,8 +231,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r4-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r4 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r5 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
