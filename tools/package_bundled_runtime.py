@@ -33,6 +33,7 @@ FILES = [
         "kind": "DXVK",
         "name": "dxvk_1.10.3.wcp",
         "variant": "standard",
+        "sha256": "7ae0a7108f08fa12a54be891feecaac9de7d8eb3cd543704426126bb16a3e87a",
         "compression": "XZ",
         "url": "https://github.com/K11MCH1/Winlator101/releases/download/dxvk_col/dxvk_1.10.3.wcp",
     },
