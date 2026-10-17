@@ -125,31 +125,38 @@ jobs:
       - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
-      - name: Restore persistent signing key
+      - name: Restore mandatory persistent signing key (never use ephemeral CI certificates)
+        if: github.event_name != 'pull_request'
         env:
           DRNAS_KEYSTORE_BASE64: ${{ secrets.DRNAS_KEYSTORE_BASE64 }}
           DRNAS_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
           DRNAS_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
           DRNAS_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
+        shell: bash
         run: |
+          set -euo pipefail
           if [[ -z "$DRNAS_KEYSTORE_BASE64" || -z "$DRNAS_STORE_PASSWORD" || -z "$DRNAS_KEY_ALIAS" || -z "$DRNAS_KEY_PASSWORD" ]]; then
-            echo "::warning::No stable key: producing a side-by-side Drnas Console LAB APK with ephemeral certificate."
-            echo "DRNAS_SIGNING_MODE=transient" >> "$GITHUB_ENV"
-          else
-            printf '%s' "$DRNAS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/drnas-signing.p12"
-            chmod 600 "$RUNNER_TEMP/drnas-signing.p12"
-            keytool -list -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" >/dev/null
-            echo "DRNAS_SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/drnas-signing.p12" >> "$GITHUB_ENV"
-            echo "DRNAS_SIGNING_MODE=stable" >> "$GITHUB_ENV"
+            echo "::error::Permanent APK signing is required. Configure all four DRNAS signing secrets. No transient APK will be built or uploaded."
+            exit 1
           fi
-      - name: Build debug APK with available signing mode
+          umask 077
+          printf '%s' "$DRNAS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/drnas-signing.p12"
+          keytool -list -storetype PKCS12 -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" >/dev/null
+          keytool -exportcert -storetype PKCS12 -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" -file "$RUNNER_TEMP/drnas-signing.der" >/dev/null
+          echo "DRNAS_EXPECTED_CERT_SHA256=$(sha256sum "$RUNNER_TEMP/drnas-signing.der" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/drnas-signing.p12" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_MODE=stable" >> "$GITHUB_ENV"
+      - name: Build persistently signed debug APK (no transient fallback)
+        if: github.event_name != 'pull_request'
         working-directory: android-app
         env:
+          DRNAS_REQUIRE_STABLE_SIGNING: "1"
           DRNAS_SIGNING_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
           DRNAS_SIGNING_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
           DRNAS_SIGNING_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK contains native ARM64 host and Android manifest
+        if: github.event_name != 'pull_request'
         run: |
           test -s android-app/app/build/outputs/apk/debug/app-debug.apk
           file android-app/app/build/outputs/apk/debug/app-debug.apk
@@ -170,39 +177,30 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
-      - name: Stage EmuDrnas preAlpha APK and explicit signing status
+      - name: Stage stable-signed EmuDrnas preAlpha APK (updates enabled)
+        if: github.event_name != 'pull_request'
+        shell: bash
         run: |
+          set -euo pipefail
+          [[ "$DRNAS_SIGNING_MODE" == stable ]] || { echo "::error::Refusing to publish non-persistent signature"; exit 1; }
+          APK=android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          CERT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]')
+          [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r4-STABLE-SIGNED.apk"
-            cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
-          EmuDrnas preAlpha 0.1 r4
-          Certificate: persistent project signing key supplied through GitHub Actions secrets.
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r4-STABLE-SIGNED.apk"
+          cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
+          EmuDrnas preAlpha 0.1 r4 - permanently signed private development APK
           Package: com.drnas.console
           versionCode: 69
-
-          Future updates can install over this app if the same certificate, applicationId
-          and an increased versionCode are retained. To upgrade an older stable app,
-          verify its signing certificate matches and its versionCode is lower.
+          Signing certificate SHA-256: $CERT
+          Signing: persistent project key from protected GitHub Actions secrets, NOT a runner debug key.
+          In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
+          Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
-          else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r4-TRANSIENT-LAB-DO-NOT-UPGRADE.apk"
-            cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
-          EmuDrnas preAlpha 0.1 r4 — private test build
-          Certificate: TRANSIENT runner debug signing key. NOT persistent.
-          Package: com.drnas.console.prealpha01r4lab
-
-          This APK intentionally installs alongside existing builds and DOES NOT
-          support in-place upgrades. Never delete your installed working version
-          to test it. Future upgradeable releases require securely configured
-          DRNAS_KEYSTORE_BASE64, DRNAS_KEYSTORE_PASSWORD, DRNAS_KEY_ALIAS
-          and DRNAS_KEY_PASSWORD secrets in repository Settings -> Actions.
-          Source-only CI validation is not on-device Crysis acceptance.
-          EOF
-          fi
-          echo "Build signing mode: $DRNAS_SIGNING_MODE"
-          sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
+          sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-fullscreen-stretch-prealpha-r4' }}
         with:
