@@ -426,6 +426,8 @@ public final class MainActivity extends Activity {
         resetWineButton=button("↻  RESET WINE",false,v->resetWine());
         desktop.addView(resetWineButton,pad(4,6));
 
+        addButton(desktop,"🎮  EDITOR XINPUT KONTROLERA · XML",false,
+                v->startActivity(new Intent(this,XInputLayoutEditorActivity.class)));
         windowsExplorerButton=button("▣  WINDOWS EXPLORER",false,v->openWineGui());
         desktop.addView(windowsExplorerButton,pad(10,12));
         addButton(desktop,"Pošalji zapis pada / zadnjeg desktopa",false,v->shareCrashDiagnostics());
