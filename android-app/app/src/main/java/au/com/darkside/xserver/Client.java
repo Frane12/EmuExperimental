@@ -25,6 +25,7 @@ public class Client extends Thread {
     private int _sequenceNumber = 0;
     private boolean _closeConnection = false;
     private int _lastOpcode=-1, _lastRequestBytes;
+    private int _geometryReplyCount;
     private boolean _isConnected = true;
     private boolean _readingRequest;
     private int _closeDownMode = Destroy;
@@ -64,6 +65,18 @@ public class Client extends Thread {
      */
     public InputOutput getInputOutput() {
         return _inputOutput;
+    }
+
+    int resourceIdBase() { return _resourceIdBase; }
+
+    /** The reply has been queued; only the writer's socketWritten counter
+     * confirms local socket output, NOT client receipt or Mesa Present completion. */
+    void geometryReplyQueued(int drawableId) {
+        int count=++_geometryReplyCount;
+        if(count<=8 || count%64==0)
+            _xServer.diagnostic("DRNAS_X11_GEOMETRY_REPLY_QUEUED base="+
+                Integer.toHexString(_resourceIdBase)+" seq="+_sequenceNumber+
+                " drawable="+drawableId+" replies="+count+" "+_inputOutput.outputStats());
     }
 
     /**
