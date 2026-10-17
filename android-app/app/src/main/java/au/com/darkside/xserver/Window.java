@@ -739,6 +739,7 @@ public class Window extends Resource {
         if (_isMapped) {
             _screen.revertFocus(this);
             _isMapped = false;
+            _xServer.windowUnmapped(getId());
 
             if (sc != null) {
                 for (Client c : sc) {
@@ -1710,6 +1711,7 @@ public class Window extends Resource {
         if (!_isMapped) return;
 
         _isMapped = false;
+        _xServer.windowUnmapped(getId());
 
         Vector<Client> sc;
 
@@ -2796,6 +2798,7 @@ public class Window extends Resource {
         }
 
         if (redraw) {
+            if(opcode==RequestCode.PutImage)_xServer.recordWindowImageInvalidation(getId());
             invalidate();
             if (updatePointer) _screen.updatePointer(0);
         }
