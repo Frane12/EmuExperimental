@@ -64,6 +64,8 @@ public final class WineGuiActivity extends Activity {
                 virtualPadEnabled || relativeCameraEnabled);
     }
     private volatile boolean desktopLaunchRequested;
+    private volatile long desktopLaunchStarted;
+    private boolean desktopWindowWarning;
     private volatile boolean desktopFailed;
     private Button shareLog;
     private Button toolbarKeyboard,toolbarTasks,toolbarOptions;
@@ -419,14 +421,23 @@ public final class WineGuiActivity extends Activity {
         // Hide the status as soon as real Wine windows are mapped.
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
-                if(destroyed || startupStatus==null)return;
+                if(destroyed || startupStatus==null || desktopFailed)return;
                 if(!desktopFailed && desktopLaunchRequested && xserver.mappedWindowCount()>0) {
                     startupStatus.setVisibility(View.GONE);
                     startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                     dependencyPanel.setVisibility(View.GONE);
                     log("DRNAS_DESKTOP_CONFIRMED: mapped X11 window after Explorer launch");
                 }
-                else xserver.getScreen().postDelayed(this,700);
+                else {
+                    if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
+                            android.os.SystemClock.uptimeMillis()-desktopLaunchStarted>=90000){
+                        desktopWindowWarning=true;startupAnimation.stop();
+                        startupStatus.setText("Windows prozor nije potvrđen nakon 90 s.\n"+
+                                "⋮ → Pošalji log ili Reset Wine. Provjera dodataka nije potvrda desktopa.");
+                        log("DRNAS_DESKTOP_NOT_CONFIRMED: 90s since Explorer request; X11 mapped window absent. Session kept for log/reset or late window mapping.");
+                    }
+                    xserver.getScreen().postDelayed(this,700);
+                }
             }
         },700);
         // Report absence of a mapped window only to the private session log.
@@ -734,7 +745,7 @@ public final class WineGuiActivity extends Activity {
                 line.contains(":err:") || line.contains("dlerror") ||
                 line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
                 line.startsWith("[Dependencies] ") || line.startsWith("DRNAS_DEPENDENCY_RESULT") ||
-                line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("Desktop stopped:");
+                line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("DRNAS_DESKTOP_NOT_CONFIRMED") || line.startsWith("Desktop stopped:");
         if(raw!=null) {
             if(verboseLogs)raw.write("GUI",line);
             else if(critical)raw.writeEssential("GUI",line);
@@ -743,7 +754,9 @@ public final class WineGuiActivity extends Activity {
             try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
             AutomaticCrashLog.request(this,line);
         }
-        if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
+        if(line.startsWith("Launching Wine explorer")){
+            desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
+        }
         if(line.startsWith("[Startup] "))runOnUiThread(()->{
             if(!destroyed){startupStatus.setText(line.substring(10));dependencyPanel.setVisibility(View.GONE);}
         });
