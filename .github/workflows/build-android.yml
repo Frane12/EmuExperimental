@@ -27,6 +27,8 @@ on:
       - "tools/package_gui_runtime.py"
       - "tools/package_bundled_runtime.py"
       - "tools/package_audio_runtime.py"
+      - "tests/test_dxvk_bundle.py"
+      - "tests/test_turnip_bundle.py"
       - "tools/graphics-tests/**"
       - "tests/test_turnip_bundle.py"
       - "tests/test_xinput_build_sources.py"
