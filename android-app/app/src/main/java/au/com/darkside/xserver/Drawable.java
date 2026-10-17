@@ -35,6 +35,7 @@ public class Drawable {
     private int previousSourceW,previousSourceH,previousTargetW,previousTargetH;
     private int previousDstX,previousDstY,previousFormat,previousDepth;
     private boolean previousTailClear,previousDirectCopy;
+    private X11PutImageProfiler profiler; // allocated only with diagnostics ON
     public static void setSafeEdgeCleanup(boolean enabled) { safeEdgeCleanup=enabled; }
 
 
@@ -888,9 +889,13 @@ public class Drawable {
                 ErrorCode.write(client, ErrorCode.Alloc, RequestCode.PutImage, 0);
                 return false;
             }
+            boolean profile=xServer.isFrameDiagnosticsEnabled();
+            long tRead=profile?System.nanoTime():0L;
             io.readBytes(_zUploadBytes,0,n);
             io.readSkip(pad);
+            long tDecodedStart=profile?System.nanoTime():0L;
             X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
+            long tUploadedStart=profile?System.nanoTime():0L;
             // C path: when WSI submits a *near-full* new frame at origin,
             // zero only uncovered right/bottom strips. Do not clear normal
             // partial X11 updates or the entire framebuffer every frame:
@@ -909,6 +914,15 @@ public class Drawable {
             } else {
                 _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
                 _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
+            }
+            if(profile) {
+                long end=System.nanoTime();
+                if(profiler==null)profiler=new X11PutImageProfiler();
+                String summary=profiler.record(
+                        tDecodedStart-tRead,tUploadedStart-tDecodedStart,
+                        end-tUploadedStart,n,end);
+                if(summary!=null)
+                    xServer.diagnostic("drawable="+drawableId+" "+summary);
             }
             return true;
         }
