@@ -253,7 +253,8 @@ public final class MainActivity extends Activity {
     private TextView label(String text, int size, int color, boolean bold) {
         TextView t = new TextView(this);
         t.setText(text);
-        t.setTextSize(size);
+        t.setTextSize(size >= 20 ? size * .78f : Math.max(10, size * .90f));
+        t.setIncludeFontPadding(false);
         t.setTextColor(color);
         if (bold) t.setTypeface(null, Typeface.BOLD);
         return t;
@@ -265,30 +266,35 @@ public final class MainActivity extends Activity {
     private LinearLayout.LayoutParams pad(int top, int bottom) {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        p.topMargin = dp(top);
-        p.bottomMargin = dp(bottom);
+        p.topMargin = dp(Math.round(top * .45f));
+        p.bottomMargin = dp(Math.round(bottom * .45f));
         return p;
     }
     private LinearLayout card() {
         LinearLayout panel = column();
-        panel.setPadding(dp(19),dp(17),dp(19),dp(19));
+        panel.setPadding(dp(10),dp(8),dp(10),dp(8));
         panel.setBackground(glass(0xDF192D43,0xEA0D1C30,21));
         panel.setElevation(dp(3));
-        content.addView(panel,pad(0,14));
+        content.addView(panel,pad(0,8));
         return panel;
     }
     private Button button(String text, boolean prominent, View.OnClickListener action) {
         Button b = new Button(this);
         b.setText(text);
         b.setAllCaps(false);
-        b.setTextSize(13);
+        b.setTextSize(11);
+        b.setIncludeFontPadding(false);
+        b.setMaxLines(2);
+        b.setEllipsize(android.text.TextUtils.TruncateAt.END);
         b.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         b.setTextColor(new ColorStateList(
                 new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
                 new int[]{0xFF829BAD,prominent?0xFF08202B:TEXT}));
-        b.setPadding(dp(15),0,dp(15),0);
-        b.setMinimumHeight(dp(46));
-        b.setMinHeight(dp(46));
+        b.setPadding(dp(7),dp(2),dp(7),dp(2));
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinimumHeight(dp(40));
+        b.setMinHeight(dp(40));
         b.setBackground(buttonSurface(prominent));
         b.setStateListAnimator(null);
         b.setOnClickListener(action);
@@ -315,7 +321,7 @@ public final class MainActivity extends Activity {
         int pageY=sameSection && pageScroll!=null?pageScroll.getScrollY():0;
         if(liveLog!=null){logPosition=liveLog.getScrollY();logFollowing=liveLog.isFollowing();}
         liveLog=null;stateBadge=null;
-        winePowerLed=null;windowsExplorerButton=null;turnOnWindowsButton=null;
+        winePowerLed=null;windowsExplorerButton=null;turnOnWindowsButton=null;resetWineButton=null;
         wineStartupBar=null;wineStartupText=null;
         ScrollView scroll = new ScrollView(this);
         pageScroll=scroll;renderedSection=section;
@@ -325,18 +331,18 @@ public final class MainActivity extends Activity {
                 GradientDrawable.Orientation.TL_BR,
                 new int[]{0xFF080F1C,0xFF0D2231,0xFF070D19}));
         content=column();
-        content.setPadding(dp(18),dp(22),dp(18),dp(36));
+        content.setPadding(dp(10),dp(8),dp(10),dp(10));
         scroll.addView(content);
         setContentView(scroll);
         LinearLayout header=horizontal();
-        header.setPadding(dp(12),dp(12),dp(12),dp(12));
+        header.setPadding(dp(9),dp(6),dp(9),dp(6));
         header.setBackground(glass(0xD51C3749,0xD10D1D32,18));
         TextView glyph=label("◈",26,ACCENT,true);
         glyph.setGravity(Gravity.CENTER);
         glyph.setBackground(box(0xAA214A58,0x6685E7D2,15));
-        header.addView(glyph,new LinearLayout.LayoutParams(dp(50),dp(50)));
+        header.addView(glyph,new LinearLayout.LayoutParams(dp(34),dp(34)));
         LinearLayout names=column();
-        names.setPadding(dp(12),0,0,0);
+        names.setPadding(dp(8),0,0,0);
         TextView brand=label("EmuDrnas",23,TEXT,true);
         brand.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
         names.addView(brand);
@@ -349,20 +355,18 @@ public final class MainActivity extends Activity {
         prealpha.setPadding(dp(7),dp(7),dp(7),dp(7));
         prealpha.setBackground(box(0x7757422B,0x99866F51,10));
         header.addView(prealpha);
-        content.addView(header,pad(0,19));
+        content.addView(header,pad(0,8));
 
-        HorizontalScrollView bar=new HorizontalScrollView(this);
-        bar.setHorizontalScrollBarEnabled(false);
+        
         LinearLayout buttons=horizontal();
         for(String name:new String[]{"Console","Components","Shortcuts"}) {
             Button b=button(name,name.equals(section),v->showSection(name));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,dp(42));
-            lp.rightMargin=dp(8);
+                    0,dp(40),1f);
+            lp.rightMargin=dp(4);
             buttons.addView(b,lp);
         }
-        bar.addView(buttons);
-        content.addView(bar,pad(0,21));
+        content.addView(buttons,pad(0,8));
 
         switch(section) {
             case "Components": showComponents(); break;
@@ -403,95 +407,118 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /** Two-step power + Explorer UI; logs exist only in private files. */
+    /** Compact controls keep normal Android layout and touch coordinates. */
+    private void actionRow(LinearLayout parent, View left, View right) {
+        LinearLayout row=horizontal();
+        row.addView(left,new LinearLayout.LayoutParams(0,dp(40),1f));
+        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,dp(40),1f);
+        second.leftMargin=dp(6);
+        row.addView(right,second);
+        parent.addView(row,pad(3,3));
+    }
+
+    private void showConfigurationMenu() {
+        int cap=WineGuiActivity.savedFrameCap(this);
+        new AlertDialog.Builder(this).setTitle("Konfiguracija")
+                .setItems(new String[]{"DXVK FPS: "+(cap==0?"bez limita":cap)+
+                        " · idući reset prikaza","Wine configuration"},(dialog,which)->{
+                    if(which==0)DrnasDxvkDialog.show(this,cap,false,chosen->{
+                        WineGuiActivity.saveFrameCap(this,chosen);
+                        Toast.makeText(this,"DXVK FPS spremljen · primjena nakon Reset Wine",
+                                Toast.LENGTH_SHORT).show();
+                    },()->{});
+                    else startConfig();
+                }).show();
+    }
+
     private void showConsole() {
+        LinearLayout page=content;
+        boolean wide=getResources().getConfiguration().screenWidthDp>=600;
+        LinearLayout right=null;
+        if(wide) {
+            LinearLayout dashboard=horizontal();
+            dashboard.setGravity(Gravity.TOP);
+            LinearLayout left=column();
+            right=column();
+            dashboard.addView(left,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1.2f);
+            rp.leftMargin=dp(8);
+            dashboard.addView(right,rp);
+            page.addView(dashboard);
+            content=left;
+        }
         MeadowBannerView meadow=new MeadowBannerView(this);
         content.addView(meadow,new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,dp(122)));
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(86)));
         showShortcuts(true);
+        if(wide)content=right;
         LinearLayout desktop=card();
         LinearLayout title=horizontal();
         TextView header=label("◈  WINDOWS ENVIRONMENT",11,ACCENT,true);
-        header.setLetterSpacing(.10f);
+        header.setLetterSpacing(.06f);
         title.addView(header,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-        TextView secure=label("LOCAL · OFFLINE",10,MUTED,true);
-        title.addView(secure);
-        desktop.addView(title,pad(0,14));
-        LinearLayout power=horizontal();
-        turnOnWindowsButton=button("⏻  TURN ON WINDOWS",true,v->startWineboot());
-        LinearLayout.LayoutParams onParams=new LinearLayout.LayoutParams(0,dp(52),1);
-        power.addView(turnOnWindowsButton,onParams);
         winePowerLed=new View(this);
-        LinearLayout.LayoutParams ledParams=new LinearLayout.LayoutParams(dp(23),dp(23));
-        ledParams.leftMargin=dp(15);
-        power.addView(winePowerLed,ledParams);
-        desktop.addView(power,pad(0,8));
-        resetWineButton=button("↻  RESET WINE",false,v->resetWine());
-        desktop.addView(resetWineButton,pad(4,6));
+        title.addView(winePowerLed,new LinearLayout.LayoutParams(dp(10),dp(10)));
+        desktop.addView(title,pad(0,5));
 
-        addButton(desktop,"🎮  EDITOR XINPUT KONTROLERA · XML",false,
-                v->startActivity(new Intent(this,XInputLayoutEditorActivity.class)));
-        windowsExplorerButton=button("▣  WINDOWS EXPLORER",false,v->openWineGui());
-        desktop.addView(windowsExplorerButton,pad(10,12));
-        // Exact-GPU H2.9 auto selection. This is a Vulkan loader *request*;
-        // whether the driver actually loaded is reported by Wine probe logs.
+        turnOnWindowsButton=button("⏻  WINDOWS ON",true,v->startWineboot());
+        resetWineButton=button("↻  RESET WINE",false,v->resetWine());
+        actionRow(desktop,turnOnWindowsButton,resetWineButton);
+        windowsExplorerButton=button("▣  EXPLORER",false,v->openWineGui());
+        actionRow(desktop,windowsExplorerButton,
+                button("🎮  XINPUT EDITOR",false,
+                    v->startActivity(new Intent(this,XInputLayoutEditorActivity.class))));
+
         final Button turnipPreference=button("",false,v->{});
         final Runnable updateTurnipLabel=()->turnipPreference.setText(
-                "A840 NeuroFlow H2.9 auto: "+
-                (TurnipRuntime.autoH29Enabled(this)?"ON  ●":"OFF  ○"));
+                "A840 H2.9 AUTO  "+(TurnipRuntime.autoH29Enabled(this)?"ON ●":"OFF ○"));
         updateTurnipLabel.run();
         turnipPreference.setOnClickListener(v->{
             boolean next=!TurnipRuntime.autoH29Enabled(this);
             TurnipRuntime.setAutoH29Enabled(this,next);
             updateTurnipLabel.run();
-            android.widget.Toast.makeText(this,
-                    next?"A840 H2.9 automatski će se pokušati učitati pri sljedećem pokretanju Explorera":
+            Toast.makeText(this,
+                    next?"A840 H2.9: automatski pokušaj pri sljedećem pokretanju Explorera. Potvrda je u Vulkan logu.":
                             "A840 H2.9 auto isključen; koristi prethodni odabir",
-                    android.widget.Toast.LENGTH_LONG).show();
+                    Toast.LENGTH_LONG).show();
         });
-        desktop.addView(turnipPreference,pad(7,4));
-        // Persisted pre-Explorer selection. The same package contains BOTH
-        // DXVK 1.10.3 variants; changing it requires restarting Wine.
         final Button dxvkVariant=button("",false,v->{});
         final Runnable updateDxvkLabel=()->{
             boolean async=DxvkVariants.ASYNC.equals(DxvkVariants.selected(this));
-            dxvkVariant.setText(async?
-                    "DXVK 1.10.3 Async   •   UKLJUČEN  ✓":
-                    "DXVK 1.10.3 Standard   •   Async OFF");
+            dxvkVariant.setText(async?"DXVK 1.10.3 · ASYNC ✓":"DXVK 1.10.3 · STANDARD");
             dxvkVariant.setTextColor(async?ACCENT:TEXT);
         };
         updateDxvkLabel.run();
         dxvkVariant.setOnClickListener(v->{
             String mode=DxvkVariants.toggle(this);
             updateDxvkLabel.run();
-            android.widget.Toast.makeText(this,
-                    "Odabran DXVK "+mode+
-                    ". Primjenjuje se pri sljedećem pokretanju Explorera.",
-                    android.widget.Toast.LENGTH_LONG).show();
+            Toast.makeText(this,"DXVK "+mode+" · Reset Wine za primjenu.",
+                    Toast.LENGTH_LONG).show();
         });
-        desktop.addView(dxvkVariant,pad(7,4));
-        note(desktop,"A840 H2.9 je ugrađen u APK. Automatska aktivacija " +
-                "zahtijeva potvrđen Adreno 840 i ispravan Vulkan loader. " +
-                "Točan rezultat provjeri u Wine/Vulkan logu; ON nije dokaz aktivacije.");
-        addButton(desktop,"Pošalji zapis pada / zadnjeg desktopa",false,v->shareCrashDiagnostics());
+        actionRow(desktop,turnipPreference,dxvkVariant);
+        actionRow(desktop,
+                button("▤  PODIJELI LOG",false,v->shareCrashDiagnostics()),
+                button("⚙  KONFIGURACIJA",false,v->showConfigurationMenu()));
+
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         wineStartupBar.setMax(100);
         wineStartupBar.setIndeterminate(false);
-        wineStartupBar.setProgressTintList(android.content.res.ColorStateList.valueOf(ACCENT));
-        desktop.addView(wineStartupBar,pad(10,3));
-        wineStartupText=label("",12,MUTED,false);
-        desktop.addView(wineStartupText,pad(7,6));
+        wineStartupBar.setProgressTintList(ColorStateList.valueOf(ACCENT));
+        desktop.addView(wineStartupBar,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(4)));
+        wineStartupText=label("",11,MUTED,false);
+        desktop.addView(wineStartupText,pad(3,0));
         refreshPowerPanel();
 
-        TextView runtimeInfo=label("1280 × 720    •    Proton 11 ARM64EC    •    DXVK / FEX",12,MUTED,false);
-        runtimeInfo.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.addView(runtimeInfo,pad(9,17));
         LinearLayout folder=card();
-        sectionEyebrow(folder,"EXPLORER  /  ANDROID FILES");
-        addButton(folder,"Select Android folder for R:",false,v->requestSharedFolder());
-        addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
-        note(folder,"While the desktop is running, R: checks for new Android folders every 20 seconds. SAF uses a private import-only mirror, not a real Android filesystem mount.");
-        addButton(folder,"Wine configuration",false,v->startConfig());
+        sectionEyebrow(folder,"ANDROID FILES  /  R:");
+        actionRow(folder,
+                button("▣  ODABERI MAPU",false,v->requestSharedFolder()),
+                button("↻  OSVJEŽI R:",false,v->synchronizeSharedFolder(false)));
+        content=page;
+        TextView runtimeInfo=label("1280 × 720 · Proton 11 · FEX 2609 · DXVK",10,MUTED,false);
+        runtimeInfo.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.addView(runtimeInfo,pad(2,2));
     }
 
 
@@ -511,7 +538,9 @@ public final class MainActivity extends Activity {
         panel.addView(headline,pad(0,10));
         List<WineShortcuts.Entry> shortcuts=WineShortcuts.list(this);
         int count=preview?Math.min(shortcuts.size(),8):shortcuts.size();
-        int columns=4;
+        int available=getResources().getConfiguration().screenWidthDp;
+        if(preview && available>=600)available=Math.round((available-28)/2.2f);
+        int columns=Math.max(4,Math.min(8,(available-40)/74));
         LinearLayout row=null;
         for(int i=0;i<count;i++) {
             if(i%columns==0) {
@@ -521,10 +550,10 @@ public final class MainActivity extends Activity {
             WineShortcuts.Entry entry=shortcuts.get(i);
             LinearLayout tile=column();
             tile.setGravity(Gravity.CENTER);
-            tile.setPadding(dp(3),dp(8),dp(3),dp(7));
+            tile.setPadding(dp(2),dp(4),dp(2),dp(3));
             tile.setBackground(glass(0xC01B4355,0xC010293F,12));
             RetroIconView icon=new RetroIconView(this,entry.id);
-            LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(dp(39),dp(39));
+            LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(dp(28),dp(28));
             tile.addView(icon,iconParams);
             TextView name=label(entry.title,11,TEXT,false);
             name.setSingleLine(true);
@@ -533,12 +562,16 @@ public final class MainActivity extends Activity {
             tile.addView(name,pad(5,0));
             tile.setContentDescription(entry.title+" · "+entry.status);
             tile.setOnClickListener(v->launchWineShortcut(entry));
-            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(78),1);
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(56),1);
             if(i%columns!=0)lp.leftMargin=dp(5);
             row.addView(tile,lp);
         }
         if(preview) {
-            addButton(panel,"＋  Više prečaca",false,v->showSection("Shortcuts"));
+            source.setText("SVI  ›");
+            source.setTextColor(ACCENT);
+            headline.setMinimumHeight(dp(40));
+            headline.setOnClickListener(v->showSection("Shortcuts"));
+            headline.setContentDescription("Prikaži sve Wine prečace");
         } else {
             addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
             addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
@@ -550,7 +583,7 @@ public final class MainActivity extends Activity {
         }
         TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
                 (!wineReady?"Pokreni Windows za instalirane programe.":""),11,MUTED,false);
-        panel.addView(footnote,pad(10,0));
+        if(!preview)panel.addView(footnote,pad(10,0));
     }
     private void launchWineShortcut(WineShortcuts.Entry entry) {
         if(wineBooting || container.isBusy() || !readyForDesktop()) {

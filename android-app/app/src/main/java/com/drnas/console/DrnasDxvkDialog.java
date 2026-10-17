@@ -77,7 +77,7 @@ final class DrnasDxvkDialog {
         name.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         root.addView(name);
         TextView hint=label("Odaberi tipku ili upiši broj.  0 = bez ograničenja.\n"+
-                "Postavka se primjenjuje prije Wine Explorera.",12,0xffb4c5d2);
+                "Pamti se i primjenjuje na idući reset prikaza / Reset Wine.",12,0xffb4c5d2);
         hint.setPadding(0,dp(8),0,dp(10));root.addView(hint);
 
         GridLayout presets=new GridLayout(context);
@@ -104,7 +104,7 @@ final class DrnasDxvkDialog {
                 LinearLayout.LayoutParams.MATCH_PARENT,dp(45)));
 
         Button launch=new Button(context);
-        launch.setText(beforeStartup?"▶  POKRENI WINDOWS":"✓  SPREMI ZA IDUĆI START");
+        launch.setText(beforeStartup?"▶  POKRENI WINDOWS":"✓  SPREMI ZA IDUĆI RESET");
         launch.setAllCaps(false);
         launch.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         launch.setTextColor(0xff10272c);

@@ -23,7 +23,6 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.*;
-import java.util.concurrent.CountDownLatch;
 import au.com.darkside.xserver.Drawable;
 import au.com.darkside.xserver.XServer;
 
@@ -78,7 +77,6 @@ public final class WineGuiActivity extends Activity {
     private boolean keyboardPending;
     private int keyboardAttempts;
     private DrnasPerformanceHud performanceHud;
-    private final CountDownLatch frameCapReady=new CountDownLatch(1);
     private int chosenFrameCap;
     private boolean renderCaptureRunning;
     private boolean relativeCameraEnabled;
@@ -139,7 +137,8 @@ public final class WineGuiActivity extends Activity {
         super.onCreate(saved);
         // Keep toggle through Reset Wine (which recreates this Activity).
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
-        chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
+        chosenFrameCap=savedFrameCap(this);
+        final int startupFrameCap=chosenFrameCap;
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
         cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f);
         stretchFullscreen=getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true);
@@ -382,10 +381,9 @@ public final class WineGuiActivity extends Activity {
                         xserver.getScreen().getGuestHeight());
                 new Thread(()->{
                     try {
-                        // Input FPS cap before any Wine process inherits DXVK environment.
-                        frameCapReady.await();
+                        // Snapshot the saved preference for this display session; edits apply on reset.
                         if(destroyed)return;
-                        session.setFrameCap(chosenFrameCap);
+                        session.setFrameCap(startupFrameCap);
                         session.run(WineGuiActivity.this,WineGuiActivity.this::log,raw,launchApp);
                     }
                     catch(Throwable e) {
@@ -422,14 +420,22 @@ public final class WineGuiActivity extends Activity {
                 startupStatus.setVisibility(View.VISIBLE);
             }
         },20000);
-        // Shown before Wine Explorer starts: default 0 = no artificial cap.
-        showFrameLimiterDialog(true);
+        // Start directly with the saved cap. The configuration menu is the only editor.
+    }
+
+    // Preserve the existing Activity preference file so updates keep the user's cap.
+    static int savedFrameCap(android.content.Context context) {
+        return DxvkFrameCap.clamp(context.getSharedPreferences("WineGuiActivity",MODE_PRIVATE)
+                .getInt("dxvk_fps_cap",0));
+    }
+    static void saveFrameCap(android.content.Context context,int cap) {
+        context.getSharedPreferences("WineGuiActivity",MODE_PRIVATE).edit()
+                .putInt("dxvk_fps_cap",DxvkFrameCap.clamp(cap)).apply();
     }
 
     private void setFrameCapAndContinue(int cap,boolean beforeStartup) {
         chosenFrameCap=DxvkFrameCap.clamp(cap);
-        getPreferences(MODE_PRIVATE).edit().putInt("dxvk_fps_cap",chosenFrameCap).apply();
-        if(beforeStartup)frameCapReady.countDown();
+        saveFrameCap(this,chosenFrameCap);
         Toast.makeText(this,"DXVK "+(chosenFrameCap==0?"bez limita":chosenFrameCap+" FPS")+
                 (beforeStartup?"":" (primijenit će se nakon Reset Wine)"),
                 Toast.LENGTH_SHORT).show();
@@ -441,10 +447,10 @@ public final class WineGuiActivity extends Activity {
         // the choices when both are set. Render explicit buttons + edit box.
         DrnasDxvkDialog.show(this,chosenFrameCap,beforeStartup,
                 cap->setFrameCapAndContinue(cap,beforeStartup),
-                ()->{if(beforeStartup)frameCapReady.countDown();});
+                ()->{});
     }
 
-    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
+    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS · idući reset prikaza","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
             "Eksperiment: brzo dekodiranje (A/B) ON/OFF",
             "Cijeli zaslon / Stretch ON/OFF",
             "DXVK 1.10.3 Async / Standard (idući start)"};
@@ -1019,7 +1025,6 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations()+
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
-        frameCapReady.countDown();
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
         if(xinputState!=null)xinputState.close();
         AutomaticCrashLog.end(this);

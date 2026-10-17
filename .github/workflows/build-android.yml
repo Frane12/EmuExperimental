@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r6 - Meadow background only
+name: EmuDrnas preAlpha 0.1 r7 - Compact neon and meadow breeze
 on:
   push:
     branches:
@@ -23,7 +23,7 @@ on:
       - experiment/wsi-mode-diagnostics-v0.5.44
       - feat/emudrnas-fullscreen-stretch-prealpha-r4
       - feat/emudrnas-retro-shortcuts-tools-r5
-      - feat/emudrnas-meadow-only-r6
+      - feat/emudrnas-compact-breeze-r7
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -246,37 +246,38 @@ jobs:
           test -s "$APK"
           CERT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]')
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
+          [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r6-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r7-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r6 - same persistent certificate, meadow artwork only
+          EmuDrnas preAlpha 0.1 r7 - compact neon layout, gentle meadow animation, saved DXVK FPS
           Package: com.drnas.console
-          versionCode: 71
+          versionCode: 72
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: only the meadow banner image and its drawing path; all Wine/frontend controls unchanged.
+          Changed: compact two-column controls; original meadow with gentle breeze/pollen; saved DXVK FPS in configuration, applied after reset without startup prompts.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r6-background-only.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r6-background-only.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-meadow-only-r6' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r6-background-only-ZIP
+          name: EmuDrnas-preAlpha-0.1-r7-compact-breeze-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-meadow-only-r6'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r6-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r6-background-only.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r6 - meadow-only draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r7-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r7 - compact breeze draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
