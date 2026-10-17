@@ -46,12 +46,19 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean verboseLogs; // OFF by default, live menu toggle
     private VirtualStickView virtualStick;
     private XInputSharedState xinputState;
-    private XInputControlsView xinputLeft,xinputRight;
-    private RelativeLookOverlay relativeLookOverlay;
+    private DrnasPadLayoutView gamepadLayer;
+    private boolean virtualPadEnabled;
+    private float cameraSensitivity=5f;
     private void syncVirtualPadConnection() {
-        if(xinputState==null)return;
-        boolean visiblePad=xinputLeft!=null && xinputLeft.getVisibility()==View.VISIBLE;
-        xinputState.setVirtualEnabled(visiblePad || relativeCameraEnabled);
+        if(gamepadLayer!=null) {
+            gamepadLayer.setButtonsVisible(virtualPadEnabled);
+            gamepadLayer.setCameraEnabled(relativeCameraEnabled);
+            gamepadLayer.setCameraGain(cameraSensitivity);
+            gamepadLayer.setVisibility(virtualPadEnabled || relativeCameraEnabled ?
+                    View.VISIBLE:View.GONE);
+        }
+        if(xinputState!=null)xinputState.setVirtualEnabled(
+                virtualPadEnabled || relativeCameraEnabled);
     }
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
@@ -119,6 +126,7 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
+        cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",5f);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
@@ -164,15 +172,17 @@ public final class WineGuiActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // Overlay BELOW toolbar and controller buttons but ABOVE X11 screen.
-        // Late-added full-screen views would swallow the top-right menu touch.
-        // This view is below XInput buttons and toolbar; any free screen touch
-        // becomes a movable right thumbstick. Existing XInput buttons win hits.
+        // The same full-screen controller view is used by the editor and by
+        // runtime. All 18 controls can be repositioned in XML. It is below
+        // the top-right menu and HUD, so these controls remain clickable.
         if(xinputState!=null) {
-            relativeLookOverlay=new RelativeLookOverlay(this,xinputState);
-            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
-            layout.addView(relativeLookOverlay,new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+            gamepadLayer=new DrnasPadLayoutView(this,xinputState,false);
+            gamepadLayer.setPreset(XInputLayoutPreset.load(this,
+                    getResources().getDisplayMetrics().widthPixels,
+                    getResources().getDisplayMetrics().heightPixels));
+            layout.addView(gamepadLayer,new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
         }
 
         // Quiet startup notice, not diagnostics. An offline Mono installation
@@ -289,22 +299,6 @@ public final class WineGuiActivity extends Activity {
         stickParams.bottomMargin=dp(40);
         virtualStick.setVisibility(View.GONE);
         layout.addView(virtualStick,stickParams);
-        // Xbox-style on-screen controller is OFF by default, so Explorer and
-        // touchscreen X11 pointer have exactly the same behavior as v0.5.47.
-        if(xinputState!=null) {
-            xinputLeft=new XInputControlsView(this,xinputState,true);
-            FrameLayout.LayoutParams l=new FrameLayout.LayoutParams(
-                    dp(214),dp(214),Gravity.BOTTOM|Gravity.START);
-            l.leftMargin=dp(3);l.bottomMargin=dp(31);
-            xinputLeft.setVisibility(View.GONE);
-            layout.addView(xinputLeft,l);
-            xinputRight=new XInputControlsView(this,xinputState,false);
-            FrameLayout.LayoutParams rr=new FrameLayout.LayoutParams(
-                    dp(272),dp(214),Gravity.BOTTOM|Gravity.END);
-            rr.rightMargin=dp(5);rr.bottomMargin=dp(31);
-            xinputRight.setVisibility(View.GONE);
-            layout.addView(xinputRight,rr);
-        }
         syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
@@ -426,13 +420,13 @@ public final class WineGuiActivity extends Activity {
                 ()->{if(beforeStartup)frameCapReady.countDown();});
     }
 
-    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi"};
+    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
             case 17:return virtualStick!=null && virtualStick.getVisibility()==View.VISIBLE;
             case 18:return verboseLogs;
-            case 19:return xinputLeft!=null && xinputLeft.getVisibility()==View.VISIBLE;
+            case 19:return virtualPadEnabled;
             case 20:return performanceHud!=null && performanceHud.isActive();
             case 21:return relativeCameraEnabled;
             case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",true);
@@ -484,10 +478,6 @@ public final class WineGuiActivity extends Activity {
                     else if(which==21) {
                         relativeCameraEnabled=!relativeCameraEnabled;
                         getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
-                        if(relativeLookOverlay!=null) {
-                            if(!relativeCameraEnabled)relativeLookOverlay.release();
-                            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
-                        }
                         syncVirtualPadConnection();
                         Toast.makeText(this,relativeCameraEnabled?
                                 "Kamera bilo gdje: XInput analog ON":"Kamera bilo gdje OFF (normalni dodir)",
@@ -506,21 +496,25 @@ public final class WineGuiActivity extends Activity {
                     else if(which==24) {
                         captureRenderForFiveSeconds();
                     }
+                    else if(which==25) {
+                        editCameraSensitivity();
+                    }
+                    else if(which==26) {
+                        startActivity(new Intent(this,XInputLayoutEditorActivity.class));
+                    }
                     else if(which==19) {
                         if(xinputState==null) {
                             Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
                         } else {
-                            boolean show=xinputLeft.getVisibility()!=View.VISIBLE;
-                            if(show && virtualStick.getVisibility()==View.VISIBLE) {
+                            virtualPadEnabled=!virtualPadEnabled;
+                            if(virtualPadEnabled && virtualStick.getVisibility()==View.VISIBLE) {
                                 virtualStick.releaseAll();
                                 virtualStick.setVisibility(View.GONE);
                             }
-                            if(!show){xinputLeft.release();xinputRight.release();}
-                            xinputLeft.setVisibility(show?View.VISIBLE:View.GONE);
-                            xinputRight.setVisibility(show?View.VISIBLE:View.GONE);
+                            if(!virtualPadEnabled && gamepadLayer!=null)gamepadLayer.release();
                             syncVirtualPadConnection();
-                            log("DRNAS_XINPUT "+(show?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
-                            Toast.makeText(this,show?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
+                            log("DRNAS_XINPUT "+(virtualPadEnabled?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
+                            Toast.makeText(this,virtualPadEnabled?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
                         }
                     }
                     else if(which==18) {
@@ -539,10 +533,9 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==17) {
                         boolean show=virtualStick.getVisibility()!=View.VISIBLE;
-                        if(show && xinputState!=null && xinputLeft!=null) {
-                            xinputLeft.release();xinputRight.release();
-                            xinputLeft.setVisibility(View.GONE);
-                            xinputRight.setVisibility(View.GONE);
+                        if(show && gamepadLayer!=null) {
+                            virtualPadEnabled=false;
+                            gamepadLayer.release();
                             syncVirtualPadConnection();
                         }
                         if(!show)virtualStick.releaseAll();
@@ -557,6 +550,37 @@ public final class WineGuiActivity extends Activity {
                         testVulkanPresentation(which==10?"fifo":which==11?"immediate":which==12?"create-only":"sync");
                     else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
         });
+    }
+
+    private void editCameraSensitivity(){
+        android.widget.LinearLayout box=new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        box.setPadding(dp(28),dp(12),dp(28),dp(8));
+        android.widget.TextView label=new android.widget.TextView(this);
+        label.setTextColor(0xff91efcc);
+        label.setTextSize(15);
+        label.setText(String.format(java.util.Locale.ROOT,"Osjetljivost kamere: %.1fx",cameraSensitivity));
+        box.addView(label);
+        android.widget.SeekBar slider=new android.widget.SeekBar(this);
+        slider.setMax(95);
+        slider.setProgress(Math.min(95,Math.max(0,Math.round(cameraSensitivity*10)-5)));
+        box.addView(slider);
+        slider.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(android.widget.SeekBar bar,int value,boolean fromUser){
+                float gain=(value+5)/10f;
+                label.setText(String.format(java.util.Locale.ROOT,"Osjetljivost kamere: %.1fx",gain));
+                cameraSensitivity=gain;
+                if(gamepadLayer!=null)gamepadLayer.setCameraGain(gain);
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
+        });
+        new AlertDialog.Builder(this).setTitle("XInput / relativna kamera")
+                .setMessage("Pomak prsta određuje brzinu kamere. 0.5x–10x.")
+                .setView(box).setPositiveButton("Spremi",(d,w)->{
+                    getPreferences(MODE_PRIVATE).edit()
+                        .putFloat("relative_sensitivity",cameraSensitivity).apply();
+                }).setNegativeButton("Odustani",null).show();
     }
 
     private void captureRenderForFiveSeconds() {
@@ -910,9 +934,7 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onPause() {
         if(virtualStick!=null)virtualStick.releaseAll();
-        if(xinputLeft!=null)xinputLeft.release();
-        if(xinputRight!=null)xinputRight.release();
-        if(relativeLookOverlay!=null)relativeLookOverlay.release();
+        if(gamepadLayer!=null)gamepadLayer.release();
         if(xinputState!=null){xinputState.releaseTouch();xinputState.disconnectPhysical();}
         log("DRNAS_X11_LIFECYCLE onPause finishing="+isFinishing()+
                 " changingConfigurations="+isChangingConfigurations());
