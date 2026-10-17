@@ -83,7 +83,8 @@ public final class WineGuiActivity extends Activity {
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
             if(destroyed||performanceHud==null||!performanceHud.isActive())return;
-            performanceHud.sample(xserver.getScreen().getDisplayedFps());
+            performanceHud.sample(xserver.getScreen().getDisplayedFps(),
+                    xserver.getScreen().getDisplayedFrameMs());
             performanceHud.postDelayed(this,650);
         }
     };
