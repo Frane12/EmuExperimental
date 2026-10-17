@@ -676,7 +676,11 @@ public class Drawable {
                 }
                 break;
             case RequestCode.PutImage:
+                // This is the crucial Mesa software-WSI -> Android bitmap step.
+                // Audit both accepted and rejected requests; DXVK swapchain
+                // creation alone is NOT proof that any rendered frame arrives.
                 changed = processPutImage(client, gc, arg, bytesRemaining);
+                xServer.recordPutImage(id,changed,bytesRemaining);
                 break;
             case RequestCode.PolyText8:
             case RequestCode.PolyText16:
