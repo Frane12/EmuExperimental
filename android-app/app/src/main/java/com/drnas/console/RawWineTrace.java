@@ -27,6 +27,11 @@ final class RawWineTrace implements AutoCloseable {
     private boolean failed;
     private String issue;
     private long lastFlushNanos;
+    // OFF by default: game frames must not wait for disk logging.
+    private volatile boolean verbose;
+
+    void setVerbose(boolean enabled) { verbose = enabled; }
+    boolean isVerbose() { return verbose; }
 
     RawWineTrace(File directory) throws IOException {
         this(directory,LATEST);
@@ -44,7 +49,13 @@ final class RawWineTrace implements AutoCloseable {
                 "yyyy-MM-dd HH:mm:ss",Locale.US).format(new Date()));
     }
 
-    synchronized void write(String source,String rawLine) {
+    void write(String source,String rawLine) {
+        if(!verbose)return;
+        writeEssential(source,rawLine);
+    }
+
+    // Small fatal/error-only evidence remains available when verbose is OFF.
+    synchronized void writeEssential(String source,String rawLine) {
         if(closed || failed || truncated)return;
         String row="["+source+"] "+rawLine+"\n";
         byte[] utf8=row.getBytes(StandardCharsets.UTF_8);
