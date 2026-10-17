@@ -28,6 +28,30 @@ public class WineGraphicsTestsTest {
             WineGraphicsTests.install(root.toFile(),exe,hash(exe));assertArrayEquals(bytes,Files.readAllBytes(link));
         }finally{clean(root);}
     }
+    @Test public void installsDxvkX86AlongsideCubeAndWritesScopedFifoConfig()throws Exception {
+        Path root=Files.createTempDirectory("cube-fifo");
+        try {
+            Files.createDirectories(root.resolve("drive_c/windows/syswow64"));
+            byte[] exe=pe();
+            byte[] d3d9=pe();d3d9[85]=31;
+            byte[] dxgi=pe();dxgi[85]=42;
+            Files.write(root.resolve("drive_c/windows/syswow64/d3d9.dll"),d3d9);
+            Files.write(root.resolve("drive_c/windows/syswow64/dxgi.dll"),dxgi);
+            WineGraphicsTests.install(root.toFile(),exe,hash(exe));
+            WineGraphicsTests.installCubeDxvkLocal(root.toFile(),line->{});
+            Path cube=root.resolve("drive_c/DRNAS/Graphics");
+            assertArrayEquals(d3d9,Files.readAllBytes(cube.resolve("d3d9.dll")));
+            assertArrayEquals(dxgi,Files.readAllBytes(cube.resolve("dxgi.dll")));
+            String config=Files.readString(cube.resolve("dxvk.conf"));
+            assertTrue(config.contains("[TestD3D.exe]"));
+            assertTrue(config.contains("d3d9.presentInterval = 1"));
+            assertTrue(config.contains("dxgi.syncInterval = 1"));
+            assertEquals("C:\\DRNAS\\Graphics\\dxvk.conf",WineGraphicsTests.cubeConfigWindowsPath());
+            // A second installation does not alter working x86 DLLs.
+            WineGraphicsTests.installCubeDxvkLocal(root.toFile(),line->{});
+            assertArrayEquals(dxgi,Files.readAllBytes(cube.resolve("dxgi.dll")));
+        }finally{clean(root);}
+    }
     @Test public void refusesBadHashBeforeWritingAndRefusesSymlinkEscape()throws Exception{
         Path root=Files.createTempDirectory("cube-safe"),outside=Files.createTempDirectory("cube-outside");
         try{
