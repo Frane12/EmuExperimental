@@ -107,51 +107,33 @@ final class DrnasPerformanceHud extends View {
         super.onDraw(canvas);
         if(!active)return;
         float w=getWidth(),h=getHeight();
-        if(w<=0||h<=0)return;
-        float inset=1.5f*density;
-        float radius=Math.min(19f*density,h*.39f);
+        if(w<=0 || h<=0)return;
+        float inset=Math.max(1f,density);
+        float radius=Math.min(14f*density,h*.43f);
         box.set(inset,inset,w-inset,h-inset);
-
-        // Transparent glass-style capsule, fine cool border and top glint.
         fill.setStyle(Paint.Style.FILL);
         fill.setShader(glassGradient);
         canvas.drawRoundRect(box,radius,radius,fill);
         fill.setShader(null);
-
-        border.setColor(0x8a9ad6f4);
+        border.setStyle(Paint.Style.STROKE);
+        border.setStrokeWidth(Math.max(1f,density));
+        border.setColor(0x668ac6de);
         canvas.drawRoundRect(box,radius,radius,border);
-        border.setColor(0x3cffffff);
-        canvas.drawRoundRect(inset+2f*density,inset+1.6f*density,
-                w-inset-2f*density,h*.48f,radius*.72f,radius*.72f,border);
-
         float segment=w/3f;
-        float titleSize=Math.min(10.5f*scaledDensity,h*.225f);
-        float valueSize=Math.min(17f*scaledDensity,h*.365f);
-        // Guard against accessibility font scaling / narrower device widths.
-        valueSize=Math.min(valueSize,segment/5.9f);
-        titleSize=Math.min(titleSize,segment/10.5f);
-        float topLine=h*.365f;
-        float valueLine=h*.730f;
-
         for(int i=0;i<3;i++) {
-            float cx=(i+.5f)*segment;
+            float x=(i+.5f)*segment;
             if(i>0) {
-                divider.setColor(0x35cad9ec);
-                float x=i*segment;
-                canvas.drawLine(x,h*.25f,x,h*.76f,divider);
+                divider.setColor(0x6c9dc1d2);
+                canvas.drawLine(i*segment,h*.21f,i*segment,h*.79f,divider);
             }
-            fill.setColor(ACCENTS[i]);
-            canvas.drawCircle(cx-segment*.34f,h*.325f,Math.max(2.0f*density,h*.043f),fill);
-
-            text.setTypeface(labelFont);
-            text.setTextSize(titleSize);
-            text.setColor(0xffb2c5d4);
-            canvas.drawText(TITLES[i],cx,topLine,text);
-
+            String title=i==0?"FPS":i==1?"RAM":"BAT";
+            String output=title+"  "+values[i];
             text.setTypeface(valueFont);
-            text.setTextSize(valueSize);
-            text.setColor(i==0?0xffeffff9:0xfff5faff);
-            canvas.drawText(values[i],cx,valueLine,text);
+            float txt=Math.min(12.3f*scaledDensity,segment/8.1f);
+            text.setTextSize(txt);
+            text.setTextAlign(Paint.Align.CENTER);
+            text.setColor(i==0?0xff8ff0cf:0xffe9f3f9);
+            canvas.drawText(output,x,h*.67f,text);
         }
     }
 }
