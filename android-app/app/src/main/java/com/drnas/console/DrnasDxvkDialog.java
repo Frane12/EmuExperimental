@@ -48,7 +48,7 @@ final class DrnasDxvkDialog {
     }
     private TextView label(String s,int sp,int color) {
         TextView t=new TextView(context);
-        t.setText(s);t.setTextSize(sp);t.setTextColor(color);
+        t.setText(AppLanguage.t(context,s));t.setTextSize(sp);t.setTextColor(color);
         return t;
     }
     private Button preset(String title,int fps) {
@@ -62,7 +62,7 @@ final class DrnasDxvkDialog {
         b.setOnClickListener(v->{
             field.setText(Integer.toString(fps));
             field.setSelection(field.length());
-            Toast.makeText(context,fps==0?"Bez FPS limita":fps+" FPS odabrano",
+            AppLanguage.toast(context,fps==0?"Bez FPS limita":fps+" FPS odabrano",
                     Toast.LENGTH_SHORT).show();
         });
         return b;
@@ -123,7 +123,7 @@ final class DrnasDxvkDialog {
             dialog.dismiss();
         });
 
-        dialog=new AlertDialog.Builder(context).setView(root)
+        dialog=new AppDialogBuilder(context).setView(root)
                 .setCancelable(true).create();
         dialog.setOnDismissListener(d->finished.run());
         dialog.show();
@@ -135,3 +135,4 @@ final class DrnasDxvkDialog {
         }
     }
 }
+

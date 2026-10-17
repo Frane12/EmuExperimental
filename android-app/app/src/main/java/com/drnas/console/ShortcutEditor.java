@@ -52,7 +52,7 @@ final class ShortcutEditor {
         actions.addView(choose,new LinearLayout.LayoutParams(0,dp(44),1));
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(44),1);p.leftMargin=dp(6);
         actions.addView(reset,p);root.addView(actions);
-        dialog=new AlertDialog.Builder(activity).setTitle("Dodaj na početni ekran").setView(root)
+        dialog=new AppDialogBuilder(activity).setTitle("Dodaj na početni ekran").setView(root)
                 .setPositiveButton("Dodaj",null).setNegativeButton("Odustani",null).create();
         dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->save()));
         dialog.setOnDismissListener(v->generation++);
@@ -102,7 +102,7 @@ final class ShortcutEditor {
                 if(activity.isFinishing()||!dialog.isShowing())return;
                 setBusy(false);
                 if(error!=null){status.setText("Nije spremljeno: "+error);return;}
-                dialog.dismiss();Toast.makeText(activity,"Prečac je dodan",Toast.LENGTH_SHORT).show();done.run();
+                dialog.dismiss();AppLanguage.toast(activity,"Prečac je dodan",Toast.LENGTH_SHORT).show();done.run();
             });
         },"drnas-shortcut-save").start();
     }

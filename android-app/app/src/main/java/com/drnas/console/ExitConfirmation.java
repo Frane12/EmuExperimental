@@ -22,7 +22,7 @@ final class ExitConfirmation {
         if(dialog!=null&&dialog.isShowing())return;
         long now=SystemClock.uptimeMillis();
         if(!gate.press(now)){
-            Toast.makeText(a,"Pritisni još jednom za potvrdu izlaza",Toast.LENGTH_SHORT).show();
+            AppLanguage.toast(a,"Pritisni još jednom za potvrdu izlaza",Toast.LENGTH_SHORT).show();
             return;
         }
         confirm(a);
@@ -34,7 +34,7 @@ final class ExitConfirmation {
             tone.startTone(ToneGenerator.TONE_PROP_BEEP,160);
             a.getWindow().getDecorView().postDelayed(tone::release,350);
         }catch(RuntimeException ignored){}
-        dialog=new AlertDialog.Builder(a).setTitle("Izaći iz aplikacije?")
+        dialog=new AppDialogBuilder(a).setTitle("Izaći iz aplikacije?")
                 .setMessage("Zatvoriti ovaj ekran i Windows sesiju?")
                 .setPositiveButton("Yes",(d,w)->a.finish())
                 .setNegativeButton("Decline",(d,w)->gate.reset())

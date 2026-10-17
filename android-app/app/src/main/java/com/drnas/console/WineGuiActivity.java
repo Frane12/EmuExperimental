@@ -150,6 +150,8 @@ public final class WineGuiActivity extends Activity {
         chosenFrameCap=appProfile.fps(savedFrameCap(this));
         final int startupFrameCap=chosenFrameCap;
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
+        String controlMode=getPreferences(MODE_PRIVATE).getString("control_mode","off");
+        virtualPadEnabled="xinput".equals(controlMode);
         cameraSensitivity=appProfile.sensitivity(getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f));
         stretchFullscreen=appProfile.stretch(getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true));
 
@@ -331,7 +333,7 @@ public final class WineGuiActivity extends Activity {
                 dp(182),dp(182),Gravity.BOTTOM|Gravity.START);
         stickParams.leftMargin=dp(18);
         stickParams.bottomMargin=dp(40);
-        virtualStick.setVisibility(View.GONE);
+        virtualStick.setVisibility("wasd".equals(controlMode)?View.VISIBLE:View.GONE);
         layout.addView(virtualStick,stickParams);
         syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
@@ -364,7 +366,8 @@ public final class WineGuiActivity extends Activity {
         setToolbarExpanded(false);
         performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
-        addDesktopKeys(layout);
+        if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
+        AppLanguage.tree(layout);
         setContentView(layout);
         if(performanceHud.isActive())performanceHud.postDelayed(hudTicker,650);
         try {
@@ -372,7 +375,7 @@ public final class WineGuiActivity extends Activity {
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
             raw.setVerbose(verboseLogs);
         } catch(IOException e) {
-            Toast.makeText(this,"Wine desktop log unavailable: "+e.getMessage(),
+            AppLanguage.toast(this,"Wine desktop log unavailable: "+e.getMessage(),
                     Toast.LENGTH_LONG).show();
             finish();
             return;
@@ -612,6 +615,7 @@ public final class WineGuiActivity extends Activity {
                             Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
                         } else {
                             virtualPadEnabled=!virtualPadEnabled;
+                            getPreferences(MODE_PRIVATE).edit().putString("control_mode",virtualPadEnabled?"xinput":"off").apply();
                             if(virtualPadEnabled && virtualStick.getVisibility()==View.VISIBLE) {
                                 virtualStick.releaseAll();
                                 virtualStick.setVisibility(View.GONE);
@@ -645,6 +649,7 @@ public final class WineGuiActivity extends Activity {
                         }
                         if(!show)virtualStick.releaseAll();
                         virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
+                        getPreferences(MODE_PRIVATE).edit().putString("control_mode",show?"wasd":"off").apply();
                         log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
                                 " input=Wine X11 WASD (XInput controller NOT emulated)");
                         Toast.makeText(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
@@ -690,7 +695,7 @@ public final class WineGuiActivity extends Activity {
             @Override public void onStartTrackingTouch(android.widget.SeekBar bar){}
             @Override public void onStopTrackingTouch(android.widget.SeekBar bar){}
         });
-        new AlertDialog.Builder(this).setTitle("XInput / relativna kamera")
+        new AppDialogBuilder(this).setTitle("XInput / relativna kamera")
                 .setMessage("Pomak prsta određuje brzinu kamere. 0.5x–10x.")
                 .setView(box).setPositiveButton("Spremi",(d,w)->{
                     if(launchProfileId==null)getPreferences(MODE_PRIVATE).edit()
@@ -758,7 +763,7 @@ public final class WineGuiActivity extends Activity {
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
         }
         if(line.startsWith("[Startup] "))runOnUiThread(()->{
-            if(!destroyed){startupStatus.setText(line.substring(10));dependencyPanel.setVisibility(View.GONE);}
+            if(!destroyed){startupStatus.setText(AppLanguage.t(this,line.substring(10)));dependencyPanel.setVisibility(View.GONE);}
         });
         if(line.startsWith("[Dependencies] ")) {
             int separator=line.indexOf('|',15);
@@ -799,7 +804,7 @@ public final class WineGuiActivity extends Activity {
         int[] keys={-1,-3,KeyEvent.KEYCODE_ENTER,KeyEvent.KEYCODE_ESCAPE,KeyEvent.KEYCODE_DEL};
         for(int i=0;i<labels.length;i++){
             final int key=keys[i];
-            Button button=new Button(this);button.setText(labels[i]);button.setTextSize(11);
+            Button button=new Button(this);button.setText(AppLanguage.t(this,labels[i]));button.setTextSize(11);
             button.setPadding(dp(8),0,dp(8),0);styleToolbar(button,false);
             button.setOnTouchListener((v,e)->{
                 int action=e.getActionMasked();

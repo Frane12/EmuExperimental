@@ -40,7 +40,7 @@ final class AppSettingsDialog {
         int available=a.getResources().getDisplayMetrics().heightPixels-dp(a,180);
         LinearLayout wrapper=new LinearLayout(a);wrapper.setOrientation(LinearLayout.VERTICAL);
         wrapper.addView(scroll,new LinearLayout.LayoutParams(-1,Math.max(dp(a,150),Math.min(dp(a,340),available))));
-        AlertDialog dialog=new AlertDialog.Builder(a).setTitle(profile.title(entry.title))
+        AlertDialog dialog=new AppDialogBuilder(a).setTitle(profile.title(entry.title))
                 .setView(wrapper).setPositiveButton("Prihvati",null).setNegativeButton("Odbaci",null).create();
         dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(button->{
             String title=name.getText().toString().trim();
@@ -65,7 +65,7 @@ final class AppSettingsDialog {
                             stretch.getSelectedItemPosition()-1,gain));
                 }
                 dialog.dismiss();changed.run();
-            }catch(Exception error){Toast.makeText(a,"Nije spremljeno: "+error.getMessage(),Toast.LENGTH_LONG).show();}
+            }catch(Exception error){AppLanguage.toast(a,"Nije spremljeno: "+error.getMessage(),Toast.LENGTH_LONG).show();}
         }));
         dialog.show();
     }
@@ -80,7 +80,7 @@ final class AppSettingsDialog {
         root.addView(e,new LinearLayout.LayoutParams(-1,dp(a,40)));return e;
     }
     private static Spinner spinner(Activity a,LinearLayout root,String[] labels,int selection){
-        Spinner s=new Spinner(a);s.setAdapter(new ArrayAdapter<String>(a,android.R.layout.simple_spinner_dropdown_item,labels){
+        Spinner s=new Spinner(a);s.setAdapter(new ArrayAdapter<String>(a,android.R.layout.simple_spinner_dropdown_item,AppLanguage.array(a,labels)){
             @Override public android.view.View getView(int p,android.view.View v,android.view.ViewGroup parent){
                 TextView text=(TextView)super.getView(p,v,parent);text.setTextColor(0xffe4fff4);text.setTextSize(12);return text;
             }

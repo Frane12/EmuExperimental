@@ -58,10 +58,10 @@ final class HostFileExplorer extends LinearLayout {
         b.setCornerRadius(dp(14));b.setStroke(dp(1),0xff3ac9d6);return b;
     }
     private TextView text(String s,int size){
-        TextView t=new TextView(activity);t.setText(s);t.setTextColor(0xffb9d6df);t.setTextSize(size);return t;
+        TextView t=new TextView(activity);t.setText(AppLanguage.t(activity,s));t.setTextColor(0xffb9d6df);t.setTextSize(size);return t;
     }
     private Button button(String s,Runnable action){
-        Button b=new Button(activity);b.setText(s);b.setAllCaps(false);b.setTextSize(11);
+        Button b=new Button(activity);b.setText(AppLanguage.t(activity,s));b.setAllCaps(false);b.setTextSize(11);
         b.setTextColor(0xffb1ffe1);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
         b.setMinHeight(dp(40));b.setMinimumHeight(dp(40));b.setMinWidth(0);b.setMinimumWidth(0);
         b.setPadding(dp(7),dp(3),dp(7),dp(3));b.setBackground(surface());
@@ -77,7 +77,7 @@ final class HostFileExplorer extends LinearLayout {
     }
     private void navigate(String d,String p){if(busy)return;drive=d;path=p;selected=null;pageSize=200;
         prefs.edit().putString("drive",d).putString("path",p).apply();refresh();}
-    private void message(String msg){status.setText(msg);}
+    private void message(String msg){status.setText(AppLanguage.t(activity,msg));}
     private interface Job {String run() throws Exception;}
     private void work(Job task){
         if(busy)return;busy=true;message("Radim…");copy.setEnabled(false);paste.setEnabled(false);
@@ -136,7 +136,7 @@ final class HostFileExplorer extends LinearLayout {
     private void fileActions(String relative){
         boolean exe=relative.toLowerCase(Locale.ROOT).endsWith(".exe");
         String[] options=exe?new String[]{"Dodaj na početni ekran","Kopiraj"}:new String[]{"Kopiraj"};
-        new AlertDialog.Builder(activity).setTitle(new File(relative).getName()).setItems(options,(d,w)->{
+        new AppDialogBuilder(activity).setTitle(new File(relative).getName()).setItems(options,(d,w)->{
             if(exe&&w==0)addShortcut(relative);else copySelected();
         }).show();
     }
@@ -161,7 +161,7 @@ final class HostFileExplorer extends LinearLayout {
     }
     private void newFolder(){
         EditText input=new EditText(activity);input.setSingleLine(true);input.setHint("Naziv mape");
-        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Nova mapa").setView(input)
+        AlertDialog dialog=new AppDialogBuilder(activity).setTitle("Nova mapa").setView(input)
                 .setPositiveButton("Stvori",null).setNegativeButton("Odustani",null).create();
         dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->{
             try{

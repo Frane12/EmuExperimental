@@ -84,11 +84,22 @@ public final class AndroidCrashDiagnostics {
         catch(IOException ignored){}
     }
 
+    static void appendInitializationLogs(File files,OutputStream out) throws IOException {
+        File logs=new File(files,"logs");
+        File[] console=logs.listFiles((dir,name)->name.startsWith("DRNAS-console-")&&name.endsWith(".txt"));
+        if(console!=null){
+            java.util.Arrays.sort(console,(a,b)->Long.compare(b.lastModified(),a.lastModified()));
+            for(int i=0;i<Math.min(2,console.length);i++)copy(console[i],out,2*1024*1024);
+        }
+        copy(new File(logs,RawWineTrace.LATEST),out,24*1024*1024);
+    }
+
     static void export(Context context,OutputStream out) throws IOException {
         out.write(("DRNAS host crash diagnostics\nPackage: "+context.getPackageName()+
                 "\nAndroid API: "+Build.VERSION.SDK_INT+"\n").getBytes(StandardCharsets.UTF_8));
         appendExitHistory(context,out);
         appendSaved(context.getFilesDir(),out);
+        appendInitializationLogs(context.getFilesDir(),out);
         copy(new File(context.getFilesDir(),"logs/latest-wine-gui-raw.txt"),out,8*1024*1024);
     }
 

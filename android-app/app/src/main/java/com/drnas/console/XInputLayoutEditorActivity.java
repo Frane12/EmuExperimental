@@ -31,10 +31,10 @@ public final class XInputLayoutEditorActivity extends Activity {
         return d;
     }
     private Button button(String text,LinearLayout bar,Runnable action){
-        Button b=new Button(this);b.setText(text);b.setAllCaps(false);
+        Button b=new Button(this);b.setText(AppLanguage.t(this,text));b.setAllCaps(false);
         b.setTextSize(12);b.setTextColor(0xffeff8fd);
         b.setBackground(glass(0xe5234056));
-        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(108),dp(43));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(43),1f);
         lp.setMargins(dp(3),0,dp(3),0);
         bar.addView(b,lp);
         b.setOnClickListener(v->action.run());
@@ -60,7 +60,7 @@ public final class XInputLayoutEditorActivity extends Activity {
         bar.setPadding(dp(7),dp(6),dp(7),dp(6));
         bar.setBackground(glass(0xee0f2739));
         FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,dp(58),
+                FrameLayout.LayoutParams.MATCH_PARENT,dp(58),
                 Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         p.topMargin=dp(8);
         root.addView(bar,p);
@@ -78,16 +78,16 @@ public final class XInputLayoutEditorActivity extends Activity {
         EditText input=new EditText(this);
         input.setSingleLine(true);
         input.setText("Crysis");
-        new AlertDialog.Builder(this).setTitle("Spremi raspored kontrolera")
+        new AppDialogBuilder(this).setTitle("Spremi raspored kontrolera")
                 .setMessage("Raspored se sprema u XML (Downloads/DRNAS/JoystickPresets)."+
                         " Aplikacija ga pamti i koristi pri sljedećem otvaranju Explorera.")
                 .setView(input).setPositiveButton("Spremi",(dialog,which)->{
                     try{
                         layout.save(this,input.getText().toString());
-                        Toast.makeText(this,"XML spremljen i preset aktiviran",
+                        AppLanguage.toast(this,"XML spremljen i preset aktiviran",
                                 Toast.LENGTH_LONG).show();
                     }catch(IOException error){
-                        Toast.makeText(this,"Spremanje: "+error.getMessage(),
+                        AppLanguage.toast(this,"Spremanje: "+error.getMessage(),
                                 Toast.LENGTH_LONG).show();
                     }
                 }).setNegativeButton("Odustani",null).show();
@@ -95,12 +95,12 @@ public final class XInputLayoutEditorActivity extends Activity {
     private void choose(){
         File[] files=XInputLayoutPreset.directory(this).listFiles((dir,name)->name.endsWith(".xml"));
         if(files==null||files.length==0){
-            Toast.makeText(this,"Još nema XML preseta",Toast.LENGTH_SHORT).show();return;
+            AppLanguage.toast(this,"Još nema XML preseta",Toast.LENGTH_SHORT).show();return;
         }
         Arrays.sort(files,(a,b)->a.getName().compareToIgnoreCase(b.getName()));
         String[] names=new String[files.length];
         for(int i=0;i<files.length;i++)names[i]=files[i].getName();
-        new AlertDialog.Builder(this).setTitle("Odaberi spremljeni XML")
+        new AppDialogBuilder(this).setTitle("Odaberi spremljeni XML")
                 .setItems(names,(dialog,which)->{
                     getSharedPreferences("joystick",MODE_PRIVATE).edit()
                             .putString("selected",names[which]).apply();

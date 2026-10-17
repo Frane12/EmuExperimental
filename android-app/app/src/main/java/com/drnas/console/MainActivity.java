@@ -76,6 +76,7 @@ public final class MainActivity extends Activity {
     private boolean resumed;
     private boolean autoGuiPending;
     private boolean startupWaitingForFolder;
+    private String wineInitializationError="";
     private final WineBootProgress bootProgress=new WineBootProgress();
     private boolean wineBooting;
     private boolean wineReady;
@@ -118,6 +119,8 @@ public final class MainActivity extends Activity {
                             readyForDesktop();
                     wineBooting=false;
                     wineReady=verified;
+                    wineInitializationError=verified?"":status;
+                    getSharedPreferences("drnas-boot",MODE_PRIVATE).edit().putString("last_error",wineInitializationError).apply();
                     bootProgress.finish(verified);
                     // The user turns Wine on first, then explicitly opens
                     // Windows Explorer. Never launch the GUI automatically.
@@ -135,6 +138,7 @@ public final class MainActivity extends Activity {
         });
         append("EmuDrnas preAlpha 0.1 · runtime bootstrap");
         wineReady=readyForDesktop();
+        if(!wineReady)wineInitializationError=getSharedPreferences("drnas-boot",MODE_PRIVATE).getString("last_error","");
         if(wineReady)bootProgress.finish(true);
         append("Full session logs are retained privately; desktop UI has no diagnostics.");
         if(logWriteIssue!=null)append("WARNING: full TXT logging unavailable: "+logWriteIssue);
@@ -151,7 +155,7 @@ public final class MainActivity extends Activity {
             return;
         }
         getPreferences(MODE_PRIVATE).edit().putBoolean("shared_offer_done",true).apply();
-        new AlertDialog.Builder(this)
+        new AppDialogBuilder(this)
                 .setTitle("Windows R: shared folder")
                 .setMessage("Allow DRNAS Wine to see a chosen Android folder as R:?" +
                     "\n\nAndroid 11+ blocks selecting the Downloads root. Choose a " +
@@ -256,7 +260,7 @@ public final class MainActivity extends Activity {
     }
     private TextView label(String text, int size, int color, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(text);
+        t.setText(AppLanguage.t(this,text));
         t.setTextSize(size >= 20 ? size * .78f : Math.max(10, size * .90f));
         t.setIncludeFontPadding(false);
         t.setTextColor(color);
@@ -276,7 +280,8 @@ public final class MainActivity extends Activity {
     }
     private LinearLayout card() {
         LinearLayout panel = column();
-        panel.setPadding(dp(10),dp(8),dp(10),dp(8));
+        int vertical=compactHome()?6:8;
+        panel.setPadding(dp(9),dp(vertical),dp(9),dp(vertical));
         panel.setBackground(glass(0xDF192D43,0xEA0D1C30,21));
         panel.setElevation(dp(3));
         content.addView(panel,pad(0,8));
@@ -284,7 +289,7 @@ public final class MainActivity extends Activity {
     }
     private Button button(String text, boolean prominent, View.OnClickListener action) {
         Button b = new Button(this);
-        b.setText(text);
+        b.setText(AppLanguage.t(this,text));
         b.setAllCaps(false);
         b.setTextSize(11);
         b.setIncludeFontPadding(false);
@@ -379,7 +384,7 @@ public final class MainActivity extends Activity {
 
         
         LinearLayout buttons=horizontal();
-        for(String name:new String[]{"Console","File Explorer","Components","Shortcuts"}) {
+        for(String name:new String[]{"Console","File Explorer","Components","Shortcuts","Options"}) {
             Button b=button(name,name.equals(section),v->showSection(name));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
                     0,dp(40),1f);
@@ -394,9 +399,11 @@ public final class MainActivity extends Activity {
             case "Components": showComponents(); break;
             case "Shortcuts": showShortcuts(false); break;
             case "Diagnostics": showDiagnostics(); break;
+            case "Options": showOptions(); break;
             default: showConsole();
         }
 
+        AppLanguage.tree(content);
         scroll.post(()->scroll.scrollTo(0,pageY));
     }
 
@@ -437,8 +444,17 @@ public final class MainActivity extends Activity {
             wineStartupBar.setProgress(bootProgress.percent());
         }
         if(wineStartupText!=null) {
-            wineStartupText.setText(bootProgress.phase()+
-                    (wineBooting ? "  •  "+bootProgress.percent()+"%" : ""));
+            wineStartupText.setText(AppLanguage.t(this,bootProgress.phase())+
+                    (wineBooting ? "  •  "+bootProgress.percent()+"%" : "")+
+                    (!wineBooting&&!ready&&!wineInitializationError.isEmpty()?"\n"+wineInitializationError:""));
+            wineStartupText.setMaxLines(2);
+            wineStartupText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            wineStartupText.setOnClickListener(v->{
+                if(!wineInitializationError.isEmpty())new AppDialogBuilder(this)
+                        .setTitle("Inicijalizacija nije uspjela").setMessage(wineInitializationError)
+                        .setPositiveButton("PODIJELI LOG",(d,w)->shareCrashDiagnostics())
+                        .setNegativeButton("Zatvori",null).show();
+            });
             wineStartupText.setTextColor(ready?ACCENT:wineBooting?WARM:MUTED);
         }
     }
@@ -473,7 +489,7 @@ public final class MainActivity extends Activity {
             picker.putExtra(Intent.EXTRA_TITLE,"Odaberi .ico ikonu");
             try{startActivityForResult(picker,PICK_SHORTCUT_ICON);}
             catch(android.content.ActivityNotFoundException error){
-                Toast.makeText(this,"Nema dostupnog odabira datoteka",Toast.LENGTH_LONG).show();
+                AppLanguage.toast(this,"Nema dostupnog odabira datoteka",Toast.LENGTH_LONG).show();
             }
         },()->{shortcutEditor=null;section="Console";render();});
         shortcutEditor.show();
@@ -512,7 +528,7 @@ public final class MainActivity extends Activity {
         }
         MeadowBannerView meadow=new MeadowBannerView(this);
         content.addView(meadow,new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,dp(86)));
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(compactHome()?Math.max(36,Math.min(86,(getResources().getConfiguration().screenHeightDp-500)/3)):86)));
         showShortcuts(true);
         if(wide)content=right;
         LinearLayout desktop=card();
@@ -531,40 +547,13 @@ public final class MainActivity extends Activity {
         windowsExplorerButton=button("EXPLORER",false,v->openWineGui());
         windowsExplorerButton.setCompoundDrawablesRelativeWithIntrinsicBounds(new RetroWindowsDrawable(dp(28)),null,null,null);
         windowsExplorerButton.setCompoundDrawablePadding(dp(7));
-        actionRow(desktop,windowsExplorerButton,
-                button("🎮  XINPUT EDITOR",false,
-                    v->startActivity(new Intent(this,XInputLayoutEditorActivity.class))));
+        LinearLayout.LayoutParams explorerRow=new LinearLayout.LayoutParams(-1,dp(40),1f);
+        explorerRow.topMargin=dp(3);explorerRow.bottomMargin=dp(3);
+        desktop.addView(windowsExplorerButton,explorerRow);
 
-        final Button turnipPreference=button("",false,v->{});
-        final Runnable updateTurnipLabel=()->turnipPreference.setText(
-                "A840 H2.9 AUTO  "+(TurnipRuntime.autoH29Enabled(this)?"ON ●":"OFF ○"));
-        updateTurnipLabel.run();
-        turnipPreference.setOnClickListener(v->{
-            boolean next=!TurnipRuntime.autoH29Enabled(this);
-            TurnipRuntime.setAutoH29Enabled(this,next);
-            updateTurnipLabel.run();
-            Toast.makeText(this,
-                    next?"A840 H2.9: automatski pokušaj pri sljedećem pokretanju Explorera. Potvrda je u Vulkan logu.":
-                            "A840 H2.9 auto isključen; koristi prethodni odabir",
-                    Toast.LENGTH_LONG).show();
-        });
-        final Button dxvkVariant=button("",false,v->{});
-        final Runnable updateDxvkLabel=()->{
-            boolean async=DxvkVariants.ASYNC.equals(DxvkVariants.selected(this));
-            dxvkVariant.setText(async?"DXVK 1.10.3 · ASYNC ✓":"DXVK 1.10.3 · STANDARD");
-            dxvkVariant.setTextColor(async?ACCENT:TEXT);
-        };
-        updateDxvkLabel.run();
-        dxvkVariant.setOnClickListener(v->{
-            String mode=DxvkVariants.toggle(this);
-            updateDxvkLabel.run();
-            Toast.makeText(this,"DXVK "+mode+" · Reset Wine za primjenu.",
-                    Toast.LENGTH_LONG).show();
-        });
-        actionRow(desktop,turnipPreference,dxvkVariant);
         actionRow(desktop,
                 button("▤  PODIJELI LOG",false,v->shareCrashDiagnostics()),
-                button("⚙  KONFIGURACIJA",false,v->showConfigurationMenu()));
+                button("Options",false,v->showSection("Options")));
 
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         wineStartupBar.setMax(100);
@@ -632,6 +621,9 @@ public final class MainActivity extends Activity {
             tile.addView(icon,iconParams);
             String displayName=AppLaunchSettings.load(this,entry.id).title(entry.title);
             TextView name=label(displayName,11,TEXT,false);
+            if(UserShortcuts.isId(entry.id)||!AppLaunchSettings.load(this,entry.id).title.isEmpty()){
+                name.setTag("user-text");name.setText(displayName);
+            }
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             name.setGravity(Gravity.CENTER);
@@ -676,6 +668,13 @@ public final class MainActivity extends Activity {
                 .putExtra("DRNAS_GUI_APP",entry.id));
     }
 
+    private boolean compactHome(){return AppOptionsView.desktop(this).getBoolean("ui_compact",true);}
+    private void showOptions(){
+        LinearLayout panel=card();
+        panel.addView(new AppOptionsView(this,this::render));
+        addButton(panel,"Diagnostics / logs",false,v->showSection("Diagnostics"));
+        addButton(panel,"Wine configuration",false,v->startConfig());
+    }
     private void showComponents() {
         sectionEyebrow(content,"VERSIONED COMPONENT VAULT");
         heading("Your engine parts.");
@@ -971,6 +970,7 @@ public final class MainActivity extends Activity {
         }
         wineBooting=true;
         wineReady=false;
+        wineInitializationError="";
         bootProgress.begin();
         refreshPowerPanel();
         if(!container.startWineboot()) {
