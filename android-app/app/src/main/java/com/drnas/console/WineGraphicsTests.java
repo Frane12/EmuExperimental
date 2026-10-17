@@ -26,6 +26,7 @@ final class WineGraphicsTests {
             hash=new String(data,0,filled,StandardCharsets.US_ASCII).trim();
         }
         install(prefix,exe,hash);
+        installCubeDxvkLocal(prefix,log);
         log.accept("Start > Programs > System Tools > Test Direct3D (DRNAS cube) installed. D3D9 HAL -> selected DXVK/Vulkan driver; rendering still requires device test.");
     }
 
@@ -43,6 +44,33 @@ final class WineGraphicsTests {
         Path menu=directory(root,"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/System Tools");
         write(graphics.resolve("TestD3D.exe"),exe);
         write(menu.resolve("Test Direct3D (DRNAS cube).lnk"),shortcut());
+    }
+
+
+    /** Place matching 32-bit DXVK DLLs beside our own 32-bit cube executable.
+     * Windows loads the app-local DLL before searching the normal system path.
+     * No game or Wine system DLLs are changed here. */
+    static void installCubeDxvkLocal(File prefix,Consumer<String> log) throws Exception {
+        Path root=prefix.getCanonicalFile().toPath();
+        Path graphics=directory(root,"drive_c/DRNAS/Graphics");
+        for(String dll:new String[]{"d3d9.dll","dxgi.dll"}) {
+            Path from=root.resolve("drive_c/windows/syswow64").resolve(dll);
+            if(!Files.isRegularFile(from,LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Cube DXVK x86 source missing: "+dll);
+            byte[] data=Files.readAllBytes(from);
+            DxvkRuntime.validatePe(data,true);
+            Path to=graphics.resolve(dll);
+            if(Files.isSymbolicLink(to))throw new IOException("Unsafe cube DLL path: "+dll);
+            if(Files.isRegularFile(to,LinkOption.NOFOLLOW_LINKS) &&
+                    java.util.Arrays.equals(
+                        MessageDigest.getInstance("SHA-256").digest(data),
+                        MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(to)))) {
+                log.accept("DRNAS_CUBE_DLL "+dll+" x86 verified in C:\\DRNAS\\Graphics");
+                continue;
+            }
+            write(to,data);
+            log.accept("DRNAS_CUBE_DLL "+dll+" x86 installed beside TestD3D.exe; bytes="+data.length);
+        }
     }
 
     private static Path directory(Path root,String relative) throws IOException {
