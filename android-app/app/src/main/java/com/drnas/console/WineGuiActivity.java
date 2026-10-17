@@ -39,6 +39,7 @@ public final class WineGuiActivity extends Activity {
     private TextView dependencyProgressText;
     private ProgressBar dependencyProgressBar;
     private boolean cpuCanvasFallback;
+    private VirtualStickView virtualStick;
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
     private Button shareLog;
@@ -152,7 +153,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -184,6 +185,14 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
+                    else if(which==17) {
+                        boolean show=virtualStick.getVisibility()!=View.VISIBLE;
+                        if(!show)virtualStick.releaseAll();
+                        virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
+                        log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
+                                " input=Wine X11 WASD (XInput controller NOT emulated)");
+                        Toast.makeText(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
+                    }
                     else if(which>=14 && which<=16)
                         testVulkanPresentation(which==14?"x11-only":which==15?"create-checkpoints":"present-checkpoints");
                     else if(which>=10 && which<=13)
@@ -211,6 +220,20 @@ public final class WineGuiActivity extends Activity {
             keyboardAttempts=0;
             showKeyboard();
         });
+        // Opt-in: leaves Wine desktop unobstructed until a game is running.
+        // Sends real X11 keyboard events; no fake XInput claims or uinput permissions.
+        virtualStick=new VirtualStickView(this,(key,pressed)->{
+            if(destroyed || xserver==null)return;
+            KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,key);
+            if(pressed)xserver.getScreen().onKeyDown(key,event);
+            else xserver.getScreen().onKeyUp(key,event);
+        });
+        FrameLayout.LayoutParams stickParams=new FrameLayout.LayoutParams(
+                dp(182),dp(182),Gravity.BOTTOM|Gravity.START);
+        stickParams.leftMargin=dp(18);
+        stickParams.bottomMargin=dp(40);
+        virtualStick.setVisibility(View.GONE);
+        layout.addView(virtualStick,stickParams);
         setContentView(layout);
         try {
             AutomaticCrashLog.begin(this);
@@ -514,6 +537,7 @@ public final class WineGuiActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        if(virtualStick!=null)virtualStick.releaseAll();
         log("DRNAS_X11_LIFECYCLE onPause finishing="+isFinishing()+
                 " changingConfigurations="+isChangingConfigurations());
         super.onPause();
