@@ -20,7 +20,7 @@ on:
       - fix/x11-dependency-diagnostics-v0.5.37
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
-      - experiment/wsi-mode-diagnostics-v0.5.46
+      - experiment/wsi-mode-diagnostics-v0.5.44
       - perf/x11-putimage-bulk-v0.5.46
     paths:
       - "android-app/**"
@@ -93,7 +93,8 @@ jobs:
         run: python3 tests/test_xcb_present_guard.py
       - name: Test pinned Turnip packaging policy
         run: python3 -m unittest discover -s tests -p 'test_turnip_bundle.py'
-      # X11PixelCodecTest included in :app:testDebugUnitTest; same FIFO baseline.\n      - name: Run JVM regression tests before checking signing secrets
+      # X11PixelCodecTest is included in the JVM regression step.
+      - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
       - name: Restore persistent signing key
