@@ -1,5 +1,58 @@
 # Persistent APK signing and safe migration
 
+## Update — mandatory stable key for active pre-alpha builds (17 Oct 2026)
+
+The current DRNAS pre-alpha build branches (`r3`, `r4` and glass UI/0.2)
+no longer produce or publish **temporary/debug-key** APKs when the four
+GitHub Actions secrets are absent. Instead, the signing job stops with a clear
+error. This is intentional: generating a new runner key would make the next
+APK impossible to install as an in-place update.
+
+The private APK build now:
+1. Restores the same PKCS12 keystore from encrypted GitHub Actions secrets.
+2. Validates the alias and public certificate.
+3. Sets `DRNAS_REQUIRE_STABLE_SIGNING=1` for APK packaging.
+4. Validates that the final APK's certificate SHA-256 matches the keystore.
+5. Exports `STABLE-SIGNED.apk` with the certificate digest in README-SIGNING.
+
+Pull requests may run tests without distributing an APK; build/publish paths
+cannot fall back to transient signatures.
+
+### Easiest setup on your own computer
+
+You can configure **one permanent identity** with the source-controlled helper
+script, run locally on a trusted machine with JDK `keytool`, `openssl`, and
+GitHub CLI (`gh`) installed and authenticated:
+
+```bash
+gh auth login
+bash tools/setup_permanent_signing.sh
+```
+
+The script saves the **private** PKCS12 keystore and password under
+`~/.drnas-signing/` and uploads them as four encrypted repository Secrets.
+**Never commit the keystore/password, paste them into chat, or place them
+in a public release.** Back up both local files to secure offline storage.
+
+The setup is idempotent: it reuses those exact files if they exist, and refuses
+to replace an incomplete identity. If a DRNAS signing identity has already been
+used to publish an installable APK, **restore its original key instead of
+creating a new one**.
+
+To verify setup without exposing secret contents, you can open the workflow
+in GitHub Actions and confirm that `Restore mandatory permanent signing key`
+passes and that the attached APK is named `STABLE-SIGNED.apk`. Keep the
+certificate SHA-256 from `README-SIGNING.txt` as a long-term public identity
+reference.
+
+**Important:** the older `...TRANSIENT-LAB...` Android packages were signed
+with different ephemeral certificates and often different `applicationId`
+suffixes, so even a future permanent key **cannot make them upgradable in
+place**. Never uninstall an existing DRNAS app without protecting its Wine
+prefix and imported components if they matter to you. Stable signed builds
+start an upgradeable lineage **from their first install onward**.
+
+
 ## Why Android refuses an update
 The installed debug APK and a new GitHub Actions APK share package ID
 `com.drnas.console`, but different ephemeral debug signing certificates.
