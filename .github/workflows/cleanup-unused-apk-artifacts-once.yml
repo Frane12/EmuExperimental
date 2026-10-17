@@ -1,0 +1,61 @@
+name: One-time cleanup of obsolete DRNAS APK artifacts
+on:
+  push:
+    paths:
+      - '.github/workflows/cleanup-unused-apk-artifacts-once.yml'
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete old APK artifacts, preserve reference builds
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const referenceVersions = new Set(['0.5.10', '0.5.16', '0.5.17', '0.5.28', '0.5.29']);
+            const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+              owner, repo, per_page: 100
+            });
+            const isApk = a => /apk/i.test(a.name);
+            const versionOf = name => {
+              const m = name.match(/(?:^|[^0-9])v?(0\.5\.\d+)(?!\d)/i);
+              return m ? m[1] : null;
+            };
+            const sorted = artifacts.filter(a => !a.expired && isApk(a))
+              .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+            const keptVersions = new Set();
+            const keep = [], remove = [];
+            for (const artifact of sorted) {
+              const v = versionOf(artifact.name);
+              if (referenceVersions.has(v) && !keptVersions.has(v)) {
+                keptVersions.add(v);
+                keep.push(artifact);
+              } else {
+                remove.push(artifact);
+              }
+            }
+            core.info('Reference builds preserved: ' + JSON.stringify(keep.map(a=>({
+              id:a.id,name:a.name,bytes:a.size_in_bytes
+            }))));
+            core.info('Other (non-APK) artifacts are NOT touched.');
+            core.info('APK artifacts marked for deletion: ' + remove.length);
+            if (remove.length > 500) {
+              core.setFailed('Safety stop: >500 artifacts, no deletion performed');
+              return;
+            }
+            let deleted=0, bytes=0, failures=[];
+            for (const artifact of remove) {
+              try {
+                await github.rest.actions.deleteArtifact({owner,repo,artifact_id:artifact.id});
+                deleted++; bytes += artifact.size_in_bytes || 0;
+              } catch (e) {
+                failures.push(artifact.id + ': ' + e.message);
+              }
+            }
+            core.info('Deleted '+deleted+' APK artifacts, freed approx '+(bytes/1024/1024/1024).toFixed(2)+' GiB.');
+            if (failures.length) core.setFailed('Failed deleting: '+failures.join('; '));
