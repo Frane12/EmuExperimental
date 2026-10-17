@@ -29,7 +29,7 @@ import java.util.function.IntPredicate;
 final class DrnasGlassOptions {
     interface OnChoose { void onChoose(DialogInterface menu,int index); }
     private static final int[] ORDER={
-            21,20,19,17,18,22,1,23,24,25,26,27,
+            21,20,19,17,18,22,28,29,1,23,24,25,26,27,
             0,2,6,7,8,4,5,9,3,
             10,11,12,13,14,15,16
     };
@@ -69,7 +69,7 @@ final class DrnasGlassOptions {
     }
     private boolean toggle(int index) {
         return index==1||index==17||index==18||index==19||
-               index==20||index==21||index==22;
+               index==20||index==21||index==22||index==28||index==29;
     }
     private void title(LinearLayout content,String title) {
         TextView caption=text(title,10,0xff75bfcd,true);
@@ -147,13 +147,13 @@ final class DrnasGlassOptions {
         panel.addView(subtitle,subParams);
 
         title(panel,"LIVE CONTROLS");
-        for(int i=0;i<11;i++)option(panel,ORDER[i]);
+        for(int i=0;i<13;i++)option(panel,ORDER[i]);
         title(panel,"RENDER A/B I MJERENJA");
         option(panel,27);
         title(panel,"WINDOWS / GENERAL");
-        for(int i=11;i<20;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
+        for(int i=13;i<22;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
         title(panel,"WSI DIJAGNOSTIKA");
-        for(int i=20;i<ORDER.length;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
+        for(int i=22;i<ORDER.length;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
 
         AlertDialog.Builder builder=new AlertDialog.Builder(activity);
         dialog=builder.setView(scroll).create();
