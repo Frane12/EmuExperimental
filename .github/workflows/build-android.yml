@@ -142,14 +142,14 @@ jobs:
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/x11-window-present-v0.5.34' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/turnip-autotuner-v0.5.34' }}
         with:
           name: Drnas-Console-v0.5.34-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve APK in a private draft release if artifact quota is full
-        if: steps.apk-artifact.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/fix/x11-window-present-v0.5.34'
+        if: steps.apk-artifact.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/fix/turnip-autotuner-v0.5.34'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
