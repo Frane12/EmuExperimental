@@ -39,6 +39,7 @@ public final class WineGuiActivity extends Activity {
     private TextView dependencyProgressText;
     private ProgressBar dependencyProgressBar;
     private boolean cpuCanvasFallback;
+    private volatile boolean verboseLogs; // OFF by default, live menu toggle
     private VirtualStickView virtualStick;
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
@@ -153,7 +154,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -185,6 +186,18 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
+                    else if(which==18) {
+                        verboseLogs=!verboseLogs;
+                        if(raw!=null)raw.setVerbose(verboseLogs);
+                        if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
+                        if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
+                        log("DRNAS_DIAGNOSTICS_TOGGLE "+(verboseLogs?"ON":"OFF")+
+                                " | X11/raw logging changes live. Wine/DXVK verbose env applies after Reset Wine.");
+                        Toast.makeText(this,verboseLogs?
+                                "Logovi ON. Puni Wine/DXVK trace nakon Reset Wine.":
+                                "Logovi OFF: prikaz bez dijagnostičkog opterećenja.",
+                                Toast.LENGTH_LONG).show();
+                    }
                     else if(which==17) {
                         boolean show=virtualStick.getVisibility()!=View.VISIBLE;
                         if(!show)virtualStick.releaseAll();
@@ -246,6 +259,7 @@ public final class WineGuiActivity extends Activity {
         }
 
         session=new WineGuiSession();
+        session.setDiagnosticsEnabled(verboseLogs);
         String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
         // Default always starts Explorer, never Wine configuration.
         final String launchApp="files".equals(requested) ? "files":
@@ -301,7 +315,15 @@ public final class WineGuiActivity extends Activity {
     }
 
     private synchronized void log(String line) {
-        if(raw!=null)raw.write("GUI",line);
+        // UI progress + fatal evidence are independent of optional verbose IO.
+        // In quiet mode do not block the rendering or X11 event paths on disk.
+        boolean critical=AutomaticLogTrigger.matches(line) ||
+                line.contains(":err:") || line.contains("dlerror") ||
+                line.contains("fatal IO error") || line.startsWith("Audio unavailable:");
+        if(raw!=null) {
+            if(verboseLogs)raw.write("GUI",line);
+            else if(critical)raw.writeEssential("GUI",line);
+        }
         if(!destroyed && AutomaticLogTrigger.matches(line)) {
             try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
             AutomaticCrashLog.request(this,line);
@@ -483,7 +505,8 @@ public final class WineGuiActivity extends Activity {
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
-                "\nDesktop failed: "+desktopFailed+"\n\n";
+                "\nDesktop failed: "+desktopFailed+
+                "\nVerbose logging: "+verboseLogs+" (Wine/DXVK native verbosity set at desktop launch)\n\n";
         out.write(header.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         AndroidCrashDiagnostics.appendExitHistory(this,out);
         DiagnosticLogBundle.write(getFilesDir(),raw,out);
