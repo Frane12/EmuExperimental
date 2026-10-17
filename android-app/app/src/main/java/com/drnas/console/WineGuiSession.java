@@ -206,6 +206,9 @@ final class WineGuiSession implements AutoCloseable {
                     ("files".equals(app)?" with winefile.exe":
                      "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
                     "; HWUI desktop + Mesa Vulkan X11 readback presentation (experimental).");
+            Map<String,String> dxvkSeen=new HashMap<>();
+            DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
+            log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
@@ -213,7 +216,6 @@ final class WineGuiSession implements AutoCloseable {
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw);
             long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
-            Map<String,String> dxvkSeen=new HashMap<>();
             long nextDxvkAudit=0;
             while(!stopped && server.alive() && System.nanoTime()<until) {
                 long now=System.nanoTime();
@@ -257,7 +259,7 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw);
         tools.log.accept("Task Manager requested in existing shell desktop and Wine prefix.");
     }
-    void testVulkanPresentation(Context context) throws IOException {
+    void testVulkanPresentation(Context context,boolean immediate) throws IOException {
         GuestTools tools;
         synchronized(this) {
             tools=guestTools;
@@ -267,7 +269,7 @@ final class WineGuiSession implements AutoCloseable {
         }
         try {
             TurnipRuntime.probeWine(context,new File(context.getFilesDir(),"gui-runtime/v1"),
-                    new HashMap<>(tools.env),tools.log,tools.raw,true);
+                    new HashMap<>(tools.env),tools.log,tools.raw,true,immediate);
         } finally { synchronized(this){vulkanProbeThread=null;} }
     }
     @Override public synchronized void close() {
