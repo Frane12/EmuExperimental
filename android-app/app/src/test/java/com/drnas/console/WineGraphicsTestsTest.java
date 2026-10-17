@@ -42,7 +42,7 @@ public class WineGraphicsTestsTest {
             Path cube=root.resolve("drive_c/DRNAS/Graphics");
             assertArrayEquals(d3d9,Files.readAllBytes(cube.resolve("d3d9.dll")));
             assertArrayEquals(dxgi,Files.readAllBytes(cube.resolve("dxgi.dll")));
-            String config=Files.readString(cube.resolve("dxvk.conf"));
+            String config=new String(Files.readAllBytes(cube.resolve("dxvk.conf")),StandardCharsets.US_ASCII);
             assertTrue(config.contains("[TestD3D.exe]"));
             assertTrue(config.contains("d3d9.presentInterval = 1"));
             assertTrue(config.contains("dxgi.syncInterval = 1"));
