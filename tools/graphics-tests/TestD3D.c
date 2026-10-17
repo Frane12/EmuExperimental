@@ -38,7 +38,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     if(!window)return 2;
     /* Map the actual X11 window BEFORE DXVK creates its Vulkan surface/swapchain.
      * Waiting until after CreateDevice can leave the WSI target unmapped. */
-    ShowWindow(window,SW_SHOWNORMAL);
+    ShowWindow(window,show == SW_HIDE ? SW_SHOWNORMAL : show);
     UpdateWindow(window);
     OutputDebugStringA("DRNAS_CUBE: X11 window mapped before D3D9 CreateDevice\\n");
     IDirect3D9 *api=Direct3DCreate9(D3D_SDK_VERSION);
@@ -64,7 +64,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     projection._33=100.0f/99.9f;projection._34=1;projection._43=-0.1f*100.0f/99.9f;
     IDirect3DDevice9_SetTransform(device,D3DTS_VIEW,&view);
     IDirect3DDevice9_SetTransform(device,D3DTS_PROJECTION,&projection);
-    DWORD start=GetTickCount(),tick=start;unsigned frames=0;MSG message={0};int result=0;
+    DWORD start=GetTickCount(),tick=start;unsigned frames=0;MSG message={0};int result=0;BOOL firstPresentLogged=FALSE;
     while(message.message!=WM_QUIT) {
         if(PeekMessageA(&message,NULL,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageA(&message);continue;}
         if(IsIconic(window)){Sleep(25);continue;}
@@ -86,7 +86,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
             failure("Render/Present",hr);result=5;break;
         }
         frames++;DWORD now=GetTickCount();
-        if(frames==1)OutputDebugStringA("DRNAS_CUBE: first D3D9 Present succeeded (onscreen visibility not guaranteed)\\n");
+        if(!firstPresentLogged){firstPresentLogged=TRUE;OutputDebugStringA("DRNAS_CUBE: first D3D9 Present succeeded (onscreen visibility not guaranteed)\\n");}
         if(now-tick>=1000){char title[512];snprintf(title,sizeof(title),
             "DRNAS D3D9 cube | %.1f FPS | %s | Esc closes",frames*1000.0/(now-tick),adapter.Description);
             SetWindowTextA(window,title);tick=now;frames=0;}
