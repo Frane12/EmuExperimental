@@ -12,6 +12,8 @@ import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.text.InputType;
@@ -33,6 +35,9 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean started;
     private volatile boolean destroyed;
     private TextView startupStatus;
+    private LinearLayout dependencyPanel;
+    private TextView dependencyProgressText;
+    private ProgressBar dependencyProgressBar;
     private boolean cpuCanvasFallback;
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
@@ -96,6 +101,31 @@ public final class WineGuiActivity extends Activity {
         startupStatus.setBackgroundColor(0xA9000000);
         layout.addView(startupStatus,new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,dp(56),Gravity.CENTER));
+
+        // Separate factual progress bar for first-time offline redistributable installs.
+        // Shown only when a Dependencies.zip has been imported; percentage means
+        // completed installer attempts, NOT a guessed time estimate.
+        dependencyPanel=new LinearLayout(this);
+        dependencyPanel.setOrientation(LinearLayout.VERTICAL);
+        dependencyPanel.setBackgroundColor(0xDF102235);
+        dependencyPanel.setPadding(dp(14),dp(11),dp(14),dp(13));
+        dependencyProgressText=new TextView(this);
+        dependencyProgressText.setTextColor(0xFFE0EFF8);
+        dependencyProgressText.setTextSize(14);
+        dependencyProgressText.setText("Instalacija Windows dodataka");
+        dependencyPanel.addView(dependencyProgressText);
+        dependencyProgressBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        dependencyProgressBar.setMax(100);
+        dependencyProgressBar.setIndeterminate(false);
+        dependencyPanel.addView(dependencyProgressBar,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(7)));
+        dependencyPanel.setVisibility(View.GONE);
+        FrameLayout.LayoutParams depParams=new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+        depParams.leftMargin=dp(22);depParams.rightMargin=dp(22);
+        depParams.bottomMargin=dp(22);
+        layout.addView(dependencyPanel,depParams);
 
         // Android controls remain reachable even if Wine has no mapped window.
         shareLog=new Button(this);
@@ -251,6 +281,27 @@ public final class WineGuiActivity extends Activity {
             AutomaticCrashLog.request(this,line);
         }
         if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
+        if(line.startsWith("[Dependencies] ")) {
+            int separator=line.indexOf('|',15);
+            if(separator>0) {
+                try {
+                    final int percent=Integer.parseInt(line.substring(15,separator).trim());
+                    final String label=line.substring(separator+1);
+                    runOnUiThread(()->{
+                        if(destroyed || dependencyPanel==null)return;
+                        dependencyProgressBar.setProgress(Math.max(0,Math.min(100,percent)));
+                        dependencyProgressText.setText(label+"  •  "+percent+"%");
+                        dependencyPanel.setVisibility(View.VISIBLE);
+                        if(percent>=100)dependencyPanel.postDelayed(()->{
+                            if(!destroyed && dependencyPanel!=null)
+                                dependencyPanel.setVisibility(View.GONE);
+                        },2100);
+                    });
+                } catch(NumberFormatException badProgress) {
+                    android.util.Log.w("DRNAS-Dependencies","Invalid progress: "+line);
+                }
+            }
+        }
         if(line.startsWith("Pripremam disk R:") || line.startsWith("Installing Wine Mono") ||
                 line.startsWith("Installing Microsoft VC++") ||
                 line.startsWith("Launching Wine explorer")) {
