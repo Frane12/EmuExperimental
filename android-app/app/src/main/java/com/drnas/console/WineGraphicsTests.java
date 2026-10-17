@@ -45,10 +45,10 @@ final class WineGraphicsTests {
         write(graphics.resolve("TestD3D.exe"),exe);
         // DXVK 1.10.3 supports per-executable sections in dxvk.conf.
         // Restrict the FIFO experiment to our cube so other games stay unchanged.
-        String fifoConfig="# DRNAS experimental: native Vulkan FIFO vs DXVK immediate\\n" +
-                "[TestD3D.exe]\\n" +
-                "d3d9.presentInterval = 1\\n" +
-                "dxgi.syncInterval = 1\\n";
+        String fifoConfig="# DRNAS experimental: native Vulkan FIFO vs DXVK immediate\n" +
+                "[TestD3D.exe]\n" +
+                "d3d9.presentInterval = 1\n" +
+                "dxgi.syncInterval = 1\n";
         write(graphics.resolve("dxvk.conf"),fifoConfig.getBytes(StandardCharsets.US_ASCII));
         write(menu.resolve("Test Direct3D (DRNAS cube).lnk"),shortcut());
     }
