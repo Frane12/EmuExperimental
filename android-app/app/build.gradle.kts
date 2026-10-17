@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 78
-        versionName = "preAlpha-0.1-r13-desktop-meadow"
+        versionCode = 79
+        versionName = "preAlpha-0.1-r14-glass-bora"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
