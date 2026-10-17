@@ -45,7 +45,7 @@ final class RawWineTrace implements AutoCloseable {
         if(java.nio.file.Files.isSymbolicLink(f.toPath()))
             throw new IOException("Refuse symlinked RAW log target");
         out=new BufferedOutputStream(new FileOutputStream(f,false),65536);
-        write("DRNAS","RAW Wine trace started "+new SimpleDateFormat(
+        writeEssential("DRNAS","RAW Wine trace started "+new SimpleDateFormat(
                 "yyyy-MM-dd HH:mm:ss",Locale.US).format(new Date()));
     }
 
