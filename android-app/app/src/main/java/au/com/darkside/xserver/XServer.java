@@ -107,25 +107,21 @@ public class XServer {
         if(renderCaptureEnabled)renderCapture.display(System.nanoTime());
     }
 
-    private final X11GameTailGuard gameTailGuard=new X11GameTailGuard();
-    // Compositor fix, not guest bitmap tail scrub. Default ON, A/B switch OFF.
-    private volatile boolean gameTailGuardEnabled=true;
-    public void setGameTailGuardEnabled(boolean enabled) {
-        gameTailGuardEnabled=enabled;
-        if(!enabled)gameTailGuard.reset();
+    private final X11PresentedFrameMask presentationMask=new X11PresentedFrameMask();
+    private volatile boolean presentationMaskEnabled=true;
+    public void setPresentationMaskEnabled(boolean enabled) {
+        presentationMaskEnabled=enabled;
+        if(!enabled)presentationMask.clear();
         getScreen().postInvalidateOnAnimation();
     }
-    public void noteGameFrameCandidate(int srcW,int srcH,int targetW,int targetH,
-                                       int dstX,int dstY,boolean opaqueCopy) {
-        if(!gameTailGuardEnabled)return;
-        int rootW=getScreen().getGuestWidth();
-        int rootH=getScreen().getGuestHeight();
-        int gap=X11GameTailGuard.candidateGap(srcW,srcH,targetW,targetH,rootW,rootH,
-                dstX,dstY,opaqueCopy);
-        if(gap>0)gameTailGuard.observe(gap,targetH,System.nanoTime());
+    public void notePresentedImage(int srcW,int srcH,int dstX,int dstY,boolean opaqueCopy) {
+        if(!presentationMaskEnabled)return;
+        presentationMask.report(srcW,srcH,dstX,dstY,
+                getScreen().getGuestWidth(),getScreen().getGuestHeight(),
+                opaqueCopy,System.nanoTime());
     }
-    public int getGameTailGap() {
-        return gameTailGuardEnabled?gameTailGuard.visibleGap(System.nanoTime()):0;
+    public int getPresentationMaskRows() {
+        return presentationMaskEnabled?presentationMask.visibleRows(System.nanoTime()):0;
     }
     public void setFrameDiagnosticsEnabled(boolean enabled) {
         frameDiagnosticsEnabled=enabled;
