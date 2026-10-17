@@ -44,6 +44,7 @@ public final class MainActivity extends Activity {
     private static final int PICK_SHARED_FOLDER = 304;
     private static final int PICK_MONO = 305;
     private static final int PICK_VC = 306;
+    private static final int PICK_DEPENDENCIES_ZIP = 307;
     private static final int BACK = 0xFF0A101B;
     private static final int PANEL = 0xFF132034;
     private static final int BORDER = 0xFF2C4054;
@@ -79,6 +80,11 @@ public final class MainActivity extends Activity {
     private Button resetWineButton;
     private ProgressBar wineStartupBar;
     private TextView wineStartupText;
+    private ProgressBar dependencyImportProgress;
+    private TextView dependencyImportStatus;
+    private volatile boolean dependencyImporting;
+    private volatile int dependencyImportPercent;
+    private volatile String dependencyImportLabel="Odaberi Dependencies.zip za offline instalaciju";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -395,6 +401,17 @@ public final class MainActivity extends Activity {
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
         addButton(panel,"Import Wine Mono (.msi)",false,v->selectPrerequisite(PICK_MONO));
         addButton(panel,"Import VC++ Redist x64 (.exe)",false,v->selectPrerequisite(PICK_VC));
+        addButton(panel,"IMPORT DEPENDENCIES.ZIP (offline)",true,v->selectPrerequisite(PICK_DEPENDENCIES_ZIP));
+        dependencyImportProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+        dependencyImportProgress.setMax(100);
+        dependencyImportProgress.setProgress(dependencyImportPercent);
+        dependencyImportProgress.setIndeterminate(false);
+        dependencyImportProgress.setVisibility(dependencyImporting?View.VISIBLE:View.GONE);
+        panel.addView(dependencyImportProgress,pad(10,4));
+        dependencyImportStatus=label(dependencyImportLabel+
+                (dependencyImporting?"  •  "+dependencyImportPercent+"%":""),12,MUTED,false);
+        panel.addView(dependencyImportStatus,pad(7,6));
+        note(panel,"Dependencies.zip is imported once through Android Files, not downloaded. Offline first-time installation starts before Wine Explorer: DirectX June 2010, VC++ x86/x64, OpenAL, XNA and VulkanRT. .NET and websetup are skipped. Check the GUI install progress bar and private log for failures.");
         note(panel,"Imported prerequisite installers run automatically ONCE per SHA-256 in each persistent Wine prefix. No installer is marked successful until its Wine process exits 0 (or 3010). Supply a genuine Wine Mono MSI and Microsoft VC++ x64 EXE. An APK-bundled wine-mono.msi is used automatically if present.");
         LinearLayout sharing=card();
         sharing.addView(label("WINDOWS R: · ANDROID SHARED FILES",11,ACCENT,true),pad(0,9));
@@ -718,6 +735,35 @@ public final class MainActivity extends Activity {
         }
         if(request==EXPORT_RAW_WINE_LOG) {
             completeRawWineExport(uri);
+            return;
+        }
+        if(request==PICK_DEPENDENCIES_ZIP) {
+            if(dependencyImporting){append("Dependency archive import already active");return;}
+            dependencyImporting=true;
+            dependencyImportPercent=0;
+            dependencyImportLabel="Kopiranje Dependencies.zip";
+            if(dependencyImportProgress!=null){dependencyImportProgress.setProgress(0);dependencyImportProgress.setVisibility(View.VISIBLE);}
+            if(dependencyImportStatus!=null)dependencyImportStatus.setText(dependencyImportLabel+"  •  0%");
+            new Thread(()->{
+                try {
+                    String summary=WineDependencyBundle.importUri(this,uri,(percent,label)->runOnUiThread(()->{
+                        dependencyImportPercent=percent;
+                        dependencyImportLabel=label;
+                        if(dependencyImportProgress!=null)dependencyImportProgress.setProgress(percent);
+                        if(dependencyImportStatus!=null)dependencyImportStatus.setText(label+"  •  "+percent+"%");
+                    }));
+                    append(summary);
+                } catch(Exception error) {
+                    append("Dependencies.zip import failed: "+error.getMessage());
+                    runOnUiThread(()->dependencyImportLabel="Import nije uspio: "+error.getMessage());
+                } finally {
+                    runOnUiThread(()->{
+                        dependencyImporting=false;
+                        if(dependencyImportProgress!=null)dependencyImportProgress.setVisibility(View.GONE);
+                        if(dependencyImportStatus!=null)dependencyImportStatus.setText(dependencyImportLabel);
+                    });
+                }
+            },"drnas-dependencies-zip-import").start();
             return;
         }
         if(request==PICK_MONO || request==PICK_VC) {
