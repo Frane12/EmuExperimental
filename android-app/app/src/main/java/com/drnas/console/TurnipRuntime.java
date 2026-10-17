@@ -94,9 +94,19 @@ final class TurnipRuntime {
         env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParentFile().getAbsolutePath()+"/");
         env.put("ADRENOTOOLS_DRIVER_NAME",driver.getName());
         env.put("DRNAS_TURNIP_PREFERRED","1");
+        // Passed to the initial native Vulkan probe AND inherited by Wine/DXVK.
+        // This requests profiling-based Mesa/Turnip autotuning when supported by
+        // the installed driver. It never forces a GMEM/SYSMEM render path.
+        enableProfiledAutotuner(env,log);
         env.put("LD_LIBRARY_PATH",driver.getParentFile().getAbsolutePath()+":"+
                 env.getOrDefault("LD_LIBRARY_PATH",""));
         log.accept("Drnas Turnip backend requested through AdrenoTools: "+driver.getName()+"; native device/swapchain probe follows.");
+    }
+
+    static void enableProfiledAutotuner(Map<String,String> env,Consumer<String> log) {
+        env.put("TU_AUTOTUNE_ALGO","profiled");
+        log.accept("Turnip autotuner startup: TU_AUTOTUNE_ALGO=profiled requested "
+                +"for native Vulkan probe and Wine/DXVK; actual support depends on loaded driver.");
     }
 
     static void configureWrapper(File lib,Map<String,String> env) throws Exception {
