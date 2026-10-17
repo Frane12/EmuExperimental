@@ -27,7 +27,7 @@ final class WineShortcuts {
     private static final String[][] BUILTINS = {
         {"notepad","Notepad","▤","notepad.exe"},
         {"wordpad","WordPad","▣","wordpad.exe"},
-        {"paint","Paint","✎","mspaint.exe"},
+        {"paint","DRNAS Paint","✎","C:\\DRNAS\\Tools\\DRNASPaint.exe"},
         {"tasks","Task Manager","▥","taskmgr.exe"},
         {"calc","Calculator","▦","calc.exe"},
         {"control","Control Panel","⚙","control.exe"},
