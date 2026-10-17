@@ -114,7 +114,9 @@ final class WineGuiSession implements AutoCloseable {
         } catch(IOException error) {
             log.accept("Crysis fullscreen guard unavailable: "+error.getMessage());
         }
-        DxvkRuntime.install(new File(base,"prefix"),prefix,log);
+        // DLLs are swapped exclusively before launching Wine: switching mode
+        // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
+        boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log);
         WineGraphicsTests.install(context,prefix,log);
         // Local source-built XInput ABI shim: no Wine bus/uinput/root access.
         // If installation fails, retain the original Wine XInput built-ins.
@@ -131,6 +133,10 @@ final class WineGuiSession implements AutoCloseable {
         File tmp=new File(base,"gui-tmp");if(!tmp.isDirectory()&&!tmp.mkdirs())throw new IOException("GUI tmp unavailable");
         Map<String,String> env=new HashMap<>(System.getenv());
         env.put("WINEPREFIX",prefix.getAbsolutePath());env.put("WINEARCH","win64");
+        env.put("DXVK_ASYNC",asyncDxvk?"1":"0");
+        env.put("DRNAS_DXVK_SELECTED_VARIANT",asyncDxvk?"async":"standard");
+        log.accept("DRNAS_DXVK_MODE "+(asyncDxvk?"1.10.3-async":"1.10.3-standard")+
+                " (DLLs validated and staged, game runtime not yet verified)");
         env.put("HOME",base.getAbsolutePath());env.put("TMPDIR",tmp.getAbsolutePath());
         env.put("XDG_RUNTIME_DIR",tmp.getAbsolutePath());env.put("LC_ALL","C");
         StringBuilder libs=new StringBuilder(nativeDir.getAbsolutePath());
