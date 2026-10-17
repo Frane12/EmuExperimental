@@ -911,6 +911,10 @@ public class Drawable {
             }
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
+                // The 707/720 issue may be OUTSIDE the game drawable.
+                // This informs the root compositor only; no guest pixels changed.
+                xServer.noteGameFrameCandidate(width,height,_bitmap.getWidth(),
+                        _bitmap.getHeight(),(int)dstX,(int)dstY,true);
             } else {
                 _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
                 _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
