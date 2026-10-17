@@ -85,6 +85,9 @@ public class XServer {
     private long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
     private boolean canvasReported;
     private volatile boolean frameDiagnosticsEnabled;
+    private volatile boolean experimentalBulkDecode;
+    public void setExperimentalBulkDecode(boolean enabled){experimentalBulkDecode=enabled;}
+    public boolean isExperimentalBulkDecode(){return experimentalBulkDecode;}
     private final RenderSampleRecorder renderCapture=new RenderSampleRecorder();
     private volatile boolean renderCaptureEnabled;
     public synchronized boolean startRenderCapture() {
