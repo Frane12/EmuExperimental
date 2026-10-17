@@ -12,6 +12,9 @@ import java.util.function.Consumer;
 /** A bounded GUI session on the already verified disposable Wineboot prefix. */
 final class WineGuiSession implements AutoCloseable {
     private static WineGuiSession active;
+    // Volatile: menu toggle takes effect for Java/X11 diagnostics immediately.
+    private volatile boolean diagnosticsEnabled;
+    void setDiagnosticsEnabled(boolean enabled) { diagnosticsEnabled=enabled; }
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
     private volatile PulseAudioRuntime audio;
@@ -59,7 +62,7 @@ final class WineGuiSession implements AutoCloseable {
         // Full logs can still be exported from the app when needed.
         // Process creation/termination traces identify which guest PID dies:
         // Explorer can remain alive even when a game exits immediately.
-        env.put("WINEDEBUG","-all,err+all,+seh,+process,+timestamp,+pid");
+        env.put("WINEDEBUG","-all,err+all"); // quiet default, no per-process traces
     }
 
     void run(Context context,Consumer<String> log,RawWineTrace raw) throws Exception {
@@ -128,7 +131,7 @@ final class WineGuiSession implements AutoCloseable {
             if(dir.isDirectory())libs.append(":").append(dir.getAbsolutePath());
         env.put("LD_LIBRARY_PATH",libs.toString());
         // A log without device enumeration is not proof of a DXVK adapter.
-        env.put("DXVK_LOG_LEVEL","debug"); // LAB diagnostic only; DXVK errors and WSI hints
+        env.put("DXVK_LOG_LEVEL",diagnosticsEnabled?"debug":"error"); // process-start setting
         env.put("DXVK_LOG_PATH",tmp.getAbsolutePath());
         // Guest path, not Android /data/..: DXVK's Win32 file stream reads this
         // application-scoped config. DXVK 1.10.3 ignores other executable sections.
@@ -147,6 +150,13 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        // These two native environment switches are read by Wine/DXVK when
+        // their processes start; Java/X11 logging can also change mid-session.
+        env.put("WINEDEBUG",diagnosticsEnabled?
+                "-all,err+all,+seh,+process,+timestamp,+pid":"-all,err+all");
+        env.put("DXVK_LOG_LEVEL",diagnosticsEnabled?"debug":"error");
+        log.accept("DRNAS_DIAGNOSTICS="+(diagnosticsEnabled?"ON":"OFF")+
+                " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
         File gl=new File(guiRuntime,"lib/libGL.so.1");
@@ -215,13 +225,13 @@ final class WineGuiSession implements AutoCloseable {
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
-            Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw);
+            Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);
             long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
             long nextDxvkAudit=0;
             while(!stopped && server.alive() && System.nanoTime()<until) {
                 long now=System.nanoTime();
-                if(now>=nextDxvkAudit) {
+                if(diagnosticsEnabled && now>=nextDxvkAudit) {
                     DxvkDiagnosticSnapshot.report(tmp,dxvkSeen,log);
                     nextDxvkAudit=now+TimeUnit.SECONDS.toNanos(5);
                 }
@@ -233,7 +243,7 @@ final class WineGuiSession implements AutoCloseable {
                 }
                 Thread.sleep(200);
             }
-            DxvkDiagnosticSnapshot.report(tmp,new HashMap<>(),log);
+            if(diagnosticsEnabled)DxvkDiagnosticSnapshot.report(tmp,new HashMap<>(),log);
             log.accept("DRNAS_DXVK_AUDIT: a created swapchain is not proof of the first successful Present.");
             log.accept(stopped?"GUI stopped by user/lifecycle.":"GUI bounded session ended.");
             if(launcher.isAlive())launcher.destroyForcibly();
@@ -258,7 +268,7 @@ final class WineGuiSession implements AutoCloseable {
                 .directory(tools.proton).redirectErrorStream(true);
         pb.environment().clear();pb.environment().putAll(tools.env);
         Process task=pb.start();
-        WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw);
+        WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw,()->diagnosticsEnabled);
         tools.log.accept("Task Manager requested in existing shell desktop and Wine prefix.");
     }
     void testVulkanPresentation(Context context,String mode) throws IOException {
