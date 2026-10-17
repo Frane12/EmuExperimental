@@ -47,6 +47,7 @@ public class InputOutput {
     private InputStream input() { return _requestBody == null ? _inStream : _requestBody; }
 
     String outputFailure() { return _outputQueue.failureDescription(); }
+    String outputStats() { return _outputQueue.transferSnapshot(); }
     private static final byte[] PadBytes = new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     /**
