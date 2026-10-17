@@ -14,6 +14,7 @@ final class X11OutputQueue extends OutputStream {
     private final Object state=new Object();
     private final Thread writer;
     private int pendingBytes;
+    private long bytesDeliveredToSocket;
     private boolean closed;
     private IOException failure;
 
@@ -64,8 +65,11 @@ final class X11OutputQueue extends OutputStream {
             while(true) {
                 byte[] bytes=queue.take();
                 synchronized(state){if(closed)return;}
-                try {target.write(bytes);target.flush();}
-                finally {synchronized(state){pendingBytes=Math.max(0,pendingBytes-bytes.length);}}
+                try {
+                    target.write(bytes);
+                    target.flush();
+                    synchronized(state){bytesDeliveredToSocket+=bytes.length;}
+                } finally {synchronized(state){pendingBytes=Math.max(0,pendingBytes-bytes.length);}}
             }
         } catch(InterruptedException stopped) {
             Thread.currentThread().interrupt();
@@ -74,6 +78,13 @@ final class X11OutputQueue extends OutputStream {
         } finally {
             close();
             try {target.close();}catch(IOException ignored){}
+        }
+    }
+
+    String transferSnapshot() {
+        synchronized(state) {
+            return "socketWritten="+bytesDeliveredToSocket+" pending="+pendingBytes+
+                    " chunks="+queue.size()+" failure="+(failure==null?"none":failure);
         }
     }
 
