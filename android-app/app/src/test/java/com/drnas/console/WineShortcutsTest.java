@@ -18,6 +18,13 @@ public final class WineShortcutsTest {
         assertTrue(WineShortcuts.isLaunchRequest("builtin:wordpad"));
         assertFalse(WineShortcuts.isLaunchRequest("builtin:notfound"));
     }
+    @Test public void nativeLauncherHasNoShellInterpolation() {
+        java.util.List<String> cmd=WineGuiSession.command(
+                new File("/system/bin/linker64"),new File("/guest/bin/wine"),"builtin:paint");
+        assertEquals("explorer.exe",cmd.get(2));
+        assertTrue(cmd.contains("C:\\DRNAS\\Tools\\DRNASPaint.exe"));
+        assertEquals("C:\\DRNAS\\Tools\\DRNASPaint.exe",cmd.get(cmd.size()-1));
+    }
     @Test public void linkLaunchRejectsTraversalAndMissingFiles() throws Exception {
         File prefix=folder.newFolder("wine");
         File desktop=new File(prefix,"drive_c/users/xuser/Desktop");
