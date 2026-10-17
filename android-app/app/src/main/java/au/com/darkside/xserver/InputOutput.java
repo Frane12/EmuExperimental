@@ -3,6 +3,9 @@ package au.com.darkside.xserver;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.EOFException;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.net.Socket;
 
 
@@ -16,6 +19,34 @@ public class InputOutput {
     private final BufferedOutputStream _outStream;
     private final X11OutputQueue _outputQueue;
     private boolean _msb = true;
+    private ByteArrayInputStream _requestBody;
+    static final int MAX_REQUEST_WORDS = 4 * 1024 * 1024; // 16 MiB, including header.
+
+    /** Receive the complete body before the caller takes the global X server lock. */
+    void beginRequest(int length) throws IOException {
+        if (length < 0 || length > MAX_REQUEST_WORDS * 4 - 4)
+            throw new IOException("Invalid X11 request body length: " + length);
+        if (_requestBody != null) throw new IOException("Nested X11 request");
+        byte[] body = new byte[length];
+        int offset = 0;
+        while (offset < length) {
+            int count = _inStream.read(body, offset, length - offset);
+            if (count < 0) throw new EOFException("Truncated X11 request body: " + offset + "/" + length);
+            if (count == 0) continue;
+            offset += count;
+        }
+        _requestBody = new ByteArrayInputStream(body);
+    }
+
+    int endRequest() {
+        int unread = _requestBody == null ? 0 : _requestBody.available();
+        _requestBody = null;
+        return unread;
+    }
+
+    private InputStream input() { return _requestBody == null ? _inStream : _requestBody; }
+
+    String outputFailure() { return _outputQueue.failureDescription(); }
     private static final byte[] PadBytes = new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
     /**
@@ -48,9 +79,9 @@ public class InputOutput {
      * @throws IOException
      */
     public int readByte() throws IOException {
-        int n = _inStream.read();
+        int n = input().read();
 
-        if (n < 0) throw new IOException();
+        if (n < 0) throw new EOFException(_requestBody == null ? "X11 peer EOF" : "X11 handler read past request boundary");
         else return n;
     }
 
@@ -64,10 +95,10 @@ public class InputOutput {
      */
     public void readBytes(byte[] ba, int offset, int length) throws IOException {
         while (length > 0) {
-            int n = _inStream.read(ba, offset, length);
+            int n = input().read(ba, offset, length);
 
             if (n < 0) {
-                throw new IOException();
+                throw new EOFException("Truncated X11 data or request boundary exceeded");
             } else {
                 length -= n;
                 offset += n;
@@ -206,11 +237,16 @@ public class InputOutput {
      * @throws IOException
      */
     public void readSkip(int n) throws IOException {
-        int avaiable = _inStream.available();
-        if(n > avaiable) // to avoid blocking
-            n = avaiable;
-        while (n > 0) 
-            n -= _inStream.skip(n);
+        if (n < 0) throw new IOException("Negative X11 skip length");
+        InputStream source = input();
+        while (n > 0) {
+            long skipped = source.skip(n);
+            if (skipped > 0) n -= (int) skipped;
+            else {
+                if (source.read() < 0) throw new EOFException("Truncated X11 padding/body");
+                n--;
+            }
+        }
     }
 
     /**
@@ -335,3 +371,4 @@ public class InputOutput {
         _inStream.close();
     }
 }
+

@@ -77,6 +77,10 @@ final class X11OutputQueue extends OutputStream {
         }
     }
 
+    String failureDescription() {
+        synchronized(state) { return failure == null ? "none" : failure.toString(); }
+    }
+
     @Override public void close() {
         synchronized(state) {
             if(closed)return;
@@ -87,3 +91,4 @@ final class X11OutputQueue extends OutputStream {
         writer.interrupt();
     }
 }
+
