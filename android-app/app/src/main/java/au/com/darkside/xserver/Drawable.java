@@ -27,16 +27,13 @@ public class Drawable {
     private byte[] _zUploadBytes;
     private int[] _zUploadColors;
     private Bitmap _zUploadBitmap;
-    private final Paint _tailClearPaint = new Paint();
-    private static volatile boolean safeEdgeCleanup = true;
     // One diagnostic per changed fast PutImage geometry, no per-frame strings.
     // Re-arm on toggling logs OFF -> ON.
     private boolean previousGeometryLogged;
     private int previousSourceW,previousSourceH,previousTargetW,previousTargetH;
     private int previousDstX,previousDstY,previousFormat,previousDepth;
-    private boolean previousTailClear,previousDirectCopy;
+    private boolean previousDirectCopy;
     private X11PutImageProfiler profiler; // allocated only with diagnostics ON
-    public static void setSafeEdgeCleanup(boolean enabled) { safeEdgeCleanup=enabled; }
 
 
     private static final byte BITMAP_FORMAT = 0;
@@ -846,9 +843,6 @@ public class Drawable {
         final boolean fastBgrx = format == Z_PIXMAP_FORMAT && depth == 24 &&
                 pixels >= 4096 && n <= 8 * 1024 * 1024 &&
                 (_shapeMask == null || _shapeMask.length != pixels);
-        final boolean scrubTail = fastBgrx && safeEdgeCleanup &&
-                X11FrameTailCleanup.shouldScrub((int)dstX,(int)dstY,width,height,
-                        _bitmap.getWidth(),_bitmap.getHeight(),directCopy);
         if(xServer.isFrameDiagnosticsEnabled()) {
             if(!previousGeometryLogged ||
                previousSourceW!=width || previousSourceH!=height ||
@@ -856,14 +850,14 @@ public class Drawable {
                previousTargetH!=_bitmap.getHeight() ||
                previousDstX!=(int)dstX || previousDstY!=(int)dstY ||
                previousFormat!=format || previousDepth!=depth ||
-               previousTailClear!=scrubTail || previousDirectCopy!=directCopy) {
+               previousDirectCopy!=directCopy) {
                 previousGeometryLogged=true;
                 previousSourceW=width; previousSourceH=height;
                 previousTargetW=_bitmap.getWidth();
                 previousTargetH=_bitmap.getHeight();
                 previousDstX=(int)dstX;previousDstY=(int)dstY;
                 previousFormat=format;previousDepth=depth;
-                previousTailClear=scrubTail;previousDirectCopy=directCopy;
+                previousDirectCopy=directCopy;
                 xServer.diagnostic("X11_PUTIMAGE_GEOMETRY drawable="+drawableId+
                         " srcW="+width+" srcH="+height+
                         " dstX="+(int)dstX+" dstY="+(int)dstY+
@@ -872,7 +866,8 @@ public class Drawable {
                         " payloadBytes="+(bytesRemaining+12)+
                         " strideBytes="+(depth==24 && format==Z_PIXMAP_FORMAT?width*4:-1)+
                         " padBytes="+pad+" opaqueCopy="+directCopy+
-                        " tailCleared="+scrubTail);
+                        " presentationMaskCandidate="+(width==xServer.getScreen().getGuestWidth() &&
+                                height<xServer.getScreen().getGuestHeight()));
             }
         }else previousGeometryLogged=false;
         if (fastBgrx) {
@@ -898,25 +893,11 @@ public class Drawable {
             long tDecodedStart=measure?System.nanoTime():0L;
             X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
             long tUploadedStart=measure?System.nanoTime():0L;
-            // C path: when WSI submits a *near-full* new frame at origin,
-            // zero only uncovered right/bottom strips. Do not clear normal
-            // partial X11 updates or the entire framebuffer every frame:
-            // that would destroy legitimate preserved pixels and waste RAM.
-            if (scrubTail) {
-                _tailClearPaint.setColor(0xff000000);
-                int canvasSave=_canvas.save();
-                if(width<_bitmap.getWidth())
-                    _canvas.drawRect(width,0,_bitmap.getWidth(),_bitmap.getHeight(),_tailClearPaint);
-                if(height<_bitmap.getHeight())
-                    _canvas.drawRect(0,height,width,_bitmap.getHeight(),_tailClearPaint);
-                _canvas.restoreToCount(canvasSave);
-            }
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
-                // The 707/720 issue may be OUTSIDE the game drawable.
-                // This informs the root compositor only; no guest pixels changed.
-                xServer.noteGameFrameCandidate(width,height,_bitmap.getWidth(),
-                        _bitmap.getHeight(),(int)dstX,(int)dstY,true);
+                // Only presentation mask receives the repeated source geometry.
+                // The bitmap remains intact for all normal X11 damage/retention.
+                xServer.notePresentedImage(width,height,(int)dstX,(int)dstY,true);
             } else {
                 _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
                 _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
