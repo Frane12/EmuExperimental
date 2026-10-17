@@ -229,122 +229,7 @@ public final class WineGuiActivity extends Activity {
         FrameLayout.LayoutParams op=new FrameLayout.LayoutParams(dp(100),dp(42),Gravity.TOP|Gravity.END);
         op.topMargin=dp(61);op.rightMargin=dp(56);
         layout.addView(toolbarOptions,op);
-        toolbarOptions.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","C-cleanup rubova ON/OFF","DXVK FPS limit (sljedeći start)"},(dialog,which)->{
-                    if(which==0) {
-                        keyboardPending=true;
-                        keyboardAttempts=0;
-                        ((AlertDialog)dialog).setOnDismissListener(d ->
-                                xserver.getScreen().postDelayed(this::showKeyboard,120));
-                    }
-                    else if(which==1) {
-                        cpuCanvasFallback=!cpuCanvasFallback;
-                        xserver.getScreen().setLayerType(cpuCanvasFallback?
-                                View.LAYER_TYPE_SOFTWARE:View.LAYER_TYPE_NONE,null);
-                        xserver.getScreen().postInvalidateOnAnimation();
-                        log("Android X11 desktop Canvas mode: "+(cpuCanvasFallback?
-                                "SOFTWARE fallback":"HWUI hardware-accelerated candidate")+
-                                " (Wine Vulkan DRI3/Present still unimplemented)");
-                        Toast.makeText(this,cpuCanvasFallback?
-                                "CPU Canvas fallback":"GPU Canvas enabled",Toast.LENGTH_SHORT).show();
-                    }
-                    else if(which==2) {
-                        Intent restart=new Intent(this,WineGuiActivity.class);
-                        new Thread(()->{
-                            try {
-                                WineGuiSession.stopActive();
-                                if(xserver!=null)xserver.stop();
-                                runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
-                            } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
-                        },"drnas-desktop-reset").start();
-                    } else if(which==3)finish();
-                    else if(which==4)shareGuiLog();
-                    else if(which==5)saveGuiLog();
-                    else if(which==6)openTaskManager();
-                    else if(which==9)openTextFallback();
-                    else if(which==20) {
-                        boolean enable=!performanceHud.isActive();
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
-                        performanceHud.setActive(enable);
-                        xserver.getScreen().setFpsCounterEnabled(enable);
-                        performanceHud.removeCallbacks(hudTicker);
-                        if(enable)performanceHud.post(hudTicker);
-                        Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
-                    }
-                    else if(which==21) {
-                        relativeCameraEnabled=!relativeCameraEnabled;
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
-                        if(relativeLookOverlay!=null) {
-                            if(!relativeCameraEnabled)relativeLookOverlay.release();
-                            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
-                        }
-                        syncVirtualPadConnection();
-                        Toast.makeText(this,relativeCameraEnabled?
-                                "Kamera bilo gdje: XInput analog ON":"Kamera bilo gdje OFF (normalni dodir)",
-                                Toast.LENGTH_SHORT).show();
-                    }
-                    else if(which==22) {
-                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("x11_edge_cleanup",enabled).apply();
-                        Drawable.setSafeEdgeCleanup(enabled);
-                        if(xserver!=null)xserver.setGameTailGuardEnabled(enabled);
-                        Toast.makeText(this,enabled?"C-cleanup ON":"C-cleanup OFF (A/B test)",
-                                Toast.LENGTH_SHORT).show();
-                    }
-                    else if(which==23) {
-                        showFrameLimiterDialog(false);
-                    }
-                    else if(which==19) {
-                        if(xinputState==null) {
-                            Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
-                        } else {
-                            boolean show=xinputLeft.getVisibility()!=View.VISIBLE;
-                            if(show && virtualStick.getVisibility()==View.VISIBLE) {
-                                virtualStick.releaseAll();
-                                virtualStick.setVisibility(View.GONE);
-                            }
-                            if(!show){xinputLeft.release();xinputRight.release();}
-                            xinputLeft.setVisibility(show?View.VISIBLE:View.GONE);
-                            xinputRight.setVisibility(show?View.VISIBLE:View.GONE);
-                            syncVirtualPadConnection();
-                            log("DRNAS_XINPUT "+(show?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
-                            Toast.makeText(this,show?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                    else if(which==18) {
-                        verboseLogs=!verboseLogs;
-                        getPreferences(MODE_PRIVATE).edit()
-                                .putBoolean("verbose_diagnostics",verboseLogs).apply();
-                        if(raw!=null)raw.setVerbose(verboseLogs);
-                        if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
-                        if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
-                        log("DRNAS_DIAGNOSTICS_TOGGLE "+(verboseLogs?"ON":"OFF")+
-                                " | X11/raw logging changes live. Wine/DXVK verbose env applies after Reset Wine.");
-                        Toast.makeText(this,verboseLogs?
-                                "Logovi ON. Puni Wine/DXVK trace nakon Reset Wine.":
-                                "Logovi OFF: prikaz bez dijagnostičkog opterećenja.",
-                                Toast.LENGTH_LONG).show();
-                    }
-                    else if(which==17) {
-                        boolean show=virtualStick.getVisibility()!=View.VISIBLE;
-                        if(show && xinputState!=null && xinputLeft!=null) {
-                            xinputLeft.release();xinputRight.release();
-                            xinputLeft.setVisibility(View.GONE);
-                            xinputRight.setVisibility(View.GONE);
-                            syncVirtualPadConnection();
-                        }
-                        if(!show)virtualStick.releaseAll();
-                        virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
-                        log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
-                                " input=Wine X11 WASD (XInput controller NOT emulated)");
-                        Toast.makeText(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
-                    }
-                    else if(which>=14 && which<=16)
-                        testVulkanPresentation(which==14?"x11-only":which==15?"create-checkpoints":"present-checkpoints");
-                    else if(which>=10 && which<=13)
-                        testVulkanPresentation(which==10?"fifo":which==11?"immediate":which==12?"create-only":"sync");
-                    else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
-                }).show());
+        toolbarOptions.setOnClickListener(v->showGlassControls());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
         toolbarTasks=new Button(this);
@@ -544,6 +429,137 @@ public final class WineGuiActivity extends Activity {
                 })
                 .setOnCancelListener(dialog->{if(beforeStartup)frameCapReady.countDown();})
                 .show();
+    }
+
+    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","C-cleanup rubova ON/OFF","DXVK FPS limit (sljedeći start)"};
+    private boolean glassMenuActive(int which) {
+        switch(which) {
+            case 1:return cpuCanvasFallback;
+            case 17:return virtualStick!=null && virtualStick.getVisibility()==View.VISIBLE;
+            case 18:return verboseLogs;
+            case 19:return xinputLeft!=null && xinputLeft.getVisibility()==View.VISIBLE;
+            case 20:return performanceHud!=null && performanceHud.isActive();
+            case 21:return relativeCameraEnabled;
+            case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
+            default:return false;
+        }
+    }
+    private void showGlassControls() {
+        DrnasGlassOptions.show(this,GLASS_MENU_ITEMS,this::glassMenuActive,(dialog,which)->{
+
+                    if(which==0) {
+                        keyboardPending=true;
+                        keyboardAttempts=0;
+                        xserver.getScreen().postDelayed(this::showKeyboard,120);
+                    }
+                    else if(which==1) {
+                        cpuCanvasFallback=!cpuCanvasFallback;
+                        xserver.getScreen().setLayerType(cpuCanvasFallback?
+                                View.LAYER_TYPE_SOFTWARE:View.LAYER_TYPE_NONE,null);
+                        xserver.getScreen().postInvalidateOnAnimation();
+                        log("Android X11 desktop Canvas mode: "+(cpuCanvasFallback?
+                                "SOFTWARE fallback":"HWUI hardware-accelerated candidate")+
+                                " (Wine Vulkan DRI3/Present still unimplemented)");
+                        Toast.makeText(this,cpuCanvasFallback?
+                                "CPU Canvas fallback":"GPU Canvas enabled",Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==2) {
+                        Intent restart=new Intent(this,WineGuiActivity.class);
+                        new Thread(()->{
+                            try {
+                                WineGuiSession.stopActive();
+                                if(xserver!=null)xserver.stop();
+                                runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
+                            } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
+                        },"drnas-desktop-reset").start();
+                    } else if(which==3)finish();
+                    else if(which==4)shareGuiLog();
+                    else if(which==5)saveGuiLog();
+                    else if(which==6)openTaskManager();
+                    else if(which==9)openTextFallback();
+                    else if(which==20) {
+                        boolean enable=!performanceHud.isActive();
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
+                        performanceHud.setActive(enable);
+                        xserver.getScreen().setFpsCounterEnabled(enable);
+                        performanceHud.removeCallbacks(hudTicker);
+                        if(enable)performanceHud.post(hudTicker);
+                        Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==21) {
+                        relativeCameraEnabled=!relativeCameraEnabled;
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
+                        if(relativeLookOverlay!=null) {
+                            if(!relativeCameraEnabled)relativeLookOverlay.release();
+                            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
+                        }
+                        syncVirtualPadConnection();
+                        Toast.makeText(this,relativeCameraEnabled?
+                                "Kamera bilo gdje: XInput analog ON":"Kamera bilo gdje OFF (normalni dodir)",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==22) {
+                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("x11_edge_cleanup",enabled).apply();
+                        Drawable.setSafeEdgeCleanup(enabled);
+                        if(xserver!=null)xserver.setGameTailGuardEnabled(enabled);
+                        Toast.makeText(this,enabled?"C-cleanup ON":"C-cleanup OFF (A/B test)",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==23) {
+                        showFrameLimiterDialog(false);
+                    }
+                    else if(which==19) {
+                        if(xinputState==null) {
+                            Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
+                        } else {
+                            boolean show=xinputLeft.getVisibility()!=View.VISIBLE;
+                            if(show && virtualStick.getVisibility()==View.VISIBLE) {
+                                virtualStick.releaseAll();
+                                virtualStick.setVisibility(View.GONE);
+                            }
+                            if(!show){xinputLeft.release();xinputRight.release();}
+                            xinputLeft.setVisibility(show?View.VISIBLE:View.GONE);
+                            xinputRight.setVisibility(show?View.VISIBLE:View.GONE);
+                            syncVirtualPadConnection();
+                            log("DRNAS_XINPUT "+(show?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
+                            Toast.makeText(this,show?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                    else if(which==18) {
+                        verboseLogs=!verboseLogs;
+                        getPreferences(MODE_PRIVATE).edit()
+                                .putBoolean("verbose_diagnostics",verboseLogs).apply();
+                        if(raw!=null)raw.setVerbose(verboseLogs);
+                        if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
+                        if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
+                        log("DRNAS_DIAGNOSTICS_TOGGLE "+(verboseLogs?"ON":"OFF")+
+                                " | X11/raw logging changes live. Wine/DXVK verbose env applies after Reset Wine.");
+                        Toast.makeText(this,verboseLogs?
+                                "Logovi ON. Puni Wine/DXVK trace nakon Reset Wine.":
+                                "Logovi OFF: prikaz bez dijagnostičkog opterećenja.",
+                                Toast.LENGTH_LONG).show();
+                    }
+                    else if(which==17) {
+                        boolean show=virtualStick.getVisibility()!=View.VISIBLE;
+                        if(show && xinputState!=null && xinputLeft!=null) {
+                            xinputLeft.release();xinputRight.release();
+                            xinputLeft.setVisibility(View.GONE);
+                            xinputRight.setVisibility(View.GONE);
+                            syncVirtualPadConnection();
+                        }
+                        if(!show)virtualStick.releaseAll();
+                        virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
+                        log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
+                                " input=Wine X11 WASD (XInput controller NOT emulated)");
+                        Toast.makeText(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which>=14 && which<=16)
+                        testVulkanPresentation(which==14?"x11-only":which==15?"create-checkpoints":"present-checkpoints");
+                    else if(which>=10 && which<=13)
+                        testVulkanPresentation(which==10?"fifo":which==11?"immediate":which==12?"create-only":"sync");
+                    else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
+        });
     }
 
     private void logEarlyRendererIntent() {
