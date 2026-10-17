@@ -217,6 +217,8 @@ public class XServer {
      * Stop listening on the socket and terminate all clients.
      */
     public synchronized void stop() {
+        diagnostic("DRNAS_X11_LIFECYCLE SERVER_STOP requested activeClients="+_clients.size()+
+                " port="+_port+" acceptThreadPresent="+(_acceptThread!=null));
         if (_acceptThread != null) {
             _acceptThread.cancel();
             _acceptThread = null;
