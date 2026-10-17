@@ -29,6 +29,7 @@ typedef VkResult (VKAPI_PTR *CreateXlibSurface)(VkInstance,const XlibSurfaceInfo
 
 /* Read-only transport snapshots: never consume X11/XCB socket bytes. */
 static int checkpoint_mode;
+static int checkpoint_failed;
 static void x11_checkpoint(void *xlib,Display *display,const char *stage) {
     if(!checkpoint_mode)return;
     int (*connection_number)(Display *)=(int (*)(Display *))dlsym(xlib,"XConnectionNumber");
@@ -52,6 +53,8 @@ static void x11_checkpoint(void *xlib,Display *display,const char *stage) {
     int (*has_error)(void *)=xcb?(int (*)(void *))dlsym(xcb,"xcb_connection_has_error"):NULL;
     void *connection=get_xcb?get_xcb(display):NULL;
     int xcb_error=connection&&has_error?has_error(connection):-1;
+    if(fd<0||flags<0||polled<0||(item.revents&(POLLERR|POLLHUP|POLLNVAL))||xcb_error>0)
+        checkpoint_failed=1;
     printf("DRNAS_X11_CHECK stage=%s pid=%ld display=%p fd=%d flags=%d fd_errno=%d poll=%d poll_errno=%d revents=0x%x target=%s xcb_error=%d (-1=unavailable)\n",
            stage,(long)getpid(),(void *)display,fd,flags,fd_errno,polled,poll_errno,
            (unsigned)item.revents,target,xcb_error);
@@ -87,6 +90,7 @@ static int x11_only_probe(void) {
     }
     puts("DRNAS_X11_ONLY BEFORE XCloseDisplay");
     close(display);
+    if(checkpoint_failed){puts("DRNAS_EXPERIMENT_FAIL x11-only transport checkpoint");return 63;}
     puts("DRNAS_EXPERIMENT_PASS x11-only: 3 complete cycles; Vulkan NOT loaded");
     /* Optional XCB handles stay loaded for this short-lived child. */
     dlclose(xlib);
@@ -396,6 +400,7 @@ int main(int argc,char **argv) {
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);
+    if(checkpoint_mode&&checkpoint_failed&&status==0)status=63;
     if(checkpoint_mode&&status==0)puts("DRNAS_EXPERIMENT_PASS Vulkan and X11 cleanup complete");
     return status;
 }
