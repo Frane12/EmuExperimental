@@ -100,6 +100,13 @@ final class XInputSharedState implements AutoCloseable {
         physicalRT=(int)(Math.max(0f,Math.min(1f,rt))*255f);
         publish(false);
     }
+    synchronized void setPhysicalTrigger(boolean left,int amount) {
+        if(closed)return;
+        physicalConnected=true;
+        int value=Math.max(0,Math.min(255,amount));
+        if(left)physicalLT=value;else physicalRT=value;
+        publish(false);
+    }
     synchronized void setPhysicalButton(int bit,boolean pressed) {
         if(closed)return;
         physicalConnected=true;
