@@ -46,6 +46,8 @@ public final class MainActivity extends Activity {
     private static final int PICK_MONO = 305;
     private static final int PICK_VC = 306;
     private static final int PICK_DEPENDENCIES_ZIP = 307;
+    private static final int PICK_SHORTCUT_ICON = 308;
+    private ShortcutEditor shortcutEditor;
     // Compact Win11/Explorer-inspired dark glass theme, shared visually
     // with the emulator HUD. All transparency is drawn on Android, not Wine.
     private static final int BACK = 0xFF080F1C;
@@ -345,15 +347,31 @@ public final class MainActivity extends Activity {
         names.setPadding(dp(8),0,0,0);
         TextView brand=label("EmuDrnas",23,TEXT,true);
         brand.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        brand.setSingleLine(true);
+        brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
         names.addView(brand);
         TextView subtitle=label("preAlpha 0.1   •   WINDOWS RUNTIME",10,ACCENT,true);
         subtitle.setLetterSpacing(.09f);
+        subtitle.setSingleLine(true);
+        subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         names.addView(subtitle);
         header.addView(names,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
         TextView prealpha=label("EARLY ACCESS",9,0xFFE7D6A5,true);
         prealpha.setGravity(Gravity.CENTER);
         prealpha.setPadding(dp(7),dp(7),dp(7),dp(7));
         prealpha.setBackground(box(0x7757422B,0x99866F51,10));
+        android.widget.TextClock clock=new android.widget.TextClock(this);
+        clock.setFormat24Hour("HH:mm");clock.setFormat12Hour("HH:mm");
+        clock.setTextSize(12);clock.setTextColor(0xff83ffd0);
+        clock.setTypeface(Typeface.MONOSPACE,Typeface.BOLD);
+        clock.setGravity(Gravity.CENTER);
+        clock.setPadding(dp(6),dp(5),dp(6),dp(5));
+        clock.setShadowLayer(dp(3),0,0,0x8852ffb6);
+        clock.setBackground(box(0xff092c2a,0xff327569,8));
+        LinearLayout.LayoutParams clockParams=new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+        clockParams.leftMargin=dp(5);clockParams.rightMargin=dp(6);
+        header.addView(clock,clockParams);
         header.addView(prealpha);
         content.addView(header,pad(0,8));
 
@@ -370,8 +388,7 @@ public final class MainActivity extends Activity {
 
         switch(section) {
             case "File Explorer":
-                content.addView(new HostFileExplorer(this,this::requestSharedFolder,
-                        ()->{section="Console";render();}));break;
+                content.addView(new HostFileExplorer(this,this::requestSharedFolder,this::editShortcut));break;
             case "Components": showComponents(); break;
             case "Shortcuts": showShortcuts(false); break;
             case "Diagnostics": showDiagnostics(); break;
@@ -444,6 +461,20 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams lp=(LinearLayout.LayoutParams)panel.getLayoutParams();
         lp.weight=weight;
         panel.setLayoutParams(lp);
+    }
+
+    private void editShortcut(String drive,String path) {
+        shortcutEditor=new ShortcutEditor(this,drive,path,()->{
+            Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            picker.addCategory(Intent.CATEGORY_OPENABLE);
+            picker.setType("*/*");
+            picker.putExtra(Intent.EXTRA_TITLE,"Odaberi .ico ikonu");
+            try{startActivityForResult(picker,PICK_SHORTCUT_ICON);}
+            catch(android.content.ActivityNotFoundException error){
+                Toast.makeText(this,"Nema dostupnog odabira datoteka",Toast.LENGTH_LONG).show();
+            }
+        },()->{shortcutEditor=null;section="Console";render();});
+        shortcutEditor.show();
     }
 
     private void showConfigurationMenu() {
@@ -584,7 +615,15 @@ public final class MainActivity extends Activity {
             tile.setGravity(Gravity.CENTER);
             tile.setPadding(dp(2),dp(4),dp(2),dp(3));
             tile.setBackground(glass(0xC01B4355,0xC010293F,12));
-            RetroIconView icon=new RetroIconView(this,entry.id);
+            android.graphics.Bitmap customIcon=UserShortcuts.icon(this,entry.id);
+            View icon;
+            if(customIcon==null)icon=new RetroIconView(this,entry.id);
+            else {
+                android.widget.ImageView image=new android.widget.ImageView(this);
+                image.setImageBitmap(customIcon);
+                image.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+                icon=image;
+            }
             LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(dp(28),dp(28));
             tile.addView(icon,iconParams);
             TextView name=label(entry.title,11,TEXT,false);
@@ -951,6 +990,11 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==PICK_SHORTCUT_ICON) {
+            if(result==RESULT_OK&&data!=null&&data.getData()!=null&&shortcutEditor!=null)
+                shortcutEditor.importIcon(data.getData());
+            return;
+        }
         if(request==PICK_SHARED_FOLDER) {
             boolean startup=startupWaitingForFolder;
             startupWaitingForFolder=false;

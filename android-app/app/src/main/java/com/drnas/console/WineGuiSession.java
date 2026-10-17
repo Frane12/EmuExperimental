@@ -93,11 +93,8 @@ final class WineGuiSession implements AutoCloseable {
     }
     private void runOwned(Context context,Consumer<String> log,RawWineTrace raw,String app) throws Exception {
         sessionThread=Thread.currentThread();
-        if(SharedFolderDrive.selectedTree(context)!=null) {
-            log.accept("Pripremam disk R: provjeravam sve datoteke prije desktopa…");
-            SharedFolderDrive.importSelected(context,log);
-            log.accept("R: import complete; background copying disabled for this desktop session.");
-        }
+        // R: is persistent. Import only on explicit folder selection / manual refresh.
+        // Starting a desktop or shortcut must never rescan the Android document tree.
         if(stopped)return;
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(

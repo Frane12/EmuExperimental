@@ -17,7 +17,8 @@ import java.util.*;
 /** Native pre-Wine file browser. Copy/Paste operate on the private drive files. */
 final class HostFileExplorer extends LinearLayout {
     private final Activity activity;
-    private final Runnable chooseFolder,added;
+    private final Runnable chooseFolder;
+    private final java.util.function.BiConsumer<String,String> shortcutEditor;
     private final SharedPreferences prefs;
     private String drive,path;
     private String selected;
@@ -26,8 +27,8 @@ final class HostFileExplorer extends LinearLayout {
     private final LinearLayout list;
     private final TextView location,status;
     private final Button copy,paste;
-    HostFileExplorer(Activity activity,Runnable chooseFolder,Runnable added) {
-        super(activity);this.activity=activity;this.chooseFolder=chooseFolder;this.added=added;
+    HostFileExplorer(Activity activity,Runnable chooseFolder,java.util.function.BiConsumer<String,String> shortcutEditor) {
+        super(activity);this.activity=activity;this.chooseFolder=chooseFolder;this.shortcutEditor=shortcutEditor;
         prefs=activity.getSharedPreferences("drnas_host_files",Activity.MODE_PRIVATE);
         drive=prefs.getString("drive","r");path=prefs.getString("path","");
         setOrientation(VERTICAL);setPadding(dp(10),dp(8),dp(10),dp(10));
@@ -170,15 +171,5 @@ final class HostFileExplorer extends LinearLayout {
             }catch(Exception e){input.setError(e.getMessage());}
         }));dialog.show();
     }
-    private void addShortcut(String relative){
-        EditText input=new EditText(activity);input.setSingleLine(true);
-        String name=new File(relative).getName();input.setText(name.substring(0,name.length()-4));
-        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Dodaj na početni ekran").setView(input)
-                .setPositiveButton("Dodaj",null).setNegativeButton("Odustani",null).create();
-        dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(b->{
-            try{UserShortcuts.add(activity,input.getText().toString(),drive,relative);
-                dialog.dismiss();Toast.makeText(activity,"Prečac je dodan",Toast.LENGTH_SHORT).show();added.run();}
-            catch(Exception e){input.setError(e.getMessage());}
-        }));dialog.show();
-    }
+    private void addShortcut(String relative){shortcutEditor.accept(drive,relative);}
 }

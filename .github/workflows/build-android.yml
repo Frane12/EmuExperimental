@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r9 - Native File Explorer and user shortcuts
+name: EmuDrnas preAlpha 0.1 r10 - ICO shortcut icons, LED clock and manual R import
 on:
   push:
     branches:
@@ -248,26 +248,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r9-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r10-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r9 - native pre-Wine C:/R: file explorer and explicit app shortcuts
+          EmuDrnas preAlpha 0.1 r10 - optional ICO shortcut icons, system LED clock and manual-only R import
           Package: com.drnas.console
-          versionCode: 74
+          versionCode: 75
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: native File Explorer tab available before Wine; C:/R: folder navigation, new folders, explicit Copy/Paste, and add EXE to home. User shortcuts are persistent and launched without shell interpolation. R: remains the import-only private mirror; copies do not write back to Android originals. Retains r8 layout, power and meadow.
+          Changed: optional ICO picker and preview when adding EXE shortcuts, imported icons stored privately; system HH:mm LED clock in header; removed Android R: tree scanning/import from every Wine/shortcut start. Existing mirror files preserved; selection and manual refresh still import new files. Retains r9 File Explorer and Copy/Paste.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r9-files-shortcuts.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r9-files-shortcuts.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r10-icons-clock.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r10-icons-clock.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r9-files-shortcuts-ZIP
+          name: EmuDrnas-preAlpha-0.1-r10-icons-clock-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -276,8 +276,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r9-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r9-files-shortcuts.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r9 - files and shortcuts draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r10-icons-clock.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r10 - icons and clock draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
