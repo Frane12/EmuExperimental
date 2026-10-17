@@ -29,6 +29,12 @@ public class Drawable {
     private Bitmap _zUploadBitmap;
     private final Paint _tailClearPaint = new Paint();
     private static volatile boolean safeEdgeCleanup = true;
+    // One diagnostic per changed fast PutImage geometry, no per-frame strings.
+    // Re-arm on toggling logs OFF -> ON.
+    private boolean previousGeometryLogged;
+    private int previousSourceW,previousSourceH,previousTargetW,previousTargetH;
+    private int previousDstX,previousDstY,previousFormat,previousDepth;
+    private boolean previousTailClear,previousDirectCopy;
     public static void setSafeEdgeCleanup(boolean enabled) { safeEdgeCleanup=enabled; }
 
 
@@ -688,7 +694,7 @@ public class Drawable {
                 // This is the crucial Mesa software-WSI -> Android bitmap step.
                 // Audit both accepted and rejected requests; DXVK swapchain
                 // creation alone is NOT proof that any rendered frame arrives.
-                changed = processPutImage(client, gc, arg, bytesRemaining);
+                changed = processPutImage(xServer, id, client, gc, arg, bytesRemaining);
                 xServer.recordPutImage(id,changed,bytesRemaining,client);
                 break;
             case RequestCode.PolyText8:
@@ -755,7 +761,8 @@ public class Drawable {
      * @return True if the drawable is modified.
      * @throws IOException
      */
-    private boolean processPutImage(Client client, GContext gc, byte format, int bytesRemaining) throws IOException {
+    private boolean processPutImage(XServer xServer, int drawableId, Client client, GContext gc,
+                                    byte format, int bytesRemaining) throws IOException {
         InputOutput io = client.getInputOutput();
 
         if (bytesRemaining < 12) {
@@ -832,9 +839,42 @@ public class Drawable {
                 _shapeMask == null && dstX >= 0 && dstY >= 0 &&
                 dstX + width <= _bitmap.getWidth() &&
                 dstY + height <= _bitmap.getHeight();
-        if (format == Z_PIXMAP_FORMAT && depth == 24
-                && pixels >= 4096 && n <= 8 * 1024 * 1024
-                && (_shapeMask == null || _shapeMask.length != pixels)) {
+        // Issue #10: payload 3619852 bytes could be a 1280x707 update.
+        // The X11 *target drawable* may itself be 1280x707, even when the
+        // 1280x720 root is larger. Never infer a 13-row gap from root size.
+        final boolean fastBgrx = format == Z_PIXMAP_FORMAT && depth == 24 &&
+                pixels >= 4096 && n <= 8 * 1024 * 1024 &&
+                (_shapeMask == null || _shapeMask.length != pixels);
+        final boolean scrubTail = fastBgrx && safeEdgeCleanup &&
+                X11FrameTailCleanup.shouldScrub((int)dstX,(int)dstY,width,height,
+                        _bitmap.getWidth(),_bitmap.getHeight(),directCopy);
+        if(xServer.isFrameDiagnosticsEnabled()) {
+            if(!previousGeometryLogged ||
+               previousSourceW!=width || previousSourceH!=height ||
+               previousTargetW!=_bitmap.getWidth() ||
+               previousTargetH!=_bitmap.getHeight() ||
+               previousDstX!=(int)dstX || previousDstY!=(int)dstY ||
+               previousFormat!=format || previousDepth!=depth ||
+               previousTailClear!=scrubTail || previousDirectCopy!=directCopy) {
+                previousGeometryLogged=true;
+                previousSourceW=width; previousSourceH=height;
+                previousTargetW=_bitmap.getWidth();
+                previousTargetH=_bitmap.getHeight();
+                previousDstX=(int)dstX;previousDstY=(int)dstY;
+                previousFormat=format;previousDepth=depth;
+                previousTailClear=scrubTail;previousDirectCopy=directCopy;
+                xServer.diagnostic("X11_PUTIMAGE_GEOMETRY drawable="+drawableId+
+                        " srcW="+width+" srcH="+height+
+                        " dstX="+(int)dstX+" dstY="+(int)dstY+
+                        " targetW="+_bitmap.getWidth()+" targetH="+_bitmap.getHeight()+
+                        " depth="+depth+" format="+format+
+                        " payloadBytes="+(bytesRemaining+12)+
+                        " strideBytes="+(depth==24 && format==Z_PIXMAP_FORMAT?width*4:-1)+
+                        " padBytes="+pad+" opaqueCopy="+directCopy+
+                        " tailCleared="+scrubTail);
+            }
+        }else previousGeometryLogged=false;
+        if (fastBgrx) {
             try {
                 if (_zUploadBytes == null || _zUploadBytes.length < n)
                     _zUploadBytes = new byte[n];
@@ -855,9 +895,7 @@ public class Drawable {
             // zero only uncovered right/bottom strips. Do not clear normal
             // partial X11 updates or the entire framebuffer every frame:
             // that would destroy legitimate preserved pixels and waste RAM.
-            if (safeEdgeCleanup && X11FrameTailCleanup.shouldScrub(
-                    (int)dstX,(int)dstY,width,height,_bitmap.getWidth(),
-                    _bitmap.getHeight(),directCopy)) {
+            if (scrubTail) {
                 _tailClearPaint.setColor(0xff000000);
                 int canvasSave=_canvas.save();
                 if(width<_bitmap.getWidth())
