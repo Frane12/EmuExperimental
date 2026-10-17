@@ -36,6 +36,11 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     HWND window=CreateWindowA(wc.lpszClassName,"DRNAS Direct3D 9 cube - initializing",style,
         80,40,rect.right-rect.left,rect.bottom-rect.top,NULL,NULL,instance,NULL);
     if(!window)return 2;
+    /* Map the actual X11 window BEFORE DXVK creates its Vulkan surface/swapchain.
+     * Waiting until after CreateDevice can leave the WSI target unmapped. */
+    ShowWindow(window,SW_SHOWNORMAL);
+    UpdateWindow(window);
+    OutputDebugStringA("DRNAS_CUBE: X11 window mapped before D3D9 CreateDevice\\n");
     IDirect3D9 *api=Direct3DCreate9(D3D_SDK_VERSION);
     if(!api){failure("Direct3DCreate9",E_FAIL);DestroyWindow(window);return 3;}
     D3DADAPTER_IDENTIFIER9 adapter={0};
@@ -48,6 +53,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     HRESULT hr=IDirect3D9_CreateDevice(api,0,D3DDEVTYPE_HAL,window,
         D3DCREATE_HARDWARE_VERTEXPROCESSING,&pp,&device);
     if(FAILED(hr)){failure("D3D9 HAL device/swapchain",hr);IDirect3D9_Release(api);DestroyWindow(window);return 4;}
+    OutputDebugStringA("DRNAS_CUBE: D3D9 device and swapchain created\\n");
     IDirect3DDevice9_SetRenderState(device,D3DRS_LIGHTING,FALSE);
     IDirect3DDevice9_SetRenderState(device,D3DRS_CULLMODE,D3DCULL_NONE);
     IDirect3DDevice9_SetRenderState(device,D3DRS_ZENABLE,TRUE);
@@ -58,7 +64,6 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     projection._33=100.0f/99.9f;projection._34=1;projection._43=-0.1f*100.0f/99.9f;
     IDirect3DDevice9_SetTransform(device,D3DTS_VIEW,&view);
     IDirect3DDevice9_SetTransform(device,D3DTS_PROJECTION,&projection);
-    ShowWindow(window,show);UpdateWindow(window);
     DWORD start=GetTickCount(),tick=start;unsigned frames=0;MSG message={0};int result=0;
     while(message.message!=WM_QUIT) {
         if(PeekMessageA(&message,NULL,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageA(&message);continue;}
@@ -75,8 +80,13 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
             HRESULT end=IDirect3DDevice9_EndScene(device);if(SUCCEEDED(hr))hr=end;
         }
         if(SUCCEEDED(hr))hr=IDirect3DDevice9_Present(device,NULL,NULL,NULL,NULL);
-        if(FAILED(hr)){failure("Render/Present",hr);result=5;break;}
+        if(FAILED(hr)){
+            char trace[128];snprintf(trace,sizeof(trace),"DRNAS_CUBE: D3D9 Render/Present FAILED 0x%08lx\\n",(unsigned long)hr);
+            OutputDebugStringA(trace);
+            failure("Render/Present",hr);result=5;break;
+        }
         frames++;DWORD now=GetTickCount();
+        if(frames==1)OutputDebugStringA("DRNAS_CUBE: first D3D9 Present succeeded (onscreen visibility not guaranteed)\\n");
         if(now-tick>=1000){char title[512];snprintf(title,sizeof(title),
             "DRNAS D3D9 cube | %.1f FPS | %s | Esc closes",frames*1000.0/(now-tick),adapter.Description);
             SetWindowTextA(window,title);tick=now;frames=0;}
