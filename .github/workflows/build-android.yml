@@ -108,8 +108,8 @@ jobs:
               file "$path"
             done
           done
-          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
-            tools/graphics-tests/XInputProbe.c -o android-app/app/src/main/assets/xinput/XInputProbe.exe
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows \
+            tools/graphics-tests/XInputProbe.c -luser32 -o android-app/app/src/main/assets/xinput/XInputProbe.exe
           i686-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x86/xinput1_3.dll | grep 'XInputGetState'
           x86_64-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x64/xinput1_3.dll | grep 'XInputGetState'
           python3 tests/test_xinput_build_sources.py
