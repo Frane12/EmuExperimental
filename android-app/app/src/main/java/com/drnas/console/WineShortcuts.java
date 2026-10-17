@@ -71,7 +71,8 @@ final class WineShortcuts {
         discover(drive,new File(drive,"ProgramData/Microsoft/Windows/Start Menu/Programs"),
                  0,visited,discovered);
         Collections.sort(discovered,Comparator.comparing(x->x.title.toLowerCase(Locale.ROOT)));
-        entries.addAll(discovered);
+        // User-created game/app links take priority in the eight-slot home preview.
+        entries.addAll(0,discovered);
         return entries;
     }
     private static void discover(File drive,File directory,int depth,Set<String> visited,
