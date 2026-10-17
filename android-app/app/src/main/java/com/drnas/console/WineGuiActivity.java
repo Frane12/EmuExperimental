@@ -16,6 +16,8 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
+import android.view.InputDevice;
+import android.view.MotionEvent;
 import android.text.InputType;
 import android.widget.FrameLayout;
 import android.widget.TextView;
@@ -41,6 +43,8 @@ public final class WineGuiActivity extends Activity {
     private boolean cpuCanvasFallback;
     private volatile boolean verboseLogs; // OFF by default, live menu toggle
     private VirtualStickView virtualStick;
+    private XInputSharedState xinputState;
+    private XInputControlsView xinputLeft,xinputRight;
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
     private Button shareLog;
@@ -70,7 +74,17 @@ public final class WineGuiActivity extends Activity {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
 
         FrameLayout layout=new FrameLayout(this);
+        layout.setMotionEventSplittingEnabled(true);
         layout.setBackgroundColor(Color.BLACK);
+        // Native Wine PE DLL and Android producer share this app-private file.
+        // The 64-byte shared mapping is updated only by actual input changes.
+        try {
+            File prefix=new File(getFilesDir(),
+                    "containers/default/wineboot-probe/template/.wine");
+            xinputState=new XInputSharedState(DrnasXInputRuntime.stateFile(prefix));
+        } catch(IOException error) {
+            android.util.Log.e("DRNAS-XInput","State mapping unavailable",error);
+        }
         xserver=new XServer(this,6012,null);
         xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.getScreen().setGuestResolution(
@@ -157,7 +171,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -189,6 +203,23 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
+                    else if(which==19) {
+                        if(xinputState==null) {
+                            Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
+                        } else {
+                            boolean show=xinputLeft.getVisibility()!=View.VISIBLE;
+                            if(show && virtualStick.getVisibility()==View.VISIBLE) {
+                                virtualStick.releaseAll();
+                                virtualStick.setVisibility(View.GONE);
+                            }
+                            if(!show){xinputLeft.release();xinputRight.release();}
+                            xinputState.setVirtualEnabled(show);
+                            xinputLeft.setVisibility(show?View.VISIBLE:View.GONE);
+                            xinputRight.setVisibility(show?View.VISIBLE:View.GONE);
+                            log("DRNAS_XINPUT "+(show?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
+                            Toast.makeText(this,show?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
+                        }
+                    }
                     else if(which==18) {
                         verboseLogs=!verboseLogs;
                         getPreferences(MODE_PRIVATE).edit()
@@ -205,6 +236,12 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==17) {
                         boolean show=virtualStick.getVisibility()!=View.VISIBLE;
+                        if(show && xinputState!=null && xinputLeft!=null) {
+                            xinputLeft.release();xinputRight.release();
+                            xinputState.setVirtualEnabled(false);
+                            xinputLeft.setVisibility(View.GONE);
+                            xinputRight.setVisibility(View.GONE);
+                        }
                         if(!show)virtualStick.releaseAll();
                         virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
                         log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
@@ -252,6 +289,22 @@ public final class WineGuiActivity extends Activity {
         stickParams.bottomMargin=dp(40);
         virtualStick.setVisibility(View.GONE);
         layout.addView(virtualStick,stickParams);
+        // Xbox-style on-screen controller is OFF by default, so Explorer and
+        // touchscreen X11 pointer have exactly the same behavior as v0.5.47.
+        if(xinputState!=null) {
+            xinputLeft=new XInputControlsView(this,xinputState,true);
+            FrameLayout.LayoutParams l=new FrameLayout.LayoutParams(
+                    dp(214),dp(214),Gravity.BOTTOM|Gravity.START);
+            l.leftMargin=dp(3);l.bottomMargin=dp(31);
+            xinputLeft.setVisibility(View.GONE);
+            layout.addView(xinputLeft,l);
+            xinputRight=new XInputControlsView(this,xinputState,false);
+            FrameLayout.LayoutParams rr=new FrameLayout.LayoutParams(
+                    dp(272),dp(214),Gravity.BOTTOM|Gravity.END);
+            rr.rightMargin=dp(5);rr.bottomMargin=dp(31);
+            xinputRight.setVisibility(View.GONE);
+            layout.addView(xinputRight,rr);
+        }
         setContentView(layout);
         try {
             AutomaticCrashLog.begin(this);
@@ -560,6 +613,72 @@ public final class WineGuiActivity extends Activity {
         },"drnas-desktop-save-as").start();
     }
 
+    // Android USB/Bluetooth pads use the same XInput state as the touch overlay.
+    // Recognized physical gamepad buttons are consumed; keyboard remains X11.
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(xinputState!=null && isControllerSource(event.getSource())) {
+            int bit=0;
+            switch(event.getKeyCode()) {
+                case KeyEvent.KEYCODE_BUTTON_A:bit=XInputSharedState.A;break;
+                case KeyEvent.KEYCODE_BUTTON_B:bit=XInputSharedState.B;break;
+                case KeyEvent.KEYCODE_BUTTON_X:bit=XInputSharedState.X;break;
+                case KeyEvent.KEYCODE_BUTTON_Y:bit=XInputSharedState.Y;break;
+                case KeyEvent.KEYCODE_BUTTON_L1:bit=XInputSharedState.LB;break;
+                case KeyEvent.KEYCODE_BUTTON_R1:bit=XInputSharedState.RB;break;
+                case KeyEvent.KEYCODE_BUTTON_START:bit=XInputSharedState.START;break;
+                case KeyEvent.KEYCODE_BUTTON_SELECT:bit=XInputSharedState.BACK;break;
+                case KeyEvent.KEYCODE_BUTTON_THUMBL:bit=XInputSharedState.LTHUMB;break;
+                case KeyEvent.KEYCODE_BUTTON_THUMBR:bit=XInputSharedState.RTHUMB;break;
+                case KeyEvent.KEYCODE_DPAD_UP:bit=XInputSharedState.DPAD_UP;break;
+                case KeyEvent.KEYCODE_DPAD_DOWN:bit=XInputSharedState.DPAD_DOWN;break;
+                case KeyEvent.KEYCODE_DPAD_LEFT:bit=XInputSharedState.DPAD_LEFT;break;
+                case KeyEvent.KEYCODE_DPAD_RIGHT:bit=XInputSharedState.DPAD_RIGHT;break;
+                default:break;
+            }
+            boolean pressed=event.getAction()==KeyEvent.ACTION_DOWN;
+            if(bit!=0) {
+                if(event.getRepeatCount()==0 || !pressed)xinputState.setPhysicalButton(bit,pressed);
+                return true;
+            }
+            if(event.getKeyCode()==KeyEvent.KEYCODE_BUTTON_L2) {
+                xinputState.setPhysicalTrigger(true,pressed?255:0);return true;
+            }
+            if(event.getKeyCode()==KeyEvent.KEYCODE_BUTTON_R2) {
+                xinputState.setPhysicalTrigger(false,pressed?255:0);return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+    private boolean isControllerSource(int source) {
+        return (source & InputDevice.SOURCE_GAMEPAD)==InputDevice.SOURCE_GAMEPAD ||
+               (source & InputDevice.SOURCE_JOYSTICK)==InputDevice.SOURCE_JOYSTICK;
+    }
+    @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if(xinputState!=null &&
+                (event.getSource() & InputDevice.SOURCE_JOYSTICK)==InputDevice.SOURCE_JOYSTICK &&
+                event.getAction()==MotionEvent.ACTION_MOVE) {
+            float rx=event.getAxisValue(MotionEvent.AXIS_RX);
+            float ry=event.getAxisValue(MotionEvent.AXIS_RY);
+            if(rx==0f && ry==0f) {
+                rx=event.getAxisValue(MotionEvent.AXIS_Z);
+                ry=event.getAxisValue(MotionEvent.AXIS_RZ);
+            }
+            float lt=Math.max(event.getAxisValue(MotionEvent.AXIS_LTRIGGER),
+                              event.getAxisValue(MotionEvent.AXIS_BRAKE));
+            float rt=Math.max(event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
+                              event.getAxisValue(MotionEvent.AXIS_GAS));
+            xinputState.setPhysicalAxis(event.getAxisValue(MotionEvent.AXIS_X),
+                    event.getAxisValue(MotionEvent.AXIS_Y),rx,ry,lt,rt);
+            float hatX=event.getAxisValue(MotionEvent.AXIS_HAT_X);
+            float hatY=event.getAxisValue(MotionEvent.AXIS_HAT_Y);
+            xinputState.setPhysicalButton(XInputSharedState.DPAD_LEFT,hatX<-.6f);
+            xinputState.setPhysicalButton(XInputSharedState.DPAD_RIGHT,hatX>.6f);
+            xinputState.setPhysicalButton(XInputSharedState.DPAD_UP,hatY<-.6f);
+            xinputState.setPhysicalButton(XInputSharedState.DPAD_DOWN,hatY>.6f);
+            return true;
+        }
+        return super.dispatchGenericMotionEvent(event);
+    }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
@@ -567,6 +686,9 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onPause() {
         if(virtualStick!=null)virtualStick.releaseAll();
+        if(xinputLeft!=null)xinputLeft.release();
+        if(xinputRight!=null)xinputRight.release();
+        if(xinputState!=null){xinputState.releaseTouch();xinputState.disconnectPhysical();}
         log("DRNAS_X11_LIFECYCLE onPause finishing="+isFinishing()+
                 " changingConfigurations="+isChangingConfigurations());
         super.onPause();
@@ -581,6 +703,7 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations()+
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
+        if(xinputState!=null)xinputState.close();
         AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
         else if(xserver!=null)xserver.stop();
