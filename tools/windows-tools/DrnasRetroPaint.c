@@ -1,5 +1,9 @@
+#ifndef UNICODE
 #define UNICODE
+#endif
+#ifndef _UNICODE
 #define _UNICODE
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <windowsx.h>
@@ -111,8 +115,10 @@ static LRESULT CALLBACK wndProc(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
         case WM_MOUSEMOVE:
             if(painting) {
                 int x=GET_X_LPARAM(l),y=GET_Y_LPARAM(l)-BAR;
-                if(x<0)x=0;if(x>=W)x=W-1;
-                if(y<0)y=0;if(y>=H)y=H-1;
+                if(x<0)x=0;
+                if(x>=W)x=W-1;
+                if(y<0)y=0;
+                if(y>=H)y=H-1;
                 stroke(x,y);
             }return 0;
         case WM_LBUTTONUP:case WM_CAPTURECHANGED:
