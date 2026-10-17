@@ -55,7 +55,7 @@ final class WineGuiSession implements AutoCloseable {
             String exe=WineShortcuts.builtinExecutable(app.substring(8));
             if(exe==null)throw new IllegalArgumentException("Unknown built-in tool");
             args.add(exe);
-        } else if(app.startsWith("link:")) {
+        } else if(app.startsWith("link:") || app.startsWith("exec:")) {
             // Canonical .lnk path was validated by resolveLink before command().
             args.add("start.exe");
             args.add("/unix");
@@ -116,7 +116,8 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final String launchMode=app.startsWith("link:") ?
-                "link:"+WineShortcuts.resolveLink(prefix,app.substring(5)).getAbsolutePath():app;
+                "link:"+WineShortcuts.resolveLink(prefix,app.substring(5)).getAbsolutePath():
+                UserShortcuts.isId(app)?"exec:"+UserShortcuts.resolve(context,app).getAbsolutePath():app;
         // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
         // An invalid/locked game.cfg must not prevent the whole Wine desktop.
         try {

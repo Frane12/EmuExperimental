@@ -181,7 +181,7 @@ public final class MainActivity extends Activity {
                 append("R: folder sync warning: "+failure.getMessage());
             } finally {
                 runOnUiThread(()->{
-                    if("Components".equals(section))render();
+                    if("Components".equals(section)||"File Explorer".equals(section))render();
                     if(startup)autoInstallAndBoot();
                 });
             }
@@ -359,7 +359,7 @@ public final class MainActivity extends Activity {
 
         
         LinearLayout buttons=horizontal();
-        for(String name:new String[]{"Console","Components","Shortcuts"}) {
+        for(String name:new String[]{"Console","File Explorer","Components","Shortcuts"}) {
             Button b=button(name,name.equals(section),v->showSection(name));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
                     0,dp(40),1f);
@@ -369,6 +369,9 @@ public final class MainActivity extends Activity {
         content.addView(buttons,pad(0,8));
 
         switch(section) {
+            case "File Explorer":
+                content.addView(new HostFileExplorer(this,this::requestSharedFolder,
+                        ()->{section="Console";render();}));break;
             case "Components": showComponents(); break;
             case "Shortcuts": showShortcuts(false); break;
             case "Diagnostics": showDiagnostics(); break;
@@ -591,6 +594,12 @@ public final class MainActivity extends Activity {
             tile.addView(name,pad(5,0));
             tile.setContentDescription(entry.title+" · "+entry.status);
             tile.setOnClickListener(v->launchWineShortcut(entry));
+            if(UserShortcuts.isId(entry.id))tile.setOnLongClickListener(v->{
+                new AlertDialog.Builder(this).setTitle(entry.title)
+                        .setItems(new String[]{"Ukloni prečac"},(d,w)->{
+                            UserShortcuts.remove(this,entry.id);render();
+                        }).show();return true;
+            });
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(56),1);
             if(i%columns!=0)lp.leftMargin=dp(5);
             row.addView(tile,lp);
@@ -602,13 +611,11 @@ public final class MainActivity extends Activity {
             headline.setOnClickListener(v->showSection("Shortcuts"));
             headline.setContentDescription("Prikaži sve Wine prečace");
         } else {
+            addButton(panel,"＋  Dodaj igru / program (.exe)",true,v->showSection("File Explorer"));
             addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
             addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
                     v->openWineGui());
-            note(panel,"Za AkelPad, Notepad++ i igre instaliraj program u Wine pa " +
-                    "napravi prečac (Create Shortcut / Desktop). " +
-                    "Prečaci se čitaju iz Desktop i Start Menu mapa Wine prefiksa. " +
-                    "Neki alati poput WordPada i Painta ovise o sadržaju Proton/Wine paketa.");
+            note(panel,"Za svoju igru otvori File Explorer, pronađi .exe na C: ili R: i odaberi Dodaj na početni ekran. Dugi dodir na svoju ikonu uklanja samo prečac. Postojeći Wine Desktop / Start Menu prečaci također se prikazuju.");
         }
         TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
                 (!wineReady?"Pokreni Windows za instalirane programe.":""),11,MUTED,false);

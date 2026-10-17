@@ -25,8 +25,16 @@ final class RetroIconView extends View {
         super.onDraw(target);
         int save=target.save();
         target.scale(getWidth()/64f,getHeight()/64f);
-        String key=id.startsWith("builtin:")?id.substring(8):"link";
+        String key=id.startsWith("builtin:")?id.substring(8):id.startsWith("user:")?"game":"link";
         switch(key) {
+            case "game":
+                box(target,5,19,59,50,12,0xFF67E7C5);
+                box(target,8,22,56,47,10,0xFF193C55);
+                line(target,17,34,31,34,0xFFA8FFE3,4);
+                line(target,24,27,24,41,0xFFA8FFE3,4);
+                circle(target,42,30,3,0xFF71D5FF);
+                circle(target,49,37,3,0xFFFF89A0);
+                break;
             case "paint":
                 circle(target,32,31,23,0xFFEBF5E5);
                 circle(target,31,30,19,0xFFCEE7EA);

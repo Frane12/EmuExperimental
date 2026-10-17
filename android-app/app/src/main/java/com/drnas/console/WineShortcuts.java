@@ -14,7 +14,7 @@ import java.util.Set;
 
 /**
  * Real Wine launchpad: known Wine system commands and observed .lnk files.
- * No fake preinstalled games; shortcuts are added only when Wine writes them.
+ * User-created entries and real Wine .lnk files; no fake preinstalled games.
  * Relative link identifiers are revalidated at launch and never passed to a shell.
  */
 final class WineShortcuts {
@@ -43,6 +43,7 @@ final class WineShortcuts {
     }
     static boolean isLaunchRequest(String app) {
         if(app==null)return false;
+        if(UserShortcuts.isId(app))return true;
         if(app.startsWith("builtin:"))return builtinExecutable(app.substring(8))!=null;
         return app.startsWith("link:") && app.length()<600 && app.toLowerCase(Locale.ROOT).endsWith(".lnk");
     }
@@ -50,7 +51,8 @@ final class WineShortcuts {
         return new File(context.getFilesDir(),"containers/default/wineboot-probe/template/.wine");
     }
     static List<Entry> list(Context context) {
-        List<Entry> entries=new ArrayList<>();
+        List<Entry> user=UserShortcuts.list(context);
+        List<Entry> entries=new ArrayList<>(user);
         for(String[] spec:BUILTINS)entries.add(new Entry("builtin:"+spec[0],spec[1],spec[2],"Wine"));
         File drive=new File(prefix(context),"drive_c");
         if(!drive.isDirectory())return entries;
@@ -72,7 +74,7 @@ final class WineShortcuts {
                  0,visited,discovered);
         Collections.sort(discovered,Comparator.comparing(x->x.title.toLowerCase(Locale.ROOT)));
         // User-created game/app links take priority in the eight-slot home preview.
-        entries.addAll(0,discovered);
+        entries.addAll(user.size(),discovered);
         return entries;
     }
     private static void discover(File drive,File directory,int depth,Set<String> visited,
