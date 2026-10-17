@@ -37,7 +37,8 @@ final class DrnasPerformanceHud extends View {
     private final RectF box=new RectF();
     private final ActivityManager manager;
     private final ActivityManager.MemoryInfo memoryInfo=new ActivityManager.MemoryInfo();
-    private final String[] values={"--","--%","--°C"};
+    private final String[] values={"--","--","--","--","--","--"};
+    private final HudMetrics stats=new HudMetrics();
     private final float density,scaledDensity;
     private final Typeface labelFont=Typeface.create("sans-serif-medium",Typeface.NORMAL);
     private final Typeface valueFont=Typeface.create("sans-serif-medium",Typeface.BOLD);
@@ -69,26 +70,30 @@ final class DrnasPerformanceHud extends View {
     }
     boolean isActive(){return active;}
 
-    void sample(float displayedFps) {
+    void sample(float displayedFps,float displayedFrameMs) {
         if(!active)return;
-        values[0]=String.format(Locale.ROOT,"%.0f",displayedFps);
+        values[0]=displayedFps>0?String.format(Locale.ROOT,"%.0f",displayedFps):"--";
+        values[1]=stats.cpu();
+        values[2]=stats.gpu();
+        values[5]=displayedFrameMs>0?
+                String.format(Locale.ROOT,"%.1fms",displayedFrameMs):"--";
 
         if(manager!=null) {
             manager.getMemoryInfo(memoryInfo);
             if(memoryInfo.totalMem>0) {
                 int percent=(int)Math.round(100.0d*(memoryInfo.totalMem-memoryInfo.availMem)/
                         memoryInfo.totalMem);
-                values[1]=percent+"%";
-            } else values[1]="--%";
+                values[3]=percent+"%";
+            } else values[3]="--";
         }
 
         Intent battery=getContext().registerReceiver(null,
                 new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if(battery!=null) {
             int temp=battery.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,Integer.MIN_VALUE);
-            values[2]=temp==Integer.MIN_VALUE?"--°C":
+            values[4]=temp==Integer.MIN_VALUE?"--°C":
                     String.format(Locale.ROOT,"%.1f°C",temp/10.0);
-        } else values[2]="--°C";
+        } else values[4]="--°C";
 
         postInvalidateOnAnimation();
     }
@@ -119,21 +124,24 @@ final class DrnasPerformanceHud extends View {
         border.setStrokeWidth(Math.max(1f,density));
         border.setColor(0x668ac6de);
         canvas.drawRoundRect(box,radius,radius,border);
-        float segment=w/3f;
-        for(int i=0;i<3;i++) {
+        // Six honest metrics: host display FPS / total device (or labeled APP)
+        // CPU / KGSL GPU busy when readable / host RAM / battery / display FT.
+        // Five thin dividers; no nested oval or giant typography.
+        float segment=w/6f;
+        final String[] titles={"FPS","CPU","GPU","RAM","BAT","FT"};
+        for(int i=0;i<6;i++) {
             float x=(i+.5f)*segment;
-            if(i>0) {
-                divider.setColor(0x6c9dc1d2);
-                canvas.drawLine(i*segment,h*.21f,i*segment,h*.79f,divider);
+            if(i>0){
+                divider.setColor(0x6084adbf);
+                canvas.drawLine(i*segment,h*.19f,i*segment,h*.81f,divider);
             }
-            String title=i==0?"FPS":i==1?"RAM":"BAT";
-            String output=title+"  "+values[i];
+            String result=titles[i]+" "+values[i];
             text.setTypeface(valueFont);
-            float txt=Math.min(12.3f*scaledDensity,segment/8.1f);
+            float txt=Math.min(10.5f*scaledDensity,segment/7.0f);
             text.setTextSize(txt);
             text.setTextAlign(Paint.Align.CENTER);
-            text.setColor(i==0?0xff8ff0cf:0xffe9f3f9);
-            canvas.drawText(output,x,h*.67f,text);
+            text.setColor(i==0?0xff8ff0cf:0xffecf7fb);
+            canvas.drawText(result,x,h*.68f,text);
         }
     }
 }
