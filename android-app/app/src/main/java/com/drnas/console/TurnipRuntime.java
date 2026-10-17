@@ -156,10 +156,13 @@ final class TurnipRuntime {
             boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
-            if(ended && p.exitValue()==0)
-                log.accept(present ? "Native Vulkan X11 PRESENT PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
+            if(!ended)
+                log.accept("DRNAS_WSI_TIMEOUT: native "+(present?"present/teardown":"enumeration")+
+                        " probe exceeded 15 seconds; check LAST DRNAS_WSI_TEARDOWN marker to locate blocked cleanup. VK_SUCCESS on Present does not imply clean shutdown.");
+            else if(p.exitValue()==0)
+                log.accept(present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
                         "Native Vulkan GPU enumeration PASSED. Windows DXVK adapter/presentation remain unverified.");
-            else log.accept("Native Vulkan "+(present?"presentation":"enumeration")+" FAILED (exit="+(ended?p.exitValue():-1)+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
+            else log.accept("Native Vulkan "+(present?"presentation/cleanup":"enumeration")+" FAILED (exit="+p.exitValue()+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
     }
