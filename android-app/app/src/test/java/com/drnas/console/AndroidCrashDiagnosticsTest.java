@@ -8,14 +8,14 @@ public class AndroidCrashDiagnosticsTest {
     @Test public void storesOriginalCauseAndThreadSeparatelyFromWineLog() throws Exception {
         Path logs=Files.createTempDirectory("crash-report");
         try {
-            Path wine=logs.resolve("latest-wine-gui-raw.txt");Files.writeString(wine,"Wine started");
+            Path wine=logs.resolve("latest-wine-gui-raw.txt");Files.write(wine,"Wine started".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             RuntimeException cause=new RuntimeException("bitmap already recycled");
             AndroidCrashDiagnostics.record(logs.toFile(),"last-renderer-error.txt",new Thread("Android UI"),cause);
-            String text=Files.readString(logs.resolve("last-renderer-error.txt"));
+            String text=new String(Files.readAllBytes(logs.resolve("last-renderer-error.txt")),java.nio.charset.StandardCharsets.UTF_8);
             assertTrue(text.contains("Android UI"));assertTrue(text.contains("bitmap already recycled"));
             assertTrue(text.contains("AndroidCrashDiagnosticsTest"));
-            Files.writeString(wine,"New Wine session");
-            assertEquals(text,Files.readString(logs.resolve("last-renderer-error.txt")));
+            Files.write(wine,"New Wine session".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            assertEquals(text,new String(Files.readAllBytes(logs.resolve("last-renderer-error.txt")),java.nio.charset.StandardCharsets.UTF_8));
         } finally {try(java.util.stream.Stream<Path> walk=Files.walk(logs)){for(Path p:(Iterable<Path>)walk.sorted(java.util.Comparator.reverseOrder())::iterator)Files.delete(p);}}
     }
     @Test public void boundsPersistedReportAndCommitsWithoutPartialFiles() throws Exception {
