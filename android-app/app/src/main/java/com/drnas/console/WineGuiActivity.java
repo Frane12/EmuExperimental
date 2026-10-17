@@ -146,9 +146,13 @@ public final class WineGuiActivity extends Activity {
             android.util.Log.e("DRNAS-XInput","State mapping unavailable",error);
         }
         xserver=new XServer(this,6012,null);
+        // A full 1280x720 PutImage was observed in the last render sample.
+        // The prior 707-row mask did not fix the artifact, so opt in only.
         xserver.setPresentationMaskEnabled(getPreferences(MODE_PRIVATE)
-                .getBoolean("x11_presentation_mask",true));
+                .getBoolean("x11_presentation_mask",false));
         xserver.setFrameDiagnosticsEnabled(verboseLogs);
+        xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
+                .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         xserver.getScreen().setRelativeTouchMode(true);
@@ -303,7 +307,8 @@ public final class WineGuiActivity extends Activity {
         syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
-                dp(374),dp(27),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+                Math.min(dp(620),getResources().getDisplayMetrics().widthPixels-dp(100)),
+                dp(32),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         hp.topMargin=dp(5);
         layout.addView(performanceHud,hp);
         // A very thin, transparent gesture zone at the screen's top edge:
@@ -421,7 +426,8 @@ public final class WineGuiActivity extends Activity {
                 ()->{if(beforeStartup)frameCapReady.countDown();});
     }
 
-    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML"};
+    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
+            "Eksperiment: brzo dekodiranje (A/B) ON/OFF"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -430,7 +436,8 @@ public final class WineGuiActivity extends Activity {
             case 19:return virtualPadEnabled;
             case 20:return performanceHud!=null && performanceHud.isActive();
             case 21:return relativeCameraEnabled;
-            case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",true);
+            case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
+            case 27:return xserver!=null && xserver.isExperimentalBulkDecode();
             default:return false;
         }
     }
@@ -485,7 +492,7 @@ public final class WineGuiActivity extends Activity {
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==22) {
-                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",true);
+                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
                         getPreferences(MODE_PRIVATE).edit().putBoolean("x11_presentation_mask",enabled).apply();
                         if(xserver!=null)xserver.setPresentationMaskEnabled(enabled);
                         Toast.makeText(this,enabled?"Maska prezentacije ON":"Maska prezentacije OFF (A/B test)",
@@ -502,6 +509,16 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==26) {
                         startActivity(new Intent(this,XInputLayoutEditorActivity.class));
+                    }
+                    else if(which==27) {
+                        boolean fast=!xserver.isExperimentalBulkDecode();
+                        xserver.setExperimentalBulkDecode(fast);
+                        getPreferences(MODE_PRIVATE).edit()
+                            .putBoolean("x11_bulk_decoder",fast).apply();
+                        Toast.makeText(this,fast?
+                                "Brzi BGRX dekoder ON — usporedi 5s uzorke":
+                                "Brzi BGRX dekoder OFF — stabilni baseline",
+                                Toast.LENGTH_LONG).show();
                     }
                     else if(which==19) {
                         if(xinputState==null) {
@@ -933,6 +950,14 @@ public final class WineGuiActivity extends Activity {
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
     }
 
+    @Override protected void onResume() {
+        super.onResume();
+        // A custom preset can be edited before Explorer starts or from
+        // the glass menu while the Wine session is temporarily paused.
+        if(gamepadLayer!=null)gamepadLayer.setPreset(XInputLayoutPreset.load(this,
+                getResources().getDisplayMetrics().widthPixels,
+                getResources().getDisplayMetrics().heightPixels));
+    }
     @Override protected void onPause() {
         if(virtualStick!=null)virtualStick.releaseAll();
         if(gamepadLayer!=null)gamepadLayer.release();
