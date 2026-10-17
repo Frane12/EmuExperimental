@@ -128,7 +128,10 @@ public class Client extends Thread {
             doComms();
         } catch (IOException e) {
             android.util.Log.i("DRNAS-X11", "Client connection ended: " + e);
-            if(!_closeConnection)_xServer.diagnostic("X11 client IO ended after opcode="+_lastOpcode+
+            if(!_closeConnection)_xServer.diagnostic("X11 CLIENT_DISCONNECT peer="+
+                    (e instanceof java.io.EOFException?"EOF":e.getClass().getSimpleName())+
+                    " clientBase="+Integer.toHexString(_resourceIdBase)+
+                    " sequence="+_sequenceNumber+" lastOpcode="+_lastOpcode+
                     " bytes="+_lastRequestBytes+" phase="+(_readingRequest?"request":"between requests")+
                     " outputFailure="+_inputOutput.outputFailure()+": "+e);
         } catch (RuntimeException e) {
