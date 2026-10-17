@@ -50,7 +50,7 @@ public final class MainActivity extends Activity {
     // with the emulator HUD. All transparency is drawn on Android, not Wine.
     private static final int BACK = 0xFF080F1C;
     private static final int PANEL = 0xDF142335;
-    private static final int BORDER = 0x6679B2D2;
+    private static final int BORDER = 0xB037CDDD;
     private static final int TEXT = 0xFFEDF6FD;
     private static final int MUTED = 0xFFADC2D3;
     private static final int ACCENT = 0xFF79E4CB;
@@ -220,7 +220,7 @@ public final class MainActivity extends Activity {
         GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{top,bottom});
         bg.setCornerRadius(dp(radius));
-        bg.setStroke(dp(1),0x6079ACC5);
+        bg.setStroke(dp(1),0xB02BDAE4);
         return bg;
     }
     private StateListDrawable buttonSurface(boolean primary) {
@@ -354,7 +354,7 @@ public final class MainActivity extends Activity {
         HorizontalScrollView bar=new HorizontalScrollView(this);
         bar.setHorizontalScrollBarEnabled(false);
         LinearLayout buttons=horizontal();
-        for(String name:new String[]{"Console","Components"}) {
+        for(String name:new String[]{"Console","Components","Shortcuts"}) {
             Button b=button(name,name.equals(section),v->showSection(name));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,dp(42));
@@ -366,6 +366,7 @@ public final class MainActivity extends Activity {
 
         switch(section) {
             case "Components": showComponents(); break;
+            case "Shortcuts": showShortcuts(false); break;
             case "Diagnostics": showDiagnostics(); break;
             default: showConsole();
         }
@@ -404,8 +405,10 @@ public final class MainActivity extends Activity {
 
     /** Two-step power + Explorer UI; logs exist only in private files. */
     private void showConsole() {
-        sectionEyebrow(content,"YOUR WINDOWS DESKTOP");
-        heading("Ready when you are.");
+        MeadowBannerView meadow=new MeadowBannerView(this);
+        content.addView(meadow,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(122)));
+        showShortcuts(true);
         LinearLayout desktop=card();
         LinearLayout title=horizontal();
         TextView header=label("◈  WINDOWS ENVIRONMENT",11,ACCENT,true);
@@ -489,6 +492,80 @@ public final class MainActivity extends Activity {
         addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
         note(folder,"While the desktop is running, R: checks for new Android folders every 20 seconds. SAF uses a private import-only mirror, not a real Android filesystem mount.");
         addButton(folder,"Wine configuration",false,v->startConfig());
+    }
+
+
+    /**
+     * The home-page preview uses real discovered Wine links and real Wine tools.
+     * A game never appears merely because its icon was featured in a mockup.
+     */
+    private void showShortcuts(boolean preview) {
+        LinearLayout panel=card();
+        LinearLayout headline=horizontal();
+        TextView title=label("◈  GAME & APP SHORTCUTS",13,ACCENT,true);
+        title.setLetterSpacing(.08f);
+        headline.addView(title,new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        TextView source=label("Added from Wine",10,MUTED,false);
+        headline.addView(source);
+        panel.addView(headline,pad(0,10));
+        List<WineShortcuts.Entry> shortcuts=WineShortcuts.list(this);
+        int count=preview?Math.min(shortcuts.size(),8):shortcuts.size();
+        int columns=4;
+        LinearLayout row=null;
+        for(int i=0;i<count;i++) {
+            if(i%columns==0) {
+                row=horizontal();row.setGravity(Gravity.CENTER_VERTICAL);
+                panel.addView(row,pad(3,4));
+            }
+            WineShortcuts.Entry entry=shortcuts.get(i);
+            LinearLayout tile=column();
+            tile.setGravity(Gravity.CENTER);
+            tile.setPadding(dp(3),dp(8),dp(3),dp(7));
+            tile.setBackground(glass(0xC01B4355,0xC010293F,12));
+            TextView icon=label(entry.glyph,27,ACCENT,true);
+            icon.setGravity(Gravity.CENTER);
+            tile.addView(icon);
+            TextView name=label(entry.title,11,TEXT,false);
+            name.setSingleLine(true);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            name.setGravity(Gravity.CENTER);
+            tile.addView(name,pad(5,0));
+            tile.setContentDescription(entry.title+" · "+entry.status);
+            tile.setOnClickListener(v->launchWineShortcut(entry));
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(78),1);
+            if(i%columns!=0)lp.leftMargin=dp(5);
+            row.addView(tile,lp);
+        }
+        if(preview) {
+            addButton(panel,"＋  Više prečaca",false,v->showSection("Shortcuts"));
+        } else {
+            addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
+            addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
+                    v->openWineGui());
+            note(panel,"Za AkelPad, Notepad++ i igre instaliraj program u Wine pa " +
+                    "napravi prečac (Create Shortcut / Desktop). " +
+                    "Prečaci se čitaju iz Desktop i Start Menu mapa Wine prefiksa. " +
+                    "Neki alati poput WordPada i Painta ovise o sadržaju Proton/Wine paketa.");
+        }
+        TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
+                (!wineReady?"Pokreni Windows za instalirane programe.":""),11,MUTED,false);
+        panel.addView(footnote,pad(10,0));
+    }
+    private void launchWineShortcut(WineShortcuts.Entry entry) {
+        if(wineBooting || container.isBusy() || !readyForDesktop()) {
+            Toast.makeText(this,"Prvo pokreni Windows i pričekaj Wine inicijalizaciju.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if(!WineShortcuts.isLaunchRequest(entry.id)) {
+            Toast.makeText(this,"Wine prečac nije dostupan.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        // A new Activity inherits the same persistent prefix and starts the
+        // named guest app inside Wine's virtual desktop. No host shell parsing.
+        startActivity(new Intent(this,WineGuiActivity.class)
+                .putExtra("DRNAS_GUI_APP",entry.id));
     }
 
     private void showComponents() {
