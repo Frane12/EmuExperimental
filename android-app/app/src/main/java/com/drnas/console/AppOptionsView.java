@@ -35,6 +35,7 @@ final class AppOptionsView extends LinearLayout {
                 value->DxvkVariants.select(a,value==1?DxvkVariants.ASYNC:DxvkVariants.STANDARD));
         toggle("Stretch · puni zaslon","full_screen_stretch",true);
         toggle("Živa pozadina desktopa","desktop_live",true);
+        toggle("Pelud na sučelju · bura","ui_bora_pollen",true);
         toggle("Veći Wine taskbar","desktop_taskbar_large",true);
         toggle("Prikaži FPS / RAM / bateriju","perf_hud",false);
         toggle("Prikaži pet tipki na desktopu","desktop_keys",true);
