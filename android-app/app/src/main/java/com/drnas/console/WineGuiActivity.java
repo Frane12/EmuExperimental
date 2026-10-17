@@ -100,7 +100,7 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
-        Drawable.setSafeEdgeCleanup(getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true));
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
@@ -118,8 +118,8 @@ public final class WineGuiActivity extends Activity {
             android.util.Log.e("DRNAS-XInput","State mapping unavailable",error);
         }
         xserver=new XServer(this,6012,null);
-        xserver.setGameTailGuardEnabled(getPreferences(MODE_PRIVATE)
-                .getBoolean("x11_edge_cleanup",true));
+        xserver.setPresentationMaskEnabled(getPreferences(MODE_PRIVATE)
+                .getBoolean("x11_presentation_mask",true));
         xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
@@ -284,7 +284,7 @@ public final class WineGuiActivity extends Activity {
         syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
-                dp(374),dp(52),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+                dp(374),dp(27),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         hp.topMargin=dp(5);
         layout.addView(performanceHud,hp);
         // A very thin, transparent gesture zone at the screen's top edge:
@@ -395,43 +395,14 @@ public final class WineGuiActivity extends Activity {
 
     private void showFrameLimiterDialog(boolean beforeStartup) {
         if(destroyed)return;
-        final int[] options={0,30,40,45,60,90,120,-1};
-        final String[] names={"0 - bez limita","30 FPS","40 FPS","45 FPS",
-                "60 FPS","90 FPS","120 FPS","Druga vrijednost (1–240)"};
-        new AlertDialog.Builder(this)
-                .setTitle("DXVK FPS limit prije pokretanja Windowsa")
-                .setMessage("Trenutno: "+chosenFrameCap+" FPS. 0 = bez DXVK limita.")
-                .setItems(names,(dialog,index)->{
-                    if(index<7) {
-                        setFrameCapAndContinue(options[index],beforeStartup);
-                        return;
-                    }
-                    EditText input=new EditText(this);
-                    input.setSingleLine(true);
-                    input.setInputType(InputType.TYPE_CLASS_NUMBER);
-                    input.setText(Integer.toString(chosenFrameCap));
-                    new AlertDialog.Builder(this).setTitle("FPS 0–240")
-                            .setView(input)
-                            .setPositiveButton("Primijeni",(d,which)->{
-                                int value=0;
-                                try {value=Integer.parseInt(input.getText().toString().trim());}
-                                catch(NumberFormatException ignored){}
-                                setFrameCapAndContinue(value,beforeStartup);
-                            })
-                            .setNegativeButton("Odustani",(d,which)->{
-                                if(beforeStartup)frameCapReady.countDown();
-                            })
-                            .setOnCancelListener(d->{if(beforeStartup)frameCapReady.countDown();})
-                            .show();
-                })
-                .setNegativeButton("Zadrži "+chosenFrameCap+" FPS",(dialog,index)->{
-                    if(beforeStartup)frameCapReady.countDown();
-                })
-                .setOnCancelListener(dialog->{if(beforeStartup)frameCapReady.countDown();})
-                .show();
+        // Never combine AlertDialog.setMessage with setItems: Android drops
+        // the choices when both are set. Render explicit buttons + edit box.
+        DrnasDxvkDialog.show(this,chosenFrameCap,beforeStartup,
+                cap->setFrameCapAndContinue(cap,beforeStartup),
+                ()->{if(beforeStartup)frameCapReady.countDown();});
     }
 
-    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","C-cleanup rubova ON/OFF","DXVK FPS limit (sljedeći start)"};
+    private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -440,7 +411,7 @@ public final class WineGuiActivity extends Activity {
             case 19:return xinputLeft!=null && xinputLeft.getVisibility()==View.VISIBLE;
             case 20:return performanceHud!=null && performanceHud.isActive();
             case 21:return relativeCameraEnabled;
-            case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
+            case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",true);
             default:return false;
         }
     }
@@ -499,15 +470,17 @@ public final class WineGuiActivity extends Activity {
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==22) {
-                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("x11_edge_cleanup",enabled).apply();
-                        Drawable.setSafeEdgeCleanup(enabled);
-                        if(xserver!=null)xserver.setGameTailGuardEnabled(enabled);
-                        Toast.makeText(this,enabled?"C-cleanup ON":"C-cleanup OFF (A/B test)",
+                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",true);
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("x11_presentation_mask",enabled).apply();
+                        if(xserver!=null)xserver.setPresentationMaskEnabled(enabled);
+                        Toast.makeText(this,enabled?"Maska prezentacije ON":"Maska prezentacije OFF (A/B test)",
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==23) {
                         showFrameLimiterDialog(false);
+                    }
+                    else if(which==24) {
+                        captureRenderForFiveSeconds();
                     }
                     else if(which==19) {
                         if(xinputState==null) {
