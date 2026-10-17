@@ -51,7 +51,16 @@ final class WineGuiSession implements AutoCloseable {
         if ("files".equals(app) || "desktop".equals(app)) args.add("winefile.exe");
         else if ("config".equals(app)) args.add("winecfg.exe");
         else if ("tasks".equals(app)) args.add("taskmgr.exe");
-        else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
+        else if (app.startsWith("builtin:")) {
+            String exe=WineShortcuts.builtinExecutable(app.substring(8));
+            if(exe==null)throw new IllegalArgumentException("Unknown built-in tool");
+            args.add(exe);
+        } else if(app.startsWith("link:")) {
+            // Canonical .lnk path was validated by resolveLink before command().
+            args.add("start.exe");
+            args.add("/unix");
+            args.add(app.substring(5));
+        } else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
     }
     static void displayEnvironment(Map<String,String> env) {
@@ -106,6 +115,8 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        final String launchMode=app.startsWith("link:") ?
+                "link:"+WineShortcuts.resolveLink(prefix,app.substring(5)).getAbsolutePath():app;
         // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
         // An invalid/locked game.cfg must not prevent the whole Wine desktop.
         try {
@@ -248,7 +259,7 @@ final class WineGuiSession implements AutoCloseable {
             Map<String,String> dxvkSeen=new HashMap<>();
             DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,app)).directory(proton).redirectErrorStream(true);
+            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
