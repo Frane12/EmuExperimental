@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.39 First Present Diagnostics
+name: EmuExperimental - Android APK v0.5.40 WSI isolated startup
 on:
   push:
     branches:
@@ -20,6 +20,7 @@ on:
       - fix/x11-dependency-diagnostics-v0.5.37
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
+      - experiment/x11-wsi-isolation-v0.5.40
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -136,28 +137,28 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.39-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.39\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.40-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.40\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.39-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.39 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0539 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.40-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.40 LAB\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0540 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/experiment/first-present-teardown-v0.5.39' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/experiment/x11-wsi-isolation-v0.5.40' }}
         with:
-          name: Drnas-Console-v0.5.39-APK-ZIP
+          name: Drnas-Console-v0.5.40-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/experiment/first-present-teardown-v0.5.39'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/experiment/x11-wsi-isolation-v0.5.40'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="drnas-emu-v0.5.39-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.39 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="drnas-emu-v0.5.40-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.40 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
