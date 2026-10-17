@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r5 - Retro Windows tools and shortcuts
+name: EmuDrnas preAlpha 0.1 r6 - Meadow background only
 on:
   push:
     branches:
@@ -23,6 +23,7 @@ on:
       - experiment/wsi-mode-diagnostics-v0.5.44
       - feat/emudrnas-fullscreen-stretch-prealpha-r4
       - feat/emudrnas-retro-shortcuts-tools-r5
+      - feat/emudrnas-meadow-only-r6
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -220,6 +221,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep wine-mono.msi
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep graphics-tests/TestD3D.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep emudrnas-meadow-r6.webp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPaint.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPad.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x86/xinput1_3.dll
@@ -245,23 +247,26 @@ jobs:
           CERT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]')
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r5-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r6-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r5 - permanently signed private development APK
+          EmuDrnas preAlpha 0.1 r6 - same persistent certificate, meadow artwork only
           Package: com.drnas.console
-          versionCode: 70
+          versionCode: 71
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
+          Changed: only the meadow banner image and its drawing path; all Wine/frontend controls unchanged.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r6-background-only.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r6-background-only.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-retro-shortcuts-tools-r5' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-meadow-only-r6' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r5-APK-ZIP
+          name: EmuDrnas-preAlpha-0.1-r6-background-only-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -270,8 +275,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r5-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r5 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r6-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r6-background-only.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r6 - meadow-only draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
