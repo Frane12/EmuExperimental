@@ -81,7 +81,7 @@ public final class XInputControlsView extends View {
     };
     private int target(float x,float y) {
         // The two panels' controls have disjoint touch regions.
-        if(d(x,y,sx(),sy())<radius()*1.35f)return STICK;
+        if(d(x,y,sx(),sy())<radius()*1.06f)return STICK;
         int[] keys=left?LEFT_BTNS:RIGHT_BTNS;
         float threshold=.10f*dimension();
         int target=NONE;float nearest=Float.MAX_VALUE;
@@ -142,8 +142,15 @@ public final class XInputControlsView extends View {
         }
         if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_POINTER_UP) {
             int id=event.getPointerId(index);
-            pressed(fingers.get(id,NONE),false);
+            int released=fingers.get(id,NONE);
             fingers.delete(id);
+            // A second finger may still hold the same virtual button.
+            // Do not emit a release until its last touch is lifted.
+            boolean stillHeld=false;
+            for(int i=0;i<fingers.size();i++) {
+                if(fingers.valueAt(i)==released){stillHeld=true;break;}
+            }
+            if(!stillHeld)pressed(released,false);
             if(action==MotionEvent.ACTION_UP)performClick();
             return true;
         }
