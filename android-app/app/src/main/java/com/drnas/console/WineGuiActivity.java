@@ -63,6 +63,8 @@ public final class WineGuiActivity extends Activity {
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        // Keep toggle through Reset Wine (which recreates this Activity).
+        verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
@@ -70,6 +72,7 @@ public final class WineGuiActivity extends Activity {
         FrameLayout layout=new FrameLayout(this);
         layout.setBackgroundColor(Color.BLACK);
         xserver=new XServer(this,6012,null);
+        xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         xserver.getScreen().setRelativeTouchMode(true);
@@ -188,6 +191,8 @@ public final class WineGuiActivity extends Activity {
                     else if(which==9)openTextFallback();
                     else if(which==18) {
                         verboseLogs=!verboseLogs;
+                        getPreferences(MODE_PRIVATE).edit()
+                                .putBoolean("verbose_diagnostics",verboseLogs).apply();
                         if(raw!=null)raw.setVerbose(verboseLogs);
                         if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
                         if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
@@ -251,6 +256,7 @@ public final class WineGuiActivity extends Activity {
         try {
             AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
+            raw.setVerbose(verboseLogs);
         } catch(IOException e) {
             Toast.makeText(this,"Wine desktop log unavailable: "+e.getMessage(),
                     Toast.LENGTH_LONG).show();
