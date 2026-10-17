@@ -351,6 +351,23 @@ done:
     return status;
 }
 
+/* A device reporting VK_DRIVER_ID_MESA_TURNIP is not enough to prove our
+ * exact APK H2.9 library was used. Check /proc/self/maps AFTER enumeration.
+ * The marker concerns ONLY this isolated probe process; Wine must be checked
+ * separately before claiming end-to-end activation. */
+static int drnas_expected_driver_mapped(const char *expected) {
+    if(!expected || expected[0]!='/' || strlen(expected)>2048)return -1;
+    FILE *maps=fopen("/proc/self/maps","r");
+    if(!maps)return -1;
+    char line[8192];
+    int mapped=0;
+    while(fgets(line,sizeof(line),maps)) {
+        if(strstr(line,expected)) {mapped=1;break;}
+    }
+    fclose(maps);
+    return mapped;
+}
+
 int main(int argc,char **argv) {
     setvbuf(stdout,NULL,_IONBF,0);setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=2&&argc!=3)return 2;
@@ -390,6 +407,17 @@ int main(int argc,char **argv) {
         printf("Vulkan device: %s | vendor=%04x device=%04x | driverID=%d %s %s\n",
             p.properties.deviceName,p.properties.vendorID,p.properties.deviceID,driver.driverID,driver.driverName,driver.driverInfo);
         puts(driver.driverID==VK_DRIVER_ID_MESA_TURNIP?"DRNAS_TURNIP_DEVICE_VERIFIED":"DRNAS_NATIVE_VULKAN_DEVICE_PRESENT__TURNIP_NOT_VERIFIED");
+        const char *expectedSo=getenv("DRNAS_TURNIP_EXPECTED_SO");
+        if(expectedSo && expectedSo[0]) {
+            int observed=drnas_expected_driver_mapped(expectedSo);
+            if(driver.driverID==VK_DRIVER_ID_MESA_TURNIP && observed==1)
+                puts("DRNAS_A840_H29_PROBE_MAPPED: expected Turnip library present in native probe process (Wine still unverified)");
+            else if(observed==0)
+                puts("DRNAS_A840_H29_PROBE_NOT_MAPPED: Vulkan vendor alone does not prove H2.9 selection");
+            else if(observed<0)
+                puts("DRNAS_A840_H29_PROBE_MAPS_UNREADABLE: cannot verify library identity");
+            else puts("DRNAS_A840_H29_PROBE_NOT_TURNIP: expected Turnip driver identity not reported");
+        }
         if(p.properties.deviceType==VK_PHYSICAL_DEVICE_TYPE_CPU){puts("CPU Vulkan device rejected");continue;}
         const char *preferred=getenv("DRNAS_TURNIP_PREFERRED");
         if(preferred && strcmp(preferred,"1")==0 && driver.driverID!=VK_DRIVER_ID_MESA_TURNIP) {
