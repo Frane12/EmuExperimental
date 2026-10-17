@@ -168,10 +168,15 @@ done:
         printf("DRNAS_WSI_TEARDOWN device_idle=%d\n",drained);
         if(drained!=VK_SUCCESS && status==0)status=44;
     }
+    puts("DRNAS_WSI_TEARDOWN BEFORE vkDestroyFence");
     if(device&&fence&&destroy_fence)destroy_fence(device,fence,NULL);
+    puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyFence; BEFORE vkDestroyCommandPool");
     if(device&&pool&&destroy_pool)destroy_pool(device,pool,NULL);
+    puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyCommandPool; BEFORE vkDestroySwapchainKHR");
     if(device&&chain&&destroy_chain)destroy_chain(device,chain,NULL);
+    puts("DRNAS_WSI_TEARDOWN AFTER vkDestroySwapchainKHR; BEFORE vkDestroyDevice");
     if(device&&destroy_device)destroy_device(device,NULL);
+    puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyDevice; BEFORE vkDestroySurfaceKHR");
     if(surface&&vkDestroySurfaceKHR)vkDestroySurfaceKHR(instance,surface,NULL);
     puts("DRNAS_WSI_TEARDOWN Vulkan objects destroyed; XDestroyWindow next");
     destroy_window(display,window);
