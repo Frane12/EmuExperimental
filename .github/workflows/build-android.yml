@@ -14,7 +14,8 @@ on:
       - feat/ime-fallback-focus-v0.5.27
       - feat/crysis-windowed-crash-diagnostics-v0.5.28
       - feat/turnip-cube-v0.5.29
-      - fix/x11-window-present-v0.5.34
+      - fix/x11-window-present-v0.5.33
+      - fix/turnip-autotuner-v0.5.34
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
