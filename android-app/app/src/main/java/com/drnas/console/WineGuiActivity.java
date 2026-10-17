@@ -152,7 +152,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan: test prikaza"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan: test prikaza (izoliran)"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
