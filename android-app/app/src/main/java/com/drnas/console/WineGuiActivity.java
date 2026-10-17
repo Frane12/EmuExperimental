@@ -485,7 +485,8 @@ public final class WineGuiActivity extends Activity {
     private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS · idući reset prikaza","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
             "Eksperiment: brzo dekodiranje (A/B) ON/OFF",
             "Cijeli zaslon / Stretch ON/OFF",
-            "DXVK 1.10.3 Async / Standard (idući start)"};
+            "DXVK 1.10.3 Async / Standard (idući start)",
+            "Uredi 5 desktop tipki i položaj (spremi)"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -594,6 +595,9 @@ public final class WineGuiActivity extends Activity {
                         Toast.makeText(this,"DXVK 1.10.3 "+variant+
                                 " — za promjenu u igri koristi Reset Wine",
                                 Toast.LENGTH_LONG).show();
+                    }
+                    else if(which==30) {
+                        editDesktopKeys();
                     }
                     else if(which==28) {
                         stretchFullscreen=!stretchFullscreen;
@@ -800,6 +804,17 @@ public final class WineGuiActivity extends Activity {
     }
 
     private View desktopKeyRow;
+    private void editDesktopKeys() {
+        DesktopKeysSettings.editor(this,this::reloadDesktopKeys);
+    }
+    private void reloadDesktopKeys() {
+        if(desktopKeyRow==null)return; // Saved for the next desktop launch.
+        android.view.ViewParent parent=desktopKeyRow.getParent();
+        if(!(parent instanceof FrameLayout))return;
+        ((FrameLayout)parent).removeView(desktopKeyRow);
+        desktopKeyRow=null;
+        addDesktopKeys((FrameLayout)parent);
+    }
     private void positionDesktopKeys(){
         if(desktopKeyRow==null)return;
         android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
@@ -807,15 +822,20 @@ public final class WineGuiActivity extends Activity {
         float gap=stretchFullscreen?0:(metrics.heightPixels-720*scale)/2f;
         int bar=getPreferences(MODE_PRIVATE).getBoolean("desktop_taskbar_large",true)?44:24;
         FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)desktopKeyRow.getLayoutParams();
-        p.bottomMargin=Math.round(gap+bar*scale)+dp(8);desktopKeyRow.setLayoutParams(p);
+        p.bottomMargin=Math.round(gap+bar*scale)+dp(DesktopKeysSettings.lift(this));
+        desktopKeyRow.setLayoutParams(p);
+        // Keep the five-key bar centered at 50%, move it within safe bounds.
+        float available=Math.max(0,metrics.widthPixels-p.width);
+        float pct=DesktopKeysSettings.horizontal(this)/100f;
+        desktopKeyRow.setTranslationX((pct-.5f)*available);
     }
     private void addDesktopKeys(FrameLayout layout) {
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
-        String[] labels={"Left mouse","Right mouse","Enter","Esc","Backspace"};
-        int[] keys={-1,-3,KeyEvent.KEYCODE_ENTER,KeyEvent.KEYCODE_ESCAPE,KeyEvent.KEYCODE_DEL};
-        for(int i=0;i<labels.length;i++){
-            final int key=keys[i];
-            Button button=new Button(this);button.setText(AppLanguage.t(this,labels[i]));button.setTextSize(11);
+        for(int i=0;i<DesktopKeysSettings.SLOT_COUNT;i++){
+            final int key=DesktopKeysSettings.key(this,i);
+            Button button=new Button(this);
+            button.setText(DesktopKeysSettings.label(this,i));button.setTextSize(11);
+            button.setContentDescription("Tipka "+(i+1)+": "+DesktopKeysSettings.label(this,i));
             button.setPadding(dp(8),0,dp(8),0);styleToolbar(button,false);
             button.setOnTouchListener((v,e)->{
                 int action=e.getActionMasked();
