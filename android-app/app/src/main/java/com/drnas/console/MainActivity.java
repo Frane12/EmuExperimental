@@ -523,9 +523,9 @@ public final class MainActivity extends Activity {
             tile.setGravity(Gravity.CENTER);
             tile.setPadding(dp(3),dp(8),dp(3),dp(7));
             tile.setBackground(glass(0xC01B4355,0xC010293F,12));
-            TextView icon=label(entry.glyph,27,ACCENT,true);
-            icon.setGravity(Gravity.CENTER);
-            tile.addView(icon);
+            RetroIconView icon=new RetroIconView(this,entry.id);
+            LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(dp(39),dp(39));
+            tile.addView(icon,iconParams);
             TextView name=label(entry.title,11,TEXT,false);
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
