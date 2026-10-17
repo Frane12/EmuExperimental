@@ -2573,6 +2573,7 @@ public class Window extends Resource {
                         io.writePadBytes(10);    // Unused.
                     }
                     io.flush();
+                    client.geometryReplyQueued(_id);
                 }
                 break;
             case RequestCode.QueryTree:
