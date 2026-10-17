@@ -7,4 +7,5 @@ XInputEnable @5
 XInputGetDSoundAudioDeviceGuids @6
 XInputGetBatteryInformation @7
 XInputGetKeystroke @8
+XInputGetAudioDeviceIds @9
 XInputGetStateEx @100
