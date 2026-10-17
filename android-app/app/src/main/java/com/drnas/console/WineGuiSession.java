@@ -175,6 +175,10 @@ final class WineGuiSession implements AutoCloseable {
             // A missing MSI/EXE never masquerades as an installed dependency.
             WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
             if(stopped)return;
+            // Only locally imported, offline setup files. No .NET or websetup.
+            // The [Dependencies] progress messages drive the first-install bar.
+            WineDependencyBundle.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            if(stopped)return;
             // Wine explorer.exe's /desktop=shell paints a solid background unless
             // the guest desktop wallpaper is installed and registered. A proper
             // Windows BMP is staged inside xuser/Pictures; failure never blocks GUI.
