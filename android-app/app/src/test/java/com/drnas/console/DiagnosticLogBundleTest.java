@@ -11,7 +11,7 @@ public final class DiagnosticLogBundleTest {
         try {
             File logs=root.resolve("logs").toFile();
             try(RawWineTrace raw=new RawWineTrace(logs,"latest-wine-gui-raw.txt")) {
-                raw.write("GUI","Desktop stopped: test failure");
+                raw.writeEssential("GUI","Desktop stopped: test failure");
                 Files.write(new File(logs,RawWineTrace.LATEST).toPath(),"wineboot evidence".getBytes(StandardCharsets.UTF_8));
                 Path dx=root.resolve("containers/default/gui-tmp");Files.createDirectories(dx);
                 Files.write(dx.resolve("Crysis_d3d9.log"),"DXVK adapter evidence".getBytes(StandardCharsets.UTF_8));
