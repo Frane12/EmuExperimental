@@ -39,6 +39,9 @@ final class AppOptionsView extends LinearLayout {
         toggle("Veći Wine taskbar","desktop_taskbar_large",true);
         toggle("Prikaži FPS / RAM / bateriju","perf_hud",false);
         toggle("Prikaži pet tipki na desktopu","desktop_keys",true);
+        addView(button("Uredi i spremi pet desktop tipki",()->
+                DesktopKeysSettings.editor(a,null)),
+                new LinearLayout.LayoutParams(-1,dp(42)));
         Switch turnip=new Switch(a);turnip.setText(AppLanguage.t(a,"A840 H2.9 automatski"));
         turnip.setTextColor(0xffe2f7ee);turnip.setChecked(TurnipRuntime.autoH29Enabled(a));
         turnip.setOnCheckedChangeListener((b,on)->TurnipRuntime.setAutoH29Enabled(a,on));addView(turnip);
