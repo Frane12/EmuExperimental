@@ -152,7 +152,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -184,7 +184,8 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
-                    else if(which==10 || which==11)testVulkanPresentation(which==11);
+                    else if(which>=10 && which<=13)
+                        testVulkanPresentation(which==10?"fifo":which==11?"immediate":which==12?"create-only":"sync");
                     else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
@@ -322,14 +323,14 @@ public final class WineGuiActivity extends Activity {
         },"drnas-task-manager").start();
     }
 
-    private void testVulkanPresentation(boolean immediate) {
+    private void testVulkanPresentation(String mode) {
         new Thread(()->{
             try {
                 if(session==null)throw new IOException("Windows još nije spreman");
-                session.testVulkanPresentation(WineGuiActivity.this,immediate);
+                session.testVulkanPresentation(WineGuiActivity.this,mode);
                 runOnUiThread(()->{if(!destroyed)Toast.makeText(this,"Vulkan test završen — rezultat je u logu",Toast.LENGTH_LONG).show();});
             } catch(Exception e){log("Vulkan test: "+e.getMessage());}
-        },"drnas-vulkan-present-"+(immediate?"immediate":"fifo")).start();
+        },"drnas-vulkan-present-"+mode).start();
     }
 
     private void sendAltKey(int key) {
