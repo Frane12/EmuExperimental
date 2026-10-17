@@ -4,6 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <time.h>
+#include <ctype.h>
 
 /* Opaque Xlib ABI, dynamically loaded from the exact Wine dependency path.
  * No compile-time dependency on host Xlib headers or host Vulkan libraries. */
@@ -18,10 +24,44 @@ typedef struct {
 } XlibSurfaceInfo;
 typedef VkResult (VKAPI_PTR *CreateXlibSurface)(VkInstance,const XlibSurfaceInfo *,const VkAllocationCallbacks *,VkSurfaceKHR *);
 
-static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu,VkPresentModeKHR requested_mode) {
+/* The diagnostic child is process-isolated. Never skip Vulkan teardown:
+ * report which native threads remain blocked after a timed observation. */
+static atomic_int drnas_destroy_completed=0;
+static void *drnas_wsi_watch(void *unused) {
+    (void)unused;
+    struct timespec delay={.tv_sec=3,.tv_nsec=0};
+    nanosleep(&delay,NULL);
+    if(atomic_load(&drnas_destroy_completed))return NULL;
+    puts("DRNAS_WSI_WATCHDOG: vkDestroySwapchainKHR STILL BLOCKED after 3s");
+    DIR *tasks=opendir("/proc/self/task");
+    if(!tasks){perror("DRNAS_WSI_WATCHDOG opendir task");return NULL;}
+    struct dirent *entry;
+    int listed=0;
+    while((entry=readdir(tasks))!=NULL && listed<48) {
+        if(!isdigit((unsigned char)entry->d_name[0]))continue;
+        char path[160],name[64]="?",wchan[96]="unavailable";
+        snprintf(path,sizeof(path),"/proc/self/task/%s/comm",entry->d_name);
+        FILE *f=fopen(path,"r");if(f){if(!fgets(name,sizeof(name),f))strcpy(name,"?");fclose(f);}
+        snprintf(path,sizeof(path),"/proc/self/task/%s/wchan",entry->d_name);
+        f=fopen(path,"r");if(f){if(!fgets(wchan,sizeof(wchan),f))strcpy(wchan,"unavailable");fclose(f);}
+        name[strcspn(name,"\r\n")]=0;
+        wchan[strcspn(wchan,"\r\n")]=0;
+        printf("DRNAS_WSI_THREAD tid=%s comm=%s wchan=%s\n",entry->d_name,name,wchan);
+        listed++;
+    }
+    closedir(tasks);
+    puts("DRNAS_WSI_WATCHDOG: wchan is kernel wait location, NOT a native stack/backtrace");
+    return NULL;
+}
+
+static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu,
+                         VkPresentModeKHR requested_mode,int create_only,int sync_after_present) {
     int status=20;
     void *xlib=dlopen("libX11.so.6",RTLD_NOW|RTLD_LOCAL);
     if(!xlib){fprintf(stderr,"Xlib: %s\n",dlerror());return status;}
+    int (*init_threads)(void)=(int (*)(void))dlsym(xlib,"XInitThreads");
+    int xthreads=init_threads?init_threads():0;
+    printf("DRNAS_WSI_XINITTHREADS result=%d (must precede XOpenDisplay)\n",xthreads);
     Display *(*open_display)(const char *)=(Display *(*)(const char *))dlsym(xlib,"XOpenDisplay");
     Window (*root_window)(Display *)=(Window (*)(Display *))dlsym(xlib,"XDefaultRootWindow");
     Window (*create_window)(Display *,Window,int,int,unsigned,unsigned,unsigned,unsigned long,unsigned long)=
@@ -136,6 +176,11 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     result=vkCreateSwapchainKHR(device,&sci,NULL,&chain);
     printf("X11 Vulkan swapchain create=%d\n",result);
     if(result!=VK_SUCCESS){status=32;goto done;}
+    if(create_only) {
+        puts("DRNAS_WSI_EXPERIMENT CREATE_ONLY: swapchain created, NO acquire/submit/present");
+        status=0;
+        goto done;
+    }
     n=0;result=vkGetSwapchainImagesKHR(device,chain,&n,NULL);
     if(result!=VK_SUCCESS||!n||n>16){status=33;goto done;}
     VkImage images[16];result=vkGetSwapchainImagesKHR(device,chain,&n,images);
@@ -173,6 +218,16 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     printf("X11 Vulkan clear/present=%d\n",result);
     status=(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)?0:43;
     if(!status)puts("DRNAS_GPU_X11_SWAPCHAIN_PRESENT_VERIFIED");
+    if(!status && sync_after_present) {
+        /* This Xlib connection is not Mesa's XCB display. A successful
+         * XSync proves only this connection's requests completed. */
+        puts("DRNAS_WSI_XSYNC BEFORE XSync (different connection from Mesa WSI)");
+        sync_display(display,0);
+        puts("DRNAS_WSI_XSYNC AFTER XSync; NOT PROOF of Mesa queue completion");
+        struct timespec delay={.tv_sec=0,.tv_nsec=400000000};
+        nanosleep(&delay,NULL);
+        puts("DRNAS_WSI_XSYNC 400ms observation completed; teardown follows");
+    }
 done:
     printf("DRNAS_WSI_TEARDOWN begin after present status=%d\n",status);
     if(device&&idle) {
@@ -185,7 +240,16 @@ done:
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyFence; BEFORE vkDestroyCommandPool");
     if(device&&pool&&destroy_pool)destroy_pool(device,pool,NULL);
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyCommandPool; BEFORE vkDestroySwapchainKHR");
-    if(device&&chain&&destroy_chain)destroy_chain(device,chain,NULL);
+    if(device&&chain&&destroy_chain) {
+        atomic_store(&drnas_destroy_completed,0);
+        pthread_t watcher;
+        if(pthread_create(&watcher,NULL,drnas_wsi_watch,NULL)==0) {
+            pthread_detach(watcher);
+            puts("DRNAS_WSI_WATCHDOG armed: kernel wchan snapshot if destroy blocks >3s");
+        } else puts("DRNAS_WSI_WATCHDOG thread creation failed");
+        destroy_chain(device,chain,NULL);
+        atomic_store(&drnas_destroy_completed,1);
+    }
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroySwapchainKHR; BEFORE vkDestroyDevice");
     if(device&&destroy_device)destroy_device(device,NULL);
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyDevice; BEFORE vkDestroySurfaceKHR");
@@ -207,7 +271,11 @@ int main(int argc,char **argv) {
     if(argc!=2&&argc!=3)return 2;
     int enumerate_only=argc==3&&strcmp(argv[2],"--enumerate-only")==0;
     int immediate=argc==3&&strcmp(argv[2],"--present-immediate")==0;
-    if(argc==3&&!enumerate_only&&!immediate)return 2;
+    int create_only=argc==3&&strcmp(argv[2],"--create-destroy")==0;
+    int sync_after_present=argc==3&&strcmp(argv[2],"--present-sync")==0;
+    if(argc==3&&!enumerate_only&&!immediate&&!create_only&&!sync_after_present)return 2;
+    if(create_only)puts("DRNAS_WSI_TEST_A create-destroy only, no Present");
+    if(sync_after_present)puts("DRNAS_WSI_TEST_B FIFO Present + XSync/delay observation");
     void *loader=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);
     if(!loader){fprintf(stderr,"Vulkan loader failed: %s\n",dlerror());return 3;}
     PFN_vkGetInstanceProcAddr get=(PFN_vkGetInstanceProcAddr)dlsym(loader,"vkGetInstanceProcAddr");
@@ -240,7 +308,7 @@ int main(int argc,char **argv) {
             puts("DRNAS_TURNIP_REQUEST_NOT_HONORED: system/wrapper device is not proof of Turnip activation");
             status=12;continue;
         }
-        status=enumerate_only?0:present_probe(get,instance,devices[i],immediate?VK_PRESENT_MODE_IMMEDIATE_KHR:VK_PRESENT_MODE_FIFO_KHR);
+        status=enumerate_only?0:present_probe(get,instance,devices[i],immediate?VK_PRESENT_MODE_IMMEDIATE_KHR:VK_PRESENT_MODE_FIFO_KHR,create_only,sync_after_present);
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);
