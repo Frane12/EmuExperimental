@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 66
-        versionName = "preAlpha-0.1"
+        versionCode = 67
+        versionName = "preAlpha-0.1-r2"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -50,7 +50,7 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".prealpha01lab"
+                applicationIdSuffix = ".prealpha01r2lab"
                 manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha LAB"
             }
         }
