@@ -401,6 +401,7 @@ public final class WineGuiActivity extends Activity {
                 "\nDesktop launch requested: "+desktopLaunchRequested+
                 "\nDesktop failed: "+desktopFailed+"\n\n";
         out.write(header.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        AndroidCrashDiagnostics.appendExitHistory(this,out);
         DiagnosticLogBundle.write(getFilesDir(),raw,out);
     }
 

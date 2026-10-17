@@ -9,6 +9,7 @@ import java.util.Comparator;
 /** Snapshot the live GUI trace, latest Wineboot trace and bounded DXVK logs. */
 final class DiagnosticLogBundle {
     static void write(File files,RawWineTrace raw,OutputStream out) throws IOException {
+        AndroidCrashDiagnostics.appendSaved(files,out);
         title(out,"LIVE WINE GUI / VULKAN");
         raw.copyTo(out);
         GameLogSnapshot.write(files,out);

@@ -1794,7 +1794,12 @@ public class Window extends Resource {
             }
         }
 
-        _drawable.getBitmap().recycle();
+        // HWUI can retain this bitmap in a recorded display list after this
+        // X11 window is removed. Explicit recycle invalidates that live GPU
+        // reference; let Android/GC release it once all references are gone.
+        // Drop the client bookkeeping reference as well (otherwise destroyed
+        // windows and their pixel buffers survive until client disconnect).
+        if (_client != null) _client.freeResource(this);
     }
 
     /**

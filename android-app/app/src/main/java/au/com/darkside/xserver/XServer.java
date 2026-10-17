@@ -208,7 +208,7 @@ public class XServer {
         Iterator<Integer> it = _resources.keySet().iterator();
         while (it.hasNext()) {
             Integer entry = it.next();
-            if (entry > _clientIdStep) _resources.remove(entry);
+            if (entry > _clientIdStep) it.remove();
         }
 
         _screen.removeNonDefaultColormaps();

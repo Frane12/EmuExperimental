@@ -293,7 +293,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS EMU",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.18 · 1280 × 720",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.30 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -366,6 +366,7 @@ public final class MainActivity extends Activity {
 
         windowsExplorerButton=button("WINDOWS EXPLORER",false,v->openWineGui());
         desktop.addView(windowsExplorerButton,pad(10,12));
+        addButton(desktop,"Pošalji zapis pada / zadnjeg desktopa",false,v->shareCrashDiagnostics());
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         wineStartupBar.setMax(100);
         wineStartupBar.setIndeterminate(false);
@@ -427,6 +428,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout panel=card();
         panel.addView(label("SESSION EVENT LOG",12,ACCENT,true),pad(0,7));
+        addButton(panel,"Pošalji zapis pada / zadnjeg desktopa",true,v->shareCrashDiagnostics());
         addButton(panel,"⬇ Export complete session log (.txt)",true,v->exportSessionLog());
         addButton(panel,"⬇ Export RAW Wine trace (.txt)",false,v->exportRawWineTrace());
         liveLog=new StableLogView(this,ACCENT);
@@ -469,6 +471,17 @@ public final class MainActivity extends Activity {
         if(log.length()>30000)log.delete(0,Math.min(12000,log.length()));
         log.append(msg);
         if(liveLog!=null)liveLog.setSnapshot(log.toString());
+    }
+
+    private void shareCrashDiagnostics() {
+        new Thread(()->{
+            try {
+                Intent share=GuiLogExport.share(this,out->AndroidCrashDiagnostics.export(this,out));
+                runOnUiThread(()->startActivity(Intent.createChooser(share,"Pošalji zapis pada")));
+            } catch(Exception error) {
+                runOnUiThread(()->Toast.makeText(this,"Zapis pada: "+error.getMessage(),Toast.LENGTH_LONG).show());
+            }
+        },"drnas-crash-export").start();
     }
 
     private void exportSessionLog() {
@@ -732,5 +745,3 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
-
-

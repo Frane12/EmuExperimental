@@ -778,8 +778,33 @@ public class ScreenView extends View {
      *
      * @param canvas The canvas on which the view will be drawn.
      */
+    private boolean rendererErrorReported;
+    private boolean rendererFallbackRequested;
+
     @Override
     protected void onDraw(Canvas canvas) {
+        int checkpoint=canvas.save();
+        try {
+            drawDesktop(canvas);
+        } catch(RuntimeException error) {
+            if(!rendererErrorReported) {
+                rendererErrorReported=true;
+                com.drnas.console.AndroidCrashDiagnostics.recordRenderer(_xServer.getContext(),error);
+                _xServer.diagnostic("Android X11 drawing FAILED: "+android.util.Log.getStackTraceString(error));
+            }
+            if(!rendererFallbackRequested) {
+                rendererFallbackRequested=true;
+                _xServer.diagnostic("Retrying Android desktop Canvas in CPU mode; Vulkan driver selection is unchanged.");
+                post(()->{setLayerType(android.view.View.LAYER_TYPE_SOFTWARE,null);invalidate();});
+            }
+            // Leave the Android controls alive even if CPU drawing also fails.
+            // The retained report can be shared without restarting Wine.
+        } finally {
+            canvas.restoreToCount(checkpoint);
+        }
+    }
+
+    private void drawDesktop(Canvas canvas) {
         if (_rootWindow == null) {
             super.onDraw(canvas);
             return;
@@ -2033,4 +2058,3 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
-
