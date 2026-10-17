@@ -2,6 +2,7 @@
 #define _UNICODE
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
 #include <commdlg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +45,11 @@ static void saveBmp(HWND hwnd) {
     DWORD total=stride*H;
     BYTE *data=(BYTE*)malloc(total);
     if(!data){MessageBoxW(hwnd,L"Out of memory",L"DRNAS Retro Paint",MB_ICONERROR);return;}
-    if(!GetDIBits(canvas,bitmap,0,H,data,&info,DIB_RGB_COLORS)) {
+    // GDI requires that GetDIBits use a deselected source bitmap.
+    HBITMAP restore=(HBITMAP)SelectObject(canvas,oldBitmap);
+    int rows=GetDIBits(canvas,bitmap,0,H,data,&info,DIB_RGB_COLORS);
+    SelectObject(canvas,restore);
+    if(rows!=H) {
         free(data);MessageBoxW(hwnd,L"Cannot read bitmap",L"DRNAS Retro Paint",MB_ICONERROR);return;
     }
     BITMAPFILEHEADER head;ZeroMemory(&head,sizeof(head));
