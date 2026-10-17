@@ -15,7 +15,10 @@ for kind,item in items.items():
     path=root/item["asset"]
     assert path.is_file()
     with tarfile.open(path,"r:xz") as archive:
-        profile=json.load(archive.extractfile("profile.json"))
+        members={m.name.removeprefix("./"):m for m in archive.getmembers()}
+        print(f"Checking DXVK {kind} WCP root members: {list(members)[:8]}",flush=True)
+        assert "profile.json" in members, (kind,list(members)[:12])
+        profile=json.load(archive.extractfile(members["profile.json"]))
         assert profile["type"]=="DXVK",(kind,profile.get("type"))
         entries=profile["files"]
         seen=set()
@@ -29,7 +32,7 @@ for kind,item in items.items():
                     assert key not in seen, (kind,key)
                     seen.add(key)
                     source=entry["source"]
-                    member=archive.extractfile(source)
+                    member=archive.extractfile(members.get(source.removeprefix("./"))) if source.removeprefix("./") in members else None
                     assert member is not None, (kind,source)
                     hdr=member.read(4096)
                     assert hdr[:2]==b"MZ", (kind,source)
