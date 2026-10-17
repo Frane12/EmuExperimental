@@ -23,6 +23,8 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.*;
+import java.util.concurrent.CountDownLatch;
+import au.com.darkside.xserver.Drawable;
 import au.com.darkside.xserver.XServer;
 
 /**
@@ -50,6 +52,18 @@ public final class WineGuiActivity extends Activity {
     private Button shareLog;
     private boolean keyboardPending;
     private int keyboardAttempts;
+    private DrnasPerformanceHud performanceHud;
+    private final CountDownLatch frameCapReady=new CountDownLatch(1);
+    private int chosenFrameCap;
+    private boolean relativeCameraEnabled;
+    private final Runnable hudTicker=new Runnable() {
+        @Override public void run() {
+            if(destroyed||performanceHud==null)return;
+            if(performanceHud.isActive())
+                performanceHud.sample(xserver.getScreen().getDisplayedFps());
+            performanceHud.postDelayed(this,650);
+        }
+    };
 
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
@@ -69,6 +83,9 @@ public final class WineGuiActivity extends Activity {
         super.onCreate(saved);
         // Keep toggle through Reset Wine (which recreates this Activity).
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
+        chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
+        relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
+        Drawable.setSafeEdgeCleanup(getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true));
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
@@ -90,6 +107,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         xserver.getScreen().setRelativeTouchMode(true);
+        xserver.getScreen().setCameraTouchMode(relativeCameraEnabled);
         // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
         // This does NOT implement X11 DRI3/Present or Wine Vulkan WSI.
         xserver.getScreen().setLayerType(View.LAYER_TYPE_NONE,null);
@@ -171,7 +189,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","C-cleanup rubova ON/OFF","DXVK FPS limit (sljedeći start)"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -203,6 +221,31 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
+                    else if(which==20) {
+                        boolean enable=!performanceHud.isActive();
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
+                        performanceHud.setActive(enable);
+                        if(enable)performanceHud.sample(xserver.getScreen().getDisplayedFps());
+                        Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==21) {
+                        relativeCameraEnabled=!relativeCameraEnabled;
+                        xserver.getScreen().setCameraTouchMode(relativeCameraEnabled);
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
+                        Toast.makeText(this,relativeCameraEnabled?
+                                "Relativna kamera ON (prst po ekranu)":"Relativna kamera OFF (touchpad)",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==22) {
+                        boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("x11_edge_cleanup",enabled).apply();
+                        Drawable.setSafeEdgeCleanup(enabled);
+                        Toast.makeText(this,enabled?"C-cleanup ON":"C-cleanup OFF (A/B test)",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                    else if(which==23) {
+                        showFrameLimiterDialog(false);
+                    }
                     else if(which==19) {
                         if(xinputState==null) {
                             Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
@@ -305,7 +348,14 @@ public final class WineGuiActivity extends Activity {
             xinputRight.setVisibility(View.GONE);
             layout.addView(xinputRight,rr);
         }
+        performanceHud=new DrnasPerformanceHud(this);
+        FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
+                dp(318),dp(34),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+        hp.topMargin=dp(6);
+        layout.addView(performanceHud,hp);
+        performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         setContentView(layout);
+        performanceHud.postDelayed(hudTicker,650);
         try {
             AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
@@ -332,7 +382,13 @@ public final class WineGuiActivity extends Activity {
                         xserver.getScreen().getGuestWidth()+"x"+
                         xserver.getScreen().getGuestHeight());
                 new Thread(()->{
-                    try {session.run(WineGuiActivity.this,WineGuiActivity.this::log,raw,launchApp);}
+                    try {
+                        // Input FPS cap before any Wine process inherits DXVK environment.
+                        frameCapReady.await();
+                        if(destroyed)return;
+                        session.setFrameCap(chosenFrameCap);
+                        session.run(WineGuiActivity.this,WineGuiActivity.this::log,raw,launchApp);
+                    }
                     catch(Throwable e) {
                         desktopFailed=true;
                         log("Desktop stopped: "+e.getClass().getSimpleName()+": "+e.getMessage());
@@ -367,6 +423,55 @@ public final class WineGuiActivity extends Activity {
                 startupStatus.setVisibility(View.VISIBLE);
             }
         },20000);
+        // Shown before Wine Explorer starts: default 0 = no artificial cap.
+        showFrameLimiterDialog(true);
+    }
+
+    private void setFrameCapAndContinue(int cap,boolean beforeStartup) {
+        chosenFrameCap=DxvkFrameCap.clamp(cap);
+        getPreferences(MODE_PRIVATE).edit().putInt("dxvk_fps_cap",chosenFrameCap).apply();
+        if(beforeStartup)frameCapReady.countDown();
+        Toast.makeText(this,"DXVK "+(chosenFrameCap==0?"bez limita":chosenFrameCap+" FPS")+
+                (beforeStartup?"":" (primijenit će se nakon Reset Wine)"),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private void showFrameLimiterDialog(boolean beforeStartup) {
+        if(destroyed)return;
+        final int[] options={0,30,40,45,60,90,120,-1};
+        final String[] names={"0 - bez limita","30 FPS","40 FPS","45 FPS",
+                "60 FPS","90 FPS","120 FPS","Druga vrijednost (1–240)"};
+        new AlertDialog.Builder(this)
+                .setTitle("DXVK FPS limit prije pokretanja Windowsa")
+                .setMessage("Trenutno: "+chosenFrameCap+" FPS. 0 = bez DXVK limita.")
+                .setItems(names,(dialog,index)->{
+                    if(index<7) {
+                        setFrameCapAndContinue(options[index],beforeStartup);
+                        return;
+                    }
+                    EditText input=new EditText(this);
+                    input.setSingleLine(true);
+                    input.setInputType(InputType.TYPE_CLASS_NUMBER);
+                    input.setText(Integer.toString(chosenFrameCap));
+                    new AlertDialog.Builder(this).setTitle("FPS 0–240")
+                            .setView(input)
+                            .setPositiveButton("Primijeni",(d,which)->{
+                                int value=0;
+                                try {value=Integer.parseInt(input.getText().toString().trim());}
+                                catch(NumberFormatException ignored){}
+                                setFrameCapAndContinue(value,beforeStartup);
+                            })
+                            .setNegativeButton("Odustani",(d,which)->{
+                                if(beforeStartup)frameCapReady.countDown();
+                            })
+                            .setOnCancelListener(d->{if(beforeStartup)frameCapReady.countDown();})
+                            .show();
+                })
+                .setNegativeButton("Zadrži "+chosenFrameCap+" FPS",(dialog,index)->{
+                    if(beforeStartup)frameCapReady.countDown();
+                })
+                .setOnCancelListener(dialog->{if(beforeStartup)frameCapReady.countDown();})
+                .show();
     }
 
     private void logEarlyRendererIntent() {
@@ -703,6 +808,8 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations()+
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
+        frameCapReady.countDown();
+        if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
         if(xinputState!=null)xinputState.close();
         AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
