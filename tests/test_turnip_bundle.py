@@ -8,6 +8,19 @@ spec.loader.exec_module(bundle)
 
 
 class TurnipBundleTest(unittest.TestCase):
+    def test_boot_manifest_accepts_eight_pinned_components(self):
+        # Regression for 2026-10-18 BOOT BLOCKED before Wine even started:
+        # Proton + FEXCore + 2 DXVK variants + A740/A810/A830/A840 = eight.
+        components = bundle.FILES + bundle.drnas_turnip_assets()
+        self.assertEqual(len(components), 8)
+        self.assertEqual(sum(c["kind"]=="DXVK" for c in components), 2)
+        self.assertEqual(sum(c["kind"]=="Turnip" for c in components), 4)
+        root = Path(__file__).parents[1]
+        installer = (root/"android-app/app/src/main/java/com/drnas/console/BundledComponents.java").read_text()
+        self.assertIn("items.length() > 8", installer)
+        self.assertIn('gpuTarget.equals("A740")', installer)
+        self.assertIn('kinds.contains("DXVKasync")', installer)
+
     def test_all_supported_gpus_have_reproducible_published_drivers(self):
         drivers = bundle.drnas_turnip_assets()
         self.assertEqual([x["gpuTarget"] for x in drivers], ["A740", "A810", "A830", "A840"])
