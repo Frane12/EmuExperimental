@@ -30,6 +30,8 @@ permissions:
   contents: read
 jobs:
   build:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -137,8 +139,17 @@ jobs:
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
+        id: apk-artifact
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/turnip-cube-v0.5.29' }}
         with:
           name: Drnas-Console-v0.5.29-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
+      - name: Preserve APK in a private draft release if artifact quota is full
+        if: steps.apk-artifact.outcome == 'failure' && github.event_name == 'push' && github.ref == 'refs/heads/feat/turnip-cube-v0.5.29'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="drnas-emu-v0.5.29-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.29 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
