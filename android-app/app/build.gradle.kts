@@ -6,6 +6,12 @@ val drnasStableSigning = listOf(
     drnasKeyPath,drnasStorePassword,drnasKeyAlias,drnasKeyPassword
 ).all { !it.isNullOrBlank() }
 
+// Build jobs that distribute APKs must never silently fall back to a one-off
+// Android debug certificate. Local debug/test builds remain possible.
+if (System.getenv("DRNAS_REQUIRE_STABLE_SIGNING") == "1" && !drnasStableSigning) {
+    error("DRNAS permanent APK signing is mandatory; set the keystore credentials before assembling an installable APK.")
+}
+
 plugins {
     id("com.android.application")
 }
