@@ -199,6 +199,7 @@ public class ScreenView extends View {
     private long lastDisplaySampleNs;
     private int displayedFrames;
     public float getDisplayedFps(){return displayedFps;}
+    public float getDisplayedFrameMs(){return displayedFps>0?1000f/displayedFps:0f;}
     private boolean fpsCounterEnabled;
     public void setFpsCounterEnabled(boolean enabled) {
         fpsCounterEnabled=enabled;
