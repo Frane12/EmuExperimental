@@ -118,8 +118,10 @@ final class WineGuiSession implements AutoCloseable {
         // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
         // An invalid/locked game.cfg must not prevent the whole Wine desktop.
         try {
-            CrysisWindowedGuard.prepareIfInstalled(
-                    new File(context.getFilesDir(),"windows-drives/shared"),prefix,log);
+            boolean directCrysis=launchMode.startsWith("exec:")&&
+                    new File(launchMode.substring(5)).getName().equalsIgnoreCase("Crysis.exe");
+            if(SharedFolderDrive.knownCrysisPresent(context)||directCrysis)
+                CrysisWindowedGuard.prepareKnownInstall(prefix,log);
         } catch(IOException error) {
             log.accept("Crysis fullscreen guard unavailable: "+error.getMessage());
         }

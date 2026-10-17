@@ -256,7 +256,7 @@ jobs:
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: optional ICO picker and preview when adding EXE shortcuts, imported icons stored privately; system HH:mm LED clock in header; removed Android R: tree scanning/import from every Wine/shortcut start. Existing mirror files preserved; selection and manual refresh still import new files. Retains r9 File Explorer and Copy/Paste.
+          Changed: optional ICO picker and preview when adding EXE shortcuts, imported icons stored privately; system HH:mm LED clock in header; removed Android R: import and recursive Crysis discovery from every Wine/shortcut start. Existing mirror files preserved; selection and manual refresh still import new files. Retains r9 File Explorer and Copy/Paste.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"

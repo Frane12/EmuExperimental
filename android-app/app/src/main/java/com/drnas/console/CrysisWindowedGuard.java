@@ -28,11 +28,19 @@ final class CrysisWindowedGuard {
 
     static void prepareIfInstalled(File shared,File prefix,Consumer<String> log)
             throws IOException {
-        int[] left={20000};
-        if(!containsCrysisExecutable(shared,0,left)) {
+        if(!isInstalled(shared)) {
             log.accept("Crysis fullscreen guard: no Crysis/Bin32/Crysis.exe on R:, not applied.");
             return;
         }
+        prepareKnownInstall(prefix,log);
+    }
+
+    static boolean isInstalled(File shared) {
+        return containsCrysisExecutable(shared,0,new int[]{20000});
+    }
+
+    /** Known install: no walk of R:, only the existing C: user configuration. */
+    static void prepareKnownInstall(File prefix,Consumer<String> log) throws IOException {
         File docs=new File(prefix,"drive_c/users/xuser/Documents/My Games");
         if(!Files.isDirectory(docs.toPath(),LinkOption.NOFOLLOW_LINKS) ||
                 Files.isSymbolicLink(docs.toPath()))

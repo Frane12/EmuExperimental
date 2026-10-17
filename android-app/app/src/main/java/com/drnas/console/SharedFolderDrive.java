@@ -16,7 +16,7 @@ import java.util.function.Consumer;
  * Android 11+ forbids a tree grant to the root Download directory; a selected
  * subfolder (e.g. Download/DRNAS) or Documents folder is supported.
  *
- * Import-only mirror completed before desktop launch. Existing Wine files are
+ * Explicit selection/refresh imports only. No scan on desktop launch. Existing Wine files are
  * preserved; there is no periodic background copying while a game runs.
  */
 final class SharedFolderDrive {
@@ -69,7 +69,19 @@ final class SharedFolderDrive {
                 " MiB; existing "+b.existing+" preserved; skipped "+b.skipped;
         report.accept(summary);
         if(b.skipped>0)throw new IOException("R: import incomplete: "+b.skipped+" inaccessible or unsafe entries. "+summary);
+        // Inventory compatibility needs only during this explicit import, never at launch.
+        boolean crysis=CrysisWindowedGuard.isInstalled(root);
+        ctx.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+                .putBoolean("known_crysis_on_r",crysis).apply();
         return summary;
+    }
+
+    static boolean knownCrysisPresent(Context ctx) {
+        // Keep the already prepared profile for upgrades, without scanning R:.
+        File existing=new File(WineShortcuts.prefix(ctx),
+                "drive_c/users/xuser/Documents/My Games/Crysis/game.cfg");
+        return ctx.getSharedPreferences(PREF,Context.MODE_PRIVATE)
+                .getBoolean("known_crysis_on_r",existing.isFile());
     }
 
     private static final class Budget {
