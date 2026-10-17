@@ -35,7 +35,7 @@ final class BundledComponents {
         }
         if (manifest.getInt("schema") != 1) throw new IOException("Unsupported bundled schema");
         JSONArray items = manifest.getJSONArray("items");
-        if (items.length() < 3 || items.length() > 6)
+        if (items.length() < 3 || items.length() > 7)
             throw new IOException("Expected three WCPs and optional Turnip variants");
         Set<String> kinds = new HashSet<>();
         File vault = new File(context.getFilesDir(), "wcp-vault");
@@ -49,7 +49,12 @@ final class BundledComponents {
             String compression = p.getString("compression");
             long expectedSize = p.getLong("bytes");
             String gpuTarget=p.optString("gpuTarget","");
-            if (!kinds.add(kind.equals("Turnip") ? kind+gpuTarget : kind) ||
+            String variant=p.optString("variant","");
+            String kindKey=kind.equals("Turnip")?kind+gpuTarget:
+                    kind.equals("DXVK")?kind+variant:kind;
+            if (!kinds.add(kindKey) ||
+                    (kind.equals("DXVK") &&
+                      !(variant.equals("standard") || variant.equals("async"))) ||
                     !(kind.equals("Proton") || kind.equals("FEXCore") ||
                       kind.equals("DXVK") || kind.equals("Turnip")) ||
                     (kind.equals("Turnip") &&
@@ -115,6 +120,7 @@ final class BundledComponents {
                     meta.put("status","turnip_zip_staged_not_activated");
                     meta.put("gpuTarget",gpuTarget);
                 }
+                if (kind.equals("DXVK"))meta.put("variant",variant);
                 if (kind.equals("FEXCore")) {
                     JSONObject fex = FexBridgePackage.inspectXz(partial, vault, sha);
                     if (fex == null) throw new IOException("Bundled FEXCore profile invalid");
@@ -146,7 +152,7 @@ final class BundledComponents {
             }
         }
         if (!kinds.contains("Proton") || !kinds.contains("FEXCore") ||
-                !kinds.contains("DXVK")) throw new IOException("Required bundled component missing");
+                !kinds.contains("DXVKstandard") || !kinds.contains("DXVKasync")) throw new IOException("Required bundled component missing");
     }
 
     static String sniff(byte[] a) {
