@@ -179,6 +179,12 @@ final class WineGuiSession implements AutoCloseable {
                 ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
                 : "Wine X11 OpenGL libGL.so.1 unavailable; Vulkan DXVK path remains preferred.");
         log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
+        // H2.9 is embedded in APK but must also be *selected* for the actual
+        // Wine loader process. This refreshes old H2.8 boot plans in-memory
+        // after an APK upgrade, without rewriting the Wine prefix.
+        boolean h29Selected=TurnipRuntime.selectBundledA840H29(context,plan,log);
+        log.accept("DRNAS_A840_H29_SELECTION="+(h29Selected?
+                "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
         TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
