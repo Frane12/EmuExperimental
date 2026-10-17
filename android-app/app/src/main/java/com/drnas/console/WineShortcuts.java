@@ -44,7 +44,7 @@ final class WineShortcuts {
     static boolean isLaunchRequest(String app) {
         if(app==null)return false;
         if(app.startsWith("builtin:"))return builtinExecutable(app.substring(8))!=null;
-        return app.startsWith("link:") && app.length()<600 && app.endsWith(".lnk");
+        return app.startsWith("link:") && app.length()<600 && app.toLowerCase(Locale.ROOT).endsWith(".lnk");
     }
     static File prefix(Context context) {
         return new File(context.getFilesDir(),"containers/default/wineboot-probe/template/.wine");
@@ -99,7 +99,7 @@ final class WineShortcuts {
         }
     }
     static File resolveLink(File prefix,String relative) throws IOException {
-        if(relative==null || relative.length()>480 || !relative.endsWith(".lnk") ||
+        if(relative==null || relative.length()>480 || !relative.toLowerCase(Locale.ROOT).endsWith(".lnk") ||
                 relative.startsWith("/") || relative.contains("..") || relative.indexOf((char)0)>=0)
             throw new IOException("Invalid Wine shortcut");
         File drive=new File(prefix,"drive_c").getCanonicalFile();
