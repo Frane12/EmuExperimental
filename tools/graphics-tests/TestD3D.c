@@ -74,7 +74,10 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
         float a=(GetTickCount()-start)*0.0007f,c=cosf(a),s=sinf(a);
         D3DMATRIX world={0};world._11=c;world._13=-s;world._21=s*s;
         world._22=c;world._23=s*c;world._31=c*s;world._32=-s;world._33=c*c;world._44=1;
-        IDirect3DDevice9_SetTransform(device,D3DTS_WORLD,&world);
+        if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first world SetTransform\\n");
+        hr=IDirect3DDevice9_SetTransform(device,D3DTS_WORLD,&world);
+        if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first world SetTransform\\n");
+        if(FAILED(hr)){OutputDebugStringA("DRNAS_CUBE: world SetTransform FAILED\\n");result=6;break;}
         if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first Clear\n");
         hr=IDirect3DDevice9_Clear(device,0,NULL,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,0xff101b2c,1,0);
         if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first Clear\n");
