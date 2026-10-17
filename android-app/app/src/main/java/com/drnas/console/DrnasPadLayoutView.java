@@ -19,10 +19,8 @@ final class DrnasPadLayoutView extends View {
     private float cameraGain=3f;
     private final SparseIntArray touches=new SparseIntArray();
     private final SparseArray<PointF> cameraFingers=new SparseArray<>();
-    private final Runnable neutralRight=()->{
-        if(state!=null && touches.indexOfValue(XInputLayoutPreset.R)<0)
-            state.setTouchRight(0f,0f);
-    };
+    private final Runnable neutralRight;
+    private boolean buttonsVisible;
     private int dragged=-1;
     private float heldLX,heldLY,heldRX,heldRY;
     private final float density;
@@ -37,6 +35,10 @@ final class DrnasPadLayoutView extends View {
     };
     DrnasPadLayoutView(Context ctx,XInputSharedState state,boolean editing) {
         super(ctx);this.state=state;this.editing=editing;
+        neutralRight=()->{
+            if(this.state!=null && touches.indexOfValue(XInputLayoutPreset.R)<0)
+                this.state.setTouchRight(0f,0f);
+        };
         density=getResources().getDisplayMetrics().density;
         setFocusable(false);
         setWillNotDraw(false);
@@ -46,6 +48,7 @@ final class DrnasPadLayoutView extends View {
     void setPreset(XInputLayoutPreset preset){release();layout=preset;invalidate();}
     XInputLayoutPreset getPreset(){return layout;}
     void setCameraEnabled(boolean value){cameraEnabled=value;if(!value)stopCamera();}
+    void setButtonsVisible(boolean value){if(!value)release();buttonsVisible=value;invalidate();}
     void setCameraGain(float value){cameraGain=Math.max(.5f,Math.min(10f,value));}
     private float px(int i){return getWidth()*layout.x[i];}
     private float py(int i){return getHeight()*layout.y[i];}
@@ -54,7 +57,7 @@ final class DrnasPadLayoutView extends View {
         return (float)Math.hypot(px(i)-x,py(i)-y);
     }
     private int hit(float x,float y){
-        if(layout==null)return NONE;
+        if(layout==null || (!editing && !buttonsVisible))return NONE;
         int best=NONE;float nearest=Float.MAX_VALUE;
         for(int i=0;i<XInputLayoutPreset.NAMES.length;i++){
             float d=dist(i,x,y);
@@ -187,7 +190,7 @@ final class DrnasPadLayoutView extends View {
     }
     @Override protected void onDraw(Canvas canvas){
         super.onDraw(canvas);
-        if(layout==null)return;
+        if(layout==null || (!editing && !buttonsVisible))return;
         for(int i=0;i<XInputLayoutPreset.NAMES.length;i++)control(canvas,i);
     }
 }
