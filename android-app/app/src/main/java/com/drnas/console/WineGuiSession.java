@@ -129,6 +129,9 @@ final class WineGuiSession implements AutoCloseable {
         // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
         boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log);
         WineGraphicsTests.install(context,prefix,log);
+        // Always available source-owned Paint, independent of Wine's optional mspaint.
+        try { DrnasPaintRuntime.install(context,prefix,log); }
+        catch(IOException problem) { log.accept("DRNAS Paint staging failed: "+problem.getMessage()); }
         // Local source-built XInput ABI shim: no Wine bus/uinput/root access.
         // If installation fails, retain the original Wine XInput built-ins.
         boolean xinputReady=false;
