@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import au.com.darkside.xserver.DrnasScreenTransform;
 import android.view.View;
 
 /**
@@ -24,6 +25,21 @@ final class CursorOverlayView extends View {
     private volatile Frame frame;
     private final int guestWidth, guestHeight;
     private final Paint paint=new Paint(Paint.FILTER_BITMAP_FLAG);
+    private volatile boolean stretchFullscreen=true;
+    private volatile DrnasScreenTransform cachedTransform;
+    void setStretchFullscreen(boolean enabled){
+        stretchFullscreen=enabled;
+        refreshTransform();
+        postInvalidateOnAnimation();
+    }
+    private void refreshTransform(){
+        cachedTransform=DrnasScreenTransform.forSize(getWidth(),getHeight(),
+                guestWidth,guestHeight,stretchFullscreen);
+    }
+    @Override protected void onSizeChanged(int w,int h,int oldW,int oldH){
+        super.onSizeChanged(w,h,oldW,oldH);
+        refreshTransform();
+    }
 
     CursorOverlayView(Context context,int guestWidth,int guestHeight) {
         super(context);
@@ -42,12 +58,11 @@ final class CursorOverlayView extends View {
         super.onDraw(canvas);
         Frame current=frame;
         if(current==null || current.bitmap==null || current.bitmap.isRecycled())return;
-        float scale=Math.min(getWidth()/(float)guestWidth,getHeight()/(float)guestHeight);
-        if(scale<=0)return;
+        DrnasScreenTransform t=cachedTransform;
+        if(t==null){refreshTransform();t=cachedTransform;}
         int saved=canvas.save();
-        canvas.translate((getWidth()-guestWidth*scale)*0.5f,
-                         (getHeight()-guestHeight*scale)*0.5f);
-        canvas.scale(scale,scale);
+        canvas.translate(t.offsetX,t.offsetY);
+        canvas.scale(t.scaleX,t.scaleY);
         canvas.drawBitmap(current.bitmap,current.x-current.hotX,
                           current.y-current.hotY,paint);
         canvas.restoreToCount(saved);
