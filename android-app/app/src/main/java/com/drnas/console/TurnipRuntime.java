@@ -142,6 +142,11 @@ final class TurnipRuntime {
 
     static void probeWine(Context context,File gui,Map<String,String> env,
                           Consumer<String> log,RawWineTrace raw,boolean present,boolean immediate) {
+        probeWine(context,gui,env,log,raw,present,immediate?"immediate":"fifo");
+    }
+
+    static void probeWine(Context context,File gui,Map<String,String> env,
+                          Consumer<String> log,RawWineTrace raw,boolean present,String testMode) {
         // Probe even without a bundled Turnip selection: distinguish Vulkan
         // enumeration from an X11 WSI/Direct3D adapter failure.
         if(!env.containsKey("VK_DRIVER_FILES"))
@@ -153,8 +158,11 @@ final class TurnipRuntime {
             java.util.List<String> command=new java.util.ArrayList<>(java.util.Arrays.asList(
                     "/system/bin/linker64",new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath()));
             if(!present)command.add("--enumerate-only");
-            else if(immediate)command.add("--present-immediate");
-            log.accept(present ? "Manual Vulkan "+(immediate?"IMMEDIATE":"FIFO")+" test: create X11 surface, device, swapchain, clear, present and teardown (15 second limit)." :
+            else if("immediate".equals(testMode))command.add("--present-immediate");
+            else if("create-only".equals(testMode))command.add("--create-destroy");
+            else if("sync".equals(testMode))command.add("--present-sync");
+            log.accept(present ? "DRNAS_WSI_TEST mode="+testMode+
+                    " (15 second isolated child, native watcher at 3s; inspect complete cleanup)" :
                     "Vulkan startup test: enumerate backend only.");
             ProcessBuilder pb=new ProcessBuilder(command).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
