@@ -31,11 +31,11 @@ for kind,item in items.items():
                     source=entry["source"]
                     member=archive.extractfile(source)
                     assert member is not None, (kind,source)
-                    hdr=member.read(256)
+                    hdr=member.read(4096)
                     assert hdr[:2]==b"MZ", (kind,source)
                     pe=int.from_bytes(hdr[60:64],"little")
                     assert pe+6<=len(hdr), (kind,source)
-                    assert hdr[pe:pe+4]==b"PE\\x00\\x00",(kind,source)
+                    assert hdr[pe:pe+4]==bytes([80,69,0,0]),(kind,source)
                     machine=int.from_bytes(hdr[pe+4:pe+6],"little")
                     assert (machine==0x14c if arch=="syswow64" else machine in (0x8664,0xa641,0xaa64)), (kind,key,hex(machine))
         assert seen=={(arch,dll) for arch in expected for dll in dlls},(kind,seen)
