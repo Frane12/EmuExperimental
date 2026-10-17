@@ -71,6 +71,7 @@ public final class WineGuiActivity extends Activity {
     private DrnasPerformanceHud performanceHud;
     private final CountDownLatch frameCapReady=new CountDownLatch(1);
     private int chosenFrameCap;
+    private boolean renderCaptureRunning;
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
@@ -533,6 +534,40 @@ public final class WineGuiActivity extends Activity {
                         testVulkanPresentation(which==10?"fifo":which==11?"immediate":which==12?"create-only":"sync");
                     else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
         });
+    }
+
+    private void captureRenderForFiveSeconds() {
+        if(xserver==null || destroyed)return;
+        if(renderCaptureRunning || !xserver.startRenderCapture()) {
+            Toast.makeText(this,"Uzorak već traje",Toast.LENGTH_SHORT).show();
+            return;
+        }
+        renderCaptureRunning=true;
+        Toast.makeText(this,"Snimam 5 sekundi — bez kontinuiranog loga",
+                Toast.LENGTH_SHORT).show();
+        // X11 worker accumulates bounded in-RAM frame timings. No disk IO
+        // or giant Strings in PutImage/Canvas hot paths.
+        xserver.getScreen().postDelayed(()->{
+            final String result=xserver.finishRenderCapture();
+            renderCaptureRunning=false;
+            new Thread(()->{
+                try {
+                    final String path=GuiLogExport.saveRenderSample(this,out->
+                            out.write(result.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    runOnUiThread(()->{
+                        if(!destroyed)Toast.makeText(this,
+                                "Spremljeno: Downloads/DRNAS/"+path,
+                                Toast.LENGTH_LONG).show();
+                    });
+                } catch(Exception error) {
+                    log("Five-second render capture export failed: "+error.getMessage());
+                    runOnUiThread(()->{
+                        if(!destroyed)Toast.makeText(this,"Spremanje uzorka nije uspjelo",
+                                Toast.LENGTH_LONG).show();
+                    });
+                }
+            },"emudrnas-render-capture-export").start();
+        },5000L);
     }
 
     private void logEarlyRendererIntent() {
