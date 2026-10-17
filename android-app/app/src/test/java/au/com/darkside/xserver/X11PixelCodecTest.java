@@ -1,6 +1,8 @@
 package au.com.darkside.xserver;
 
 import org.junit.Test;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import static org.junit.Assert.*;
 
 public class X11PixelCodecTest {
@@ -16,6 +18,18 @@ public class X11PixelCodecTest {
         int[] destination = {0,0,0x12345678};
         X11PixelCodec.decodeBgrxToArgb(raw,destination,2);
         assertArrayEquals(new int[]{0xff030201,0xff070605,0x12345678},destination);
+    }
+    @Test public void bulkPathEqualsScalarEvenWithRandomXAlphaAndPartialSizes(){
+        java.util.Random rand=new java.util.Random(82L);
+        for(int count:new int[]{1,19,480,707*1280}){
+            byte[] raw=new byte[count*4];
+            rand.nextBytes(raw);
+            int[] baseline=new int[count],bulk=new int[count];
+            X11PixelCodec.decodeBgrxToArgb(raw,baseline,count);
+            X11PixelCodec.decodeBgrxBulk(ByteBuffer.wrap(raw)
+                    .order(ByteOrder.LITTLE_ENDIAN).asIntBuffer(),bulk,count);
+            assertArrayEquals(baseline,bulk);
+        }
     }
     @Test(expected=IllegalArgumentException.class)
     public void rejectsTruncatedPayload() {
