@@ -25,6 +25,7 @@ public class Drawable {
     // Retain one buffer per drawable, not one 800x600 (~6 MiB) allocation
     // per Mesa sw,noshm PutImage. A window owns this state until destruction.
     private byte[] _zUploadBytes;
+    private java.nio.IntBuffer _bulkWords;
     private int[] _zUploadColors;
     private Bitmap _zUploadBitmap;
     // One diagnostic per changed fast PutImage geometry, no per-frame strings.
