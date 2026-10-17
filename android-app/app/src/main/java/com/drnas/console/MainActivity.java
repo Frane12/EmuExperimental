@@ -343,7 +343,7 @@ public final class MainActivity extends Activity {
         }
         if(wineStartupText!=null) {
             wineStartupText.setText(bootProgress.phase()+
-                    (wineBooting ? "  •  korak "+bootProgress.percent()+"%" : ""));
+                    (wineBooting ? "  •  "+bootProgress.percent()+"%" : ""));
             wineStartupText.setTextColor(ready?ACCENT:wineBooting?WARM:MUTED);
         }
     }
