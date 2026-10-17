@@ -856,6 +856,11 @@ public class ScreenView extends View {
             }
 
             _paint.reset();
+            // GPU bilinear sampling improves noninteger full-screen scaling
+            // without another X11 buffer copy/readback. Leave CPU fallback
+            // on the cheaper nonfiltered path to avoid software penalties.
+            if(stretchFullscreen && canvas.isHardwareAccelerated())
+                _paint.setFilterBitmap(true);
             // The X11 framebuffer is unchanged. FILL scales X/Y independently
             // into the full Android View; FIT retains original letterboxing.
             int checkpoint=canvas.save();
