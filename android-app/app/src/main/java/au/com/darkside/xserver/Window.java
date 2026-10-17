@@ -333,8 +333,13 @@ public class Window extends Resource {
      * @return The window's cursor.
      */
     public Cursor getCursor() {
-        if (_cursor == null) return _parent.getCursor();
-        else return _cursor;
+        // Cursor=None inherits on child windows; on the root it means the
+        // server default cursor, never a dereference of a null parent.
+        for (Window window=this; window!=null; window=window._parent) {
+            if (window._cursor!=null) return window._cursor;
+        }
+        Resource fallback=_xServer.getResource(2);
+        return fallback instanceof Cursor ? (Cursor)fallback : null;
     }
 
     /**
@@ -1794,7 +1799,12 @@ public class Window extends Resource {
             }
         }
 
-        _drawable.getBitmap().recycle();
+        // HWUI can retain this bitmap in a recorded display list after this
+        // X11 window is removed. Explicit recycle invalidates that live GPU
+        // reference; let Android/GC release it once all references are gone.
+        // Drop the client bookkeeping reference as well (otherwise destroyed
+        // windows and their pixel buffers survive until client disconnect).
+        if (_client != null) _client.freeResource(this);
     }
 
     /**

@@ -122,7 +122,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->new AlertDialog.Builder(this)
-                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)"},(dialog,which)->{
+                .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan: test prikaza"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
                         keyboardAttempts=0;
@@ -154,6 +154,7 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
                     else if(which==9)openTextFallback();
+                    else if(which==10)testVulkanPresentation();
                     else sendAltKey(which==7?android.view.KeyEvent.KEYCODE_TAB:android.view.KeyEvent.KEYCODE_ENTER);
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
@@ -179,6 +180,7 @@ public final class WineGuiActivity extends Activity {
         });
         setContentView(layout);
         try {
+            AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
         } catch(IOException e) {
             Toast.makeText(this,"Wine desktop log unavailable: "+e.getMessage(),
@@ -244,6 +246,10 @@ public final class WineGuiActivity extends Activity {
 
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
+        if(!destroyed && AutomaticLogTrigger.matches(line)) {
+            try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
+            AutomaticCrashLog.request(this,line);
+        }
         if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
         if(line.startsWith("Pripremam disk R:") || line.startsWith("Installing Wine Mono") ||
                 line.startsWith("Installing Microsoft VC++") ||
@@ -263,6 +269,16 @@ public final class WineGuiActivity extends Activity {
                 if(!destroyed)Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
             });}
         },"drnas-task-manager").start();
+    }
+
+    private void testVulkanPresentation() {
+        new Thread(()->{
+            try {
+                if(session==null)throw new IOException("Windows još nije spreman");
+                session.testVulkanPresentation(WineGuiActivity.this);
+                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,"Vulkan test završen — rezultat je u logu",Toast.LENGTH_LONG).show();});
+            } catch(Exception e){log("Vulkan test: "+e.getMessage());}
+        },"drnas-vulkan-present-test").start();
     }
 
     private void sendAltKey(int key) {
@@ -390,6 +406,7 @@ public final class WineGuiActivity extends Activity {
                 "\nDesktop launch requested: "+desktopLaunchRequested+
                 "\nDesktop failed: "+desktopFailed+"\n\n";
         out.write(header.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        AndroidCrashDiagnostics.appendExitHistory(this,out);
         DiagnosticLogBundle.write(getFilesDir(),raw,out);
     }
 
@@ -442,10 +459,10 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onDestroy() {
         destroyed=true;
+        AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
         else if(xserver!=null)xserver.stop();
         super.onDestroy();
     }
 }
-
 

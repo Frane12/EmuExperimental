@@ -122,6 +122,11 @@ final class TurnipRuntime {
 
     static void probeWine(Context context,File gui,Map<String,String> env,
                           Consumer<String> log,RawWineTrace raw) {
+        probeWine(context,gui,env,log,raw,false);
+    }
+
+    static void probeWine(Context context,File gui,Map<String,String> env,
+                          Consumer<String> log,RawWineTrace raw,boolean present) {
         // Probe even without a bundled Turnip selection: distinguish Vulkan
         // enumeration from an X11 WSI/Direct3D adapter failure.
         if(!env.containsKey("VK_DRIVER_FILES"))
@@ -130,21 +135,24 @@ final class TurnipRuntime {
         try {
             File nativeDir=new File(context.getApplicationInfo().nativeLibraryDir);
             File loader=new File(gui,"lib/libvulkan.so.1");
-            ProcessBuilder pb=new ProcessBuilder("/system/bin/linker64",
-                    new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath(),"--enumerate-only").redirectErrorStream(true);
+            java.util.List<String> command=new java.util.ArrayList<>(java.util.Arrays.asList(
+                    "/system/bin/linker64",new File(nativeDir,"libdrnas_vulkan_probe.so").getAbsolutePath(),loader.getAbsolutePath()));
+            if(!present)command.add("--enumerate-only");
+            log.accept(present ? "Manual Vulkan test: create X11 surface, device, swapchain, clear and present (15 second limit)." :
+                    "Vulkan startup test: enumerate backend only.");
+            ProcessBuilder pb=new ProcessBuilder(command).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
             boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
             if(ended && p.exitValue()==0)
-                log.accept("Native Vulkan GPU enumeration PASSED. No test X11 window or swapchain is created during desktop startup. Windows DXVK adapter/presentation remain unverified.");
-            else log.accept("Native Vulkan enumeration FAILED (exit="+(ended?p.exitValue():-1)+"); DXVK adapter cannot be assumed. Inspect [Wine Vulkan] for details.");
+                log.accept(present ? "Native Vulkan X11 PRESENT PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
+                        "Native Vulkan GPU enumeration PASSED. Windows DXVK adapter/presentation remain unverified.");
+            else log.accept("Native Vulkan "+(present?"presentation":"enumeration")+" FAILED (exit="+(ended?p.exitValue():-1)+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
     }
 
     private TurnipRuntime(){}
 }
-
-

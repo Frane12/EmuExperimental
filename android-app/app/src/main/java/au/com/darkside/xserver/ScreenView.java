@@ -778,8 +778,33 @@ public class ScreenView extends View {
      *
      * @param canvas The canvas on which the view will be drawn.
      */
+    private boolean rendererErrorReported;
+    private boolean rendererFallbackRequested;
+
     @Override
     protected void onDraw(Canvas canvas) {
+        int checkpoint=canvas.save();
+        try {
+            drawDesktop(canvas);
+        } catch(RuntimeException error) {
+            if(!rendererErrorReported) {
+                rendererErrorReported=true;
+                com.drnas.console.AndroidCrashDiagnostics.recordRenderer(_xServer.getContext(),error);
+                _xServer.diagnostic("Android X11 drawing FAILED: "+android.util.Log.getStackTraceString(error));
+            }
+            if(!rendererFallbackRequested) {
+                rendererFallbackRequested=true;
+                _xServer.diagnostic("Retrying Android desktop Canvas in CPU mode; Vulkan driver selection is unchanged.");
+                post(()->{setLayerType(android.view.View.LAYER_TYPE_SOFTWARE,null);invalidate();});
+            }
+            // Leave the Android controls alive even if CPU drawing also fails.
+            // The retained report can be shared without restarting Wine.
+        } finally {
+            canvas.restoreToCount(checkpoint);
+        }
+    }
+
+    private void drawDesktop(Canvas canvas) {
         if (_rootWindow == null) {
             super.onDraw(canvas);
             return;
@@ -931,10 +956,11 @@ public class ScreenView extends View {
         _currentCursorX = x;
         _currentCursorY = y;
 
-        Bitmap bm=cursor.getBitmap();
+        Bitmap bm=cursor==null ? null : cursor.getBitmap();
         CursorOverlayListener listener=cursorOverlayListener;
-        if (listener!=null)listener.onCursorUpdated(bm,x,y,cursor.getHotspotX(),cursor.getHotspotY());
-        else {
+        if (listener!=null)listener.onCursorUpdated(bm,x,y,
+                cursor==null?0:cursor.getHotspotX(),cursor==null?0:cursor.getHotspotY());
+        else if (bm!=null && !bm.isRecycled()) {
             int left=x-cursor.getHotspotX(),top=y-cursor.getHotspotY();
             invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
         }
@@ -947,7 +973,25 @@ public class ScreenView extends View {
      * @param y    New Y coordinate.
      * @param mode 0=Normal, 1=Grab, 2=Ungrab
      */
+    private boolean pointerErrorReported;
     public void updatePointerPosition(int x, int y, int mode) {
+        synchronized(_xServer) {
+            if(_rootWindow==null)return;
+            try { updatePointerPositionOwned(x,y,mode); }
+            catch(RuntimeException error) {
+                if(!pointerErrorReported) {
+                    pointerErrorReported=true;
+                    com.drnas.console.AndroidCrashDiagnostics.recordPointer(_xServer.getContext(),error);
+                    _xServer.diagnostic("X11 pointer update FAILED: "+android.util.Log.getStackTraceString(error));
+                }
+                // Restore a valid origin for the next enter/motion event.
+                _motionWindow=_rootWindow;
+                _motionX=_currentCursorX;_motionY=_currentCursorY;
+            }
+        }
+    }
+
+    private void updatePointerPositionOwned(int x, int y, int mode) {
         Window w;
         Cursor c;
 
@@ -971,7 +1015,7 @@ public class ScreenView extends View {
             movePointer(x, y, c);
 
         if (w != _motionWindow) {
-            _motionWindow.leaveEnterNotify(x, y, w, mode);
+            if(_motionWindow!=null)_motionWindow.leaveEnterNotify(x, y, w, mode);
             _motionWindow = w;
             _motionX = x;
             _motionY = y;
@@ -2033,4 +2077,3 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
-

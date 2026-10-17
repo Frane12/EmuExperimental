@@ -17,6 +17,7 @@ final class WineGuiSession implements AutoCloseable {
     private volatile PulseAudioRuntime audio;
     private volatile Thread sessionThread;
     private volatile GuestTools guestTools;
+    private volatile Thread vulkanProbeThread;
 
     static void stopActive() throws Exception {
         WineGuiSession current;
@@ -109,6 +110,7 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("Crysis fullscreen guard unavailable: "+error.getMessage());
         }
         DxvkRuntime.install(new File(base,"prefix"),prefix,log);
+        WineGraphicsTests.install(context,prefix,log);
         SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
@@ -227,15 +229,26 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw);
         tools.log.accept("Task Manager requested in existing shell desktop and Wine prefix.");
     }
+    void testVulkanPresentation(Context context) throws IOException {
+        GuestTools tools;
+        synchronized(this) {
+            tools=guestTools;
+            if(stopped || tools==null)throw new IOException("Windows još nije spreman");
+            if(vulkanProbeThread!=null)throw new IOException("Vulkan test već traje");
+            vulkanProbeThread=Thread.currentThread();
+        }
+        try {
+            TurnipRuntime.probeWine(context,new File(context.getFilesDir(),"gui-runtime/v1"),
+                    new HashMap<>(tools.env),tools.log,tools.raw,true);
+        } finally { synchronized(this){vulkanProbeThread=null;} }
+    }
     @Override public synchronized void close() {
         stopped=true;
         guestTools=null;
+        Thread probe=vulkanProbeThread;if(probe!=null)probe.interrupt();
         Thread worker=sessionThread;if(worker!=null && worker!=Thread.currentThread())worker.interrupt();
         PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
-
-
-

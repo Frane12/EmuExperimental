@@ -85,7 +85,7 @@ public final class WineServerDiagnostics {
                             log.accept(prefix+"[guest process] "+line.substring(0,Math.min(line.length(),650)));
                         else if((line.contains(":err:")||line.contains("dlerror")||
                                 line.contains("cannot find")||line.contains("Failed to")||
-                                line.contains("X connection to")) && priority++<80)
+                                line.contains("X connection to")||AutomaticLogTrigger.matches(line)) && priority++<80)
                             log.accept(prefix+line.substring(0,Math.min(line.length(),800)));
                     }
                 }
@@ -185,3 +185,4 @@ public final class WineServerDiagnostics {
 
     private WineServerDiagnostics(){}
 }
+

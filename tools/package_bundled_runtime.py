@@ -40,46 +40,27 @@ MAGIC = {"XZ": bytes.fromhex("fd377a585a00"),
          "ZSTD": bytes.fromhex("28b52ffd"), "ZIP": bytes.fromhex("504b0304")}
 
 def drnas_turnip_assets():
-    """Choose only *published* Drnas Turnip release ZIPs, never draft/internal."""
-    api = "https://api.github.com/repos/Frane12/Testturnip/releases?per_page=100"
-    req = urllib.request.Request(api, headers={
-        "User-Agent": "DRNAS-EmuExperimental-bundled/0.5.16",
-        "Accept": "application/vnd.github+json"})
-    try:
-        with urllib.request.urlopen(req, timeout=40) as stream:
-            releases = json.load(stream)
-    except Exception as error:
-        print(f"WARNING: Turnip release catalog unavailable: {error}", flush=True)
-        return []
-    result = []
-    for gpu in ("A810", "A830", "A840"):
-        options = []
-        for release in releases:
-            if release.get("draft") or release.get("prerelease"):
-                continue
-            tag = release.get("tag_name", "").lower()
-            if "internal" in tag or "draft" in tag or "test" in tag:
-                continue
-            for asset in release.get("assets", []):
-                name = asset.get("name", "")
-                if (re.search(r"(?i)(?<![a-z0-9])" + gpu + r"(?![0-9])", name) and
-                    name.lower().endswith(".zip") and
-                    "source" not in name.lower() and "symbols" not in name.lower() and
-                    asset.get("size", 0) > 100_000 and
-                    asset.get("browser_download_url", "").startswith(
-                        "https://github.com/Frane12/Testturnip/releases/download/")):
-                    options.append((release.get("published_at", ""),
-                                    asset.get("browser_download_url"), name))
-        if not options:
-            print(f"WARNING: No published {gpu} Drnas Turnip driver ZIP; system Vulkan fallback", flush=True)
-            continue
-        options.sort(reverse=True)
-        published, url, original = options[0]
-        result.append({"kind":"Turnip","name":"Drnas-Turnip-"+gpu+".zip",
-                       "compression":"ZIP","url":url,"gpuTarget":gpu,
-                       "releaseAssetName":original,"publishedAt":published})
-        print(f"Drnas Turnip {gpu}: {original} ({published})", flush=True)
-    return result
+    """Explicit, reproducible driver set; published prereleases are intentional.
+
+    Never discover a different driver during a rebuild. A840 H2.8 remains
+    TESTING ONLY; inclusion is an integration experiment, not a stability claim.
+    """
+    base = "https://github.com/Frane12/Testturnip/releases/download/"
+    pinned = [
+        ("A810", "drnas-turnip-a810-s-ultimate-v1.0",
+         "Drnas-Turnip-A810-S-Ultimate-v1.0.zip",
+         "b32c541e76556f06f8ec36e7cafe5034cefe2ae8c3d4f38939d2832a963bc8c0"),
+        ("A830", "drnas-turnip-s1-a830-smart", "Drnas-Turnip-S1-A830.zip",
+         "c5660b57f39b4334d64811b51f496d19327de975f1368b7f936941c00eb577d5"),
+        ("A840", "drnas-turnip-neuroflow-a8xx-testing-20261016",
+         "Drnas-Turnip-NeuroFlow-A840-H2.8-TESTING-ONLY.zip",
+         "033039c5c9843ced2f119387bdc0b21af3fa359f97d8fabaa3189dbc411510bc"),
+    ]
+    return [{"kind": "Turnip", "name": "Drnas-Turnip-" + gpu + ".zip",
+             "compression": "ZIP", "url": base + tag + "/" + name,
+             "sha256": sha, "gpuTarget": gpu, "releaseAssetName": name}
+            for gpu, tag, name, sha in pinned]
+
 
 def check_turnip_zip(archive):
     with zipfile.ZipFile(archive) as z:
