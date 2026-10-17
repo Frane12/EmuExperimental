@@ -15,6 +15,9 @@ final class GuiLogExport {
     static String save(Context context,Writer writer) throws IOException {
         return create(context,writer).name;
     }
+    static String saveRenderSample(Context context,Writer writer) throws IOException {
+        return create(context,writer,"EmuDrnas-Render-5s").name;
+    }
     static android.content.Intent share(Context context,Writer writer) throws IOException {
         Saved saved=create(context,writer);
         android.content.Intent intent=new android.content.Intent(android.content.Intent.ACTION_SEND);
@@ -30,8 +33,11 @@ final class GuiLogExport {
         Saved(String name,Uri uri){this.name=name;this.uri=uri;}
     }
     private static Saved create(Context context,Writer writer) throws IOException {
+        return create(context,writer,"DRNAS-Wine-GUI");
+    }
+    private static Saved create(Context context,Writer writer,String prefix) throws IOException {
         if(Build.VERSION.SDK_INT<29)throw new IOException("Downloads export requires Android 10; use Save as");
-        String name="DRNAS-Wine-GUI-"+new java.text.SimpleDateFormat(
+        String name=prefix+"-"+new java.text.SimpleDateFormat(
                 "yyyy-MM-dd_HH-mm-ss-SSS",java.util.Locale.US).format(new java.util.Date())+".txt";
         ContentValues values=new ContentValues();
         values.put(MediaStore.MediaColumns.DISPLAY_NAME,name);
