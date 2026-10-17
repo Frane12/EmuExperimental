@@ -33,5 +33,23 @@ int main(int argc,char **argv) {
             if(e && strstr(e,"library \"") && strstr(e,"not found"))errors++;
         }
     }
+    /* Optional for DXVK/Vulkan, but required by Wine's OpenGL/media backends.
+     * Run loader checks in this isolated helper, never in the Android UI. */
+    const char *optional[]={"libGL.so.1","libavutil.so.60","libgstgl-1.0.so"};
+    const char *purpose[]={"Wine wgl OpenGL fallback","Wine winedmo media","Wine winegstreamer media"};
+    int missing=0;
+    for(size_t i=0;i<sizeof(optional)/sizeof(optional[0]);i++){
+        dlerror();void *h=dlopen(optional[i],RTLD_NOW|RTLD_LOCAL);
+        if(h){
+            printf("DRNAS_DEP_AUDIT OPTIONAL_LOAD_OK %s (%s)\n",optional[i],purpose[i]);
+            dlclose(h);
+        } else {
+            const char *e=dlerror();
+            printf("DRNAS_DEP_AUDIT OPTIONAL_LOAD_MISSING %s (%s): %s\n",
+                   optional[i],purpose[i],e?e:"unknown");
+            missing++;
+        }
+    }
+    printf("DRNAS_DEP_AUDIT RESULT essential_failures=%d optional_loader_failures=%d; optional missing libs do not prove Direct3D failure\n",errors,missing);
     return errors?1:0;
 }
