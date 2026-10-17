@@ -50,6 +50,16 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
     private Button shareLog;
+    private Button toolbarKeyboard,toolbarTasks,toolbarOptions;
+    private boolean toolbarExpanded;
+    private void setToolbarExpanded(boolean expanded) {
+        toolbarExpanded=expanded;
+        int visibility=expanded?View.VISIBLE:View.GONE;
+        if(shareLog!=null)shareLog.setVisibility(visibility);
+        if(toolbarKeyboard!=null)toolbarKeyboard.setVisibility(visibility);
+        if(toolbarTasks!=null)toolbarTasks.setVisibility(visibility);
+        if(toolbarOptions!=null)toolbarOptions.setVisibility(visibility);
+    }
     private boolean keyboardPending;
     private int keyboardAttempts;
     private DrnasPerformanceHud performanceHud;
@@ -170,8 +180,10 @@ public final class WineGuiActivity extends Activity {
         shareLog.setTextColor(Color.WHITE);
         shareLog.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xE025465A));
         shareLog.setContentDescription("Pošalji dijagnostički TXT log");
-        FrameLayout.LayoutParams sl=new FrameLayout.LayoutParams(dp(132),dp(46),Gravity.TOP|Gravity.END);
-        sl.topMargin=dp(5);sl.rightMargin=dp(56);
+        FrameLayout.LayoutParams sl=new FrameLayout.LayoutParams(dp(132),dp(42),Gravity.TOP|Gravity.END);
+        // Collapse all buttons by default; the glass HUD owns the top center.
+        // Expanded toolbar sits on a second row, not on top of performance HUD.
+        sl.topMargin=dp(61);sl.rightMargin=dp(160);
         layout.addView(shareLog,sl);
         shareLog.setOnClickListener(v->shareGuiLog());
         Button menu=new Button(this);
@@ -187,7 +199,18 @@ public final class WineGuiActivity extends Activity {
                 dp(46),dp(46),Gravity.TOP|Gravity.END);
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
-        menu.setOnClickListener(v->new AlertDialog.Builder(this)
+        menu.setOnClickListener(v->setToolbarExpanded(!toolbarExpanded));
+        // A dedicated Options button opens the existing experimental menu
+        // when expanded. The top-right dot itself only folds/unfolds toolbar.
+        toolbarOptions=new Button(this);
+        toolbarOptions.setText("Opcije");
+        toolbarOptions.setAllCaps(false);
+        toolbarOptions.setTextColor(Color.WHITE);
+        toolbarOptions.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xCD294254));
+        FrameLayout.LayoutParams op=new FrameLayout.LayoutParams(dp(100),dp(42),Gravity.TOP|Gravity.END);
+        op.topMargin=dp(61);op.rightMargin=dp(56);
+        layout.addView(toolbarOptions,op);
+        toolbarOptions.setOnClickListener(v->new AlertDialog.Builder(this)
                 .setItems(new String[]{"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","C-cleanup rubova ON/OFF","DXVK FPS limit (sljedeći start)"},(dialog,which)->{
                     if(which==0) {
                         keyboardPending=true;
@@ -300,21 +323,21 @@ public final class WineGuiActivity extends Activity {
                 }).show());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
-        Button tasks=new Button(this);
-        tasks.setText("Task Manager");tasks.setAllCaps(false);
-        FrameLayout.LayoutParams tl=new FrameLayout.LayoutParams(dp(144),dp(46),Gravity.TOP|Gravity.END);
-        tl.topMargin=dp(5);tl.rightMargin=dp(192);
-        layout.addView(tasks,tl);tasks.setOnClickListener(v->openTaskManager());
+        toolbarTasks=new Button(this);
+        toolbarTasks.setText("Task Manager");toolbarTasks.setAllCaps(false);
+        FrameLayout.LayoutParams tl=new FrameLayout.LayoutParams(dp(140),dp(42),Gravity.TOP|Gravity.END);
+        tl.topMargin=dp(61);tl.rightMargin=dp(296);
+        layout.addView(toolbarTasks,tl);toolbarTasks.setOnClickListener(v->openTaskManager());
         // An always-visible keyboard button remains usable if a Wine game changes focus.
-        Button keyboard=new Button(this);
-        keyboard.setText("⌨");
-        keyboard.setContentDescription("Prikaži Android tipkovnicu za Wine");
-        keyboard.setTextSize(20);
-        keyboard.setAllCaps(false);
-        FrameLayout.LayoutParams kl=new FrameLayout.LayoutParams(dp(64),dp(46),Gravity.TOP|Gravity.END);
-        kl.topMargin=dp(5);kl.rightMargin=dp(343);
-        layout.addView(keyboard,kl);
-        keyboard.setOnClickListener(v->{
+        toolbarKeyboard=new Button(this);
+        toolbarKeyboard.setText("⌨");
+        toolbarKeyboard.setContentDescription("Prikaži Android tipkovnicu za Wine");
+        toolbarKeyboard.setTextSize(20);
+        toolbarKeyboard.setAllCaps(false);
+        FrameLayout.LayoutParams kl=new FrameLayout.LayoutParams(dp(60),dp(42),Gravity.TOP|Gravity.END);
+        kl.topMargin=dp(61);kl.rightMargin=dp(440);
+        layout.addView(toolbarKeyboard,kl);
+        toolbarKeyboard.setOnClickListener(v->{
             keyboardPending=true;
             keyboardAttempts=0;
             showKeyboard();
@@ -351,9 +374,31 @@ public final class WineGuiActivity extends Activity {
         }
         performanceHud=new DrnasPerformanceHud(this);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
-                dp(318),dp(34),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
-        hp.topMargin=dp(6);
+                dp(374),dp(52),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
+        hp.topMargin=dp(5);
         layout.addView(performanceHud,hp);
+        // A very thin, transparent gesture zone at the screen's top edge:
+        // pull down to reveal toolbar, pull upward to collapse it. No gesture
+        // interceptor covers the active Crysis framebuffer or virtual pads.
+        View gestureEdge=new View(this);
+        FrameLayout.LayoutParams gp=new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,dp(10),Gravity.TOP);
+        final float[] touchDown=new float[1];
+        gestureEdge.setOnTouchListener((view,event)->{
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+                touchDown[0]=event.getRawY();
+                return true;
+            }
+            if(event.getActionMasked()==MotionEvent.ACTION_MOVE ||
+                    event.getActionMasked()==MotionEvent.ACTION_UP){
+                float delta=event.getRawY()-touchDown[0];
+                if(delta>dp(25)){setToolbarExpanded(true);return true;}
+                if(delta<-dp(25)){setToolbarExpanded(false);return true;}
+            }
+            return true;
+        });
+        layout.addView(gestureEdge,gp);
+        setToolbarExpanded(false);
         performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
         setContentView(layout);
