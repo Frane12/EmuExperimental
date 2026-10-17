@@ -42,7 +42,7 @@ MAGIC = {"XZ": bytes.fromhex("fd377a585a00"),
 def drnas_turnip_assets():
     """Explicit, reproducible driver set; published prereleases are intentional.
 
-    Never discover a different driver during a rebuild. A840 H2.8 remains
+    Never discover a different driver during a rebuild. A840 H2.9 remains
     TESTING ONLY; inclusion is an integration experiment, not a stability claim.
     """
     base = "https://github.com/Frane12/Testturnip/releases/download/"
@@ -52,9 +52,9 @@ def drnas_turnip_assets():
          "b32c541e76556f06f8ec36e7cafe5034cefe2ae8c3d4f38939d2832a963bc8c0"),
         ("A830", "drnas-turnip-s1-a830-smart", "Drnas-Turnip-S1-A830.zip",
          "c5660b57f39b4334d64811b51f496d19327de975f1368b7f936941c00eb577d5"),
-        ("A840", "drnas-turnip-neuroflow-a8xx-testing-20261016",
-         "Drnas-Turnip-NeuroFlow-A840-H2.8-TESTING-ONLY.zip",
-         "033039c5c9843ced2f119387bdc0b21af3fa359f97d8fabaa3189dbc411510bc"),
+        ("A840", "drnas-turnip-neuroflow-a840-h2.9-testing-20261017",
+         "Drnas-Turnip-NeuroFlow-A840-H2.9-TESTING-ONLY.zip",
+         "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d"),
     ]
     return [{"kind": "Turnip", "name": "Drnas-Turnip-" + gpu + ".zip",
              "compression": "ZIP", "url": base + tag + "/" + name,
