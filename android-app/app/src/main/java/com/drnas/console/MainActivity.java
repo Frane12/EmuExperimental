@@ -447,6 +447,26 @@ public final class MainActivity extends Activity {
                     android.widget.Toast.LENGTH_LONG).show();
         });
         desktop.addView(turnipPreference,pad(7,4));
+        // Persisted pre-Explorer selection. The same package contains BOTH
+        // DXVK 1.10.3 variants; changing it requires restarting Wine.
+        final Button dxvkVariant=button("",false,v->{});
+        final Runnable updateDxvkLabel=()->{
+            boolean async=DxvkVariants.ASYNC.equals(DxvkVariants.selected(this));
+            dxvkVariant.setText(async?
+                    "DXVK 1.10.3 Async   •   UKLJUČEN  ✓":
+                    "DXVK 1.10.3 Standard   •   Async OFF");
+            dxvkVariant.setTextColor(async?ACCENT:TEXT);
+        };
+        updateDxvkLabel.run();
+        dxvkVariant.setOnClickListener(v->{
+            String mode=DxvkVariants.toggle(this);
+            updateDxvkLabel.run();
+            android.widget.Toast.makeText(this,
+                    "Odabran DXVK "+mode+
+                    ". Primjenjuje se pri sljedećem pokretanju Explorera.",
+                    android.widget.Toast.LENGTH_LONG).show();
+        });
+        desktop.addView(dxvkVariant,pad(7,4));
         note(desktop,"A840 H2.9 je ugrađen u APK. Automatska aktivacija " +
                 "zahtijeva potvrđen Adreno 840 i ispravan Vulkan loader. " +
                 "Točan rezultat provjeri u Wine/Vulkan logu; ON nije dokaz aktivacije.");
@@ -474,7 +494,7 @@ public final class MainActivity extends Activity {
     private void showComponents() {
         sectionEyebrow(content,"VERSIONED COMPONENT VAULT");
         heading("Your engine parts.");
-        content.addView(label("Proton 11.0-2 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are included and provisioned automatically. Optional import is for alternative WCPs and Turnip ZIP.",13,MUTED,false),pad(0,18));
+        content.addView(label("Proton 11.0-2 ARM64EC, FEXCore 2609 and both DXVK 1.10.3 Standard + Async are included in the APK. Switch modes before Explorer; Reset Wine is needed to apply an in-session change.",13,MUTED,false),pad(0,18));
         LinearLayout panel=card();
         panel.addView(label("STAGE A COMPONENT ARCHIVE",12,ACCENT,true),pad(0,8));
         addButton(panel,"+ Import .wcp / Turnip .zip",true,v->selectWcp());
