@@ -185,6 +185,8 @@ final class WineGuiSession implements AutoCloseable {
             try { WineWallpaper.ensure(prefix,linker,wine,proton,env,log,raw); }
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
+            FexPerformanceProfile.apply(env);
+            log.accept("FEX Performance requested: TSO/vector/memcpy/halfbarrier=0; x87 reduced precision=1; multiblock=1. Effective bridge settings and speed require device verification.");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
@@ -256,3 +258,4 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+

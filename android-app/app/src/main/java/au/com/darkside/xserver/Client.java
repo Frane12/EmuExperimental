@@ -26,6 +26,7 @@ public class Client extends Thread {
     private boolean _closeConnection = false;
     private int _lastOpcode=-1, _lastRequestBytes;
     private boolean _isConnected = true;
+    private boolean _readingRequest;
     private int _closeDownMode = Destroy;
     private boolean _imperviousToServerGrabs = false;
 
@@ -128,7 +129,8 @@ public class Client extends Thread {
         } catch (IOException e) {
             android.util.Log.i("DRNAS-X11", "Client connection ended: " + e);
             if(!_closeConnection)_xServer.diagnostic("X11 client IO ended after opcode="+_lastOpcode+
-                    " bytes="+_lastRequestBytes+": "+e);
+                    " bytes="+_lastRequestBytes+" phase="+(_readingRequest?"request":"between requests")+
+                    " outputFailure="+_inputOutput.outputFailure()+": "+e);
         } catch (RuntimeException e) {
             android.util.Log.e("DRNAS-X11", "X11 request failed", e);
             _xServer.diagnostic("X11 request FAILED opcode="+_lastOpcode+" bytes="+_lastRequestBytes+": "+android.util.Log.getStackTraceString(e));
@@ -243,13 +245,19 @@ public class Client extends Thread {
             int requestLength = _inputOutput.readShort();
             int bytesRemaining;
 
-            if (requestLength == 0) {    // Handle big requests.
-                requestLength = _inputOutput.readInt();
-                if (requestLength > 2) bytesRemaining = requestLength * 4 - 8;
-                else bytesRemaining = 0;
-            } else {
-                bytesRemaining = requestLength * 4 - 4;
+            _readingRequest = true;
+            _lastOpcode = opcode & 255;
+            int headerWords = 1;
+            long words = requestLength;
+            if (requestLength == 0) {
+                words = Integer.toUnsignedLong(_inputOutput.readInt());
+                headerWords = 2;
             }
+            if (words < headerWords || words > InputOutput.MAX_REQUEST_WORDS)
+                throw new IOException("Invalid X11 request length in words: " + words);
+            bytesRemaining = (int) (words * 4 - headerWords * 4);
+            _lastRequestBytes = bytesRemaining;
+            _inputOutput.beginRequest(bytesRemaining);
 
             // Deal with server grabs.
             while (!_xServer.processingAllowed(this)) {
@@ -261,7 +269,14 @@ public class Client extends Thread {
 
             _lastOpcode=opcode&255;_lastRequestBytes=bytesRemaining;
             synchronized (_xServer) {
-                processRequest(opcode, arg, bytesRemaining);
+                try {
+                    processRequest(opcode, arg, bytesRemaining);
+                } finally {
+                    int unread = _inputOutput.endRequest();
+                    if (unread != 0) _xServer.diagnostic("X11 handler left " + unread +
+                            " body bytes, opcode=" + (opcode & 255) + "; next request remains aligned");
+                }
+                _readingRequest = false;
             }
         }
     }
@@ -805,4 +820,5 @@ public class Client extends Thread {
             _xServer.destroyClientResources(client);
     }
 }
+
 

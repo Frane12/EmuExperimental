@@ -64,7 +64,7 @@ public class Extensions {
                     synchronized (io) {
                         Util.writeReplyHeader(client, arg);
                         io.writeInt(0);
-                        io.writeInt(Integer.MAX_VALUE);
+                        io.writeInt(4 * 1024 * 1024); // 16 MiB; matches InputOutput framing limit.
                         io.writePadBytes(20);
                     }
                     io.flush();

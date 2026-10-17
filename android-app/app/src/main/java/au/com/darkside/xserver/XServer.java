@@ -643,6 +643,10 @@ public class XServer {
         if (_extensions.containsKey(s)) e = _extensions.get(s);
         else e = null;
 
+        if (s.equals("MIT-SHM") || s.equals("DRI3") || s.equals("Present") ||
+                s.equals("GLX") || s.equals("BIG-REQUESTS"))
+            diagnostic("X11 QueryExtension name=" + s + " present=" + (e != null) +
+                    " sequence=" + client.getSequenceNumber());
         synchronized (io) {
             Util.writeReplyHeader(client, (byte) 0);
             io.writeInt(0);    // Reply length.
@@ -1005,3 +1009,4 @@ public class XServer {
         }
     }
 }
+
