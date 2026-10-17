@@ -22,6 +22,12 @@ public class Drawable {
     private Bitmap _backgroundBitmap;
     private int _backgroundColor;
     private boolean[] _shapeMask = null;
+    // Retain one buffer per drawable, not one 800x600 (~6 MiB) allocation
+    // per Mesa sw,noshm PutImage. A window owns this state until destruction.
+    private byte[] _zUploadBytes;
+    private int[] _zUploadColors;
+    private Bitmap _zUploadBitmap;
+
 
     private static final byte BITMAP_FORMAT = 0;
     private static final byte XY_PIXMAP_FORMAT = 1;
@@ -807,6 +813,37 @@ public class Drawable {
             io.readSkip(bytesRemaining);
             ErrorCode.write(client, ErrorCode.Length, RequestCode.PutImage, 0);
             return false;
+        }
+
+
+        // Mesa software WSI streams a full BGRX frame via X11 PutImage.
+        // The generic per-byte loop incurs ~1.9 million Java readByte() calls
+        // AND three full-frame allocations at 800x600 on every repaint.
+        // Use bulk reads, a linear decoder and reusable staging resources.
+        // Preserve the generic renderer when a shape mask needs compositing.
+        final int pixels = width * height;
+        if (format == Z_PIXMAP_FORMAT && depth == 24
+                && pixels >= 4096 && n <= 8 * 1024 * 1024
+                && (_shapeMask == null || _shapeMask.length != pixels)) {
+            try {
+                if (_zUploadBytes == null || _zUploadBytes.length < n)
+                    _zUploadBytes = new byte[n];
+                if (_zUploadColors == null || _zUploadColors.length < pixels)
+                    _zUploadColors = new int[pixels];
+                if (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
+                        || _zUploadBitmap.getHeight() != height)
+                    _zUploadBitmap = Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
+            } catch (OutOfMemoryError error) {
+                io.readSkip(bytesRemaining);
+                ErrorCode.write(client, ErrorCode.Alloc, RequestCode.PutImage, 0);
+                return false;
+            }
+            io.readBytes(_zUploadBytes,0,n);
+            io.readSkip(pad);
+            X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
+            _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
+            _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
+            return true;
         }
 
         int[] colors;
