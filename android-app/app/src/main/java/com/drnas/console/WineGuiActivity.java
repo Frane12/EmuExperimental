@@ -145,6 +145,17 @@ public final class WineGuiActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // Overlay BELOW toolbar and controller buttons but ABOVE X11 screen.
+        // Late-added full-screen views would swallow the top-right menu touch.
+        // This view is below XInput buttons and toolbar; any free screen touch
+        // becomes a movable right thumbstick. Existing XInput buttons win hits.
+        if(xinputState!=null) {
+            relativeLookOverlay=new RelativeLookOverlay(this,xinputState);
+            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
+            layout.addView(relativeLookOverlay,new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+
         // Quiet startup notice, not diagnostics. An offline Mono installation
         // may need time before the Wine desktop maps its first X11 window.
         startupStatus=new TextView(this);
@@ -355,14 +366,6 @@ public final class WineGuiActivity extends Activity {
             keyboardAttempts=0;
             showKeyboard();
         });
-        // This view is below XInput buttons and toolbar; any free screen touch
-        // becomes a movable right thumbstick. Existing XInput buttons win hits.
-        if(xinputState!=null) {
-            relativeLookOverlay=new RelativeLookOverlay(this,xinputState);
-            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
-            layout.addView(relativeLookOverlay,new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
-        }
         // Opt-in: leaves Wine desktop unobstructed until a game is running.
         // Sends real X11 keyboard events; no fake XInput claims or uinput permissions.
         virtualStick=new VirtualStickView(this,(key,pressed)->{
