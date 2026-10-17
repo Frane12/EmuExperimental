@@ -231,14 +231,37 @@ public final class MainActivity extends Activity {
         bg.setStroke(dp(1),0xB02BDAE4);
         return bg;
     }
+    // Three-stage shading + lit rim gives buttons a gentle raised-glass depth.
+    // Press feedback uses a darker inset gradient, not a distracting ripple.
+    private GradientDrawable glassButtonLayer(boolean primary,boolean pressed) {
+        GradientDrawable layer=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                primary
+                ? (pressed?new int[]{0xff37bba5,0xff4dd1b5,0xff278b7d}
+                          :new int[]{0xffa2f3dd,0xff74dbbe,0xff42b59b})
+                : (pressed?new int[]{0xff18354c,0xff284963,0xff10263b}
+                          :new int[]{0xff3b5974,0xff203c57,0xff142b45}));
+        layer.setCornerRadius(dp(14));
+        layer.setStroke(dp(1),pressed?0xff79e3e9:0xff3fd5df);
+        return layer;
+    }
     private StateListDrawable buttonSurface(boolean primary) {
         StateListDrawable layers=new StateListDrawable();
-        layers.addState(new int[]{android.R.attr.state_pressed},
-                glass(primary?0xFF4DC5A9:0xF0466480,
-                      primary?0xFF36A48F:0xF034536E,14));
-        layers.addState(new int[]{},
-                glass(primary?0xFF81EAD2:0xCF234059,
-                      primary?0xFF4ACDAF:0xCF142C45,14));
+        layers.addState(new int[]{android.R.attr.state_pressed},glassButtonLayer(primary,true));
+        layers.addState(new int[]{},glassButtonLayer(primary,false));
+        return layers;
+    }
+    private StateListDrawable powerButtonSurface(boolean ready) {
+        StateListDrawable layers=new StateListDrawable();
+        GradientDrawable down=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                ready?new int[]{0xff1b473f,0xff0b2c29}:new int[]{0xff4d2637,0xff271320});
+        down.setCornerRadius(dp(14));
+        down.setStroke(dp(1),ready?0xff54e8b0:0xfff26976);
+        GradientDrawable up=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                ready?new int[]{0xff205248,0xff113b35,0xff0a2522}
+                     :new int[]{0xff522b3a,0xff351c2b,0xff22121d});
+        up.setCornerRadius(dp(14));up.setStroke(dp(1),ready?0xff57e8b0:0xfff26976);
+        layers.addState(new int[]{android.R.attr.state_pressed},down);
+        layers.addState(new int[]{},up);
         return layers;
     }
     private void sectionEyebrow(LinearLayout root,String text) {
@@ -306,7 +329,32 @@ public final class MainActivity extends Activity {
         b.setMinHeight(dp(40));
         b.setBackground(buttonSurface(prominent));
         b.setStateListAnimator(null);
+        b.setElevation(dp(3));
+        b.setOnTouchListener((view,event)->{
+            if(!view.isEnabled())return false;
+            switch(event.getActionMasked()){
+                case android.view.MotionEvent.ACTION_DOWN:
+                    view.animate().cancel();
+                    view.animate().scaleX(.977f).scaleY(.96f).setDuration(85).start();
+                    break;
+                case android.view.MotionEvent.ACTION_CANCEL:
+                case android.view.MotionEvent.ACTION_UP:
+                    view.animate().cancel();
+                    view.animate().scaleX(1f).scaleY(1f).setDuration(155).start();
+                    break;
+            }
+            return false; // Let the native Button handle clicks/accessibility.
+        });
         b.setOnClickListener(action);
+        return b;
+    }
+    private Button iconButton(String text,String icon,View.OnClickListener action) {
+        Button b=button(text,false,action);
+        b.setGravity(Gravity.CENTER);
+        b.setCompoundDrawablesRelativeWithIntrinsicBounds(null,
+                new DashboardIconDrawable(icon,dp(29)),null,null);
+        b.setCompoundDrawablePadding(dp(4));
+        b.setPadding(dp(5),dp(6),dp(5),dp(5));
         return b;
     }
     private void addButton(LinearLayout root, String name, boolean main, View.OnClickListener action) {
@@ -336,13 +384,17 @@ public final class MainActivity extends Activity {
         pageScroll=scroll;renderedSection=section;
         SystemBarInsets.apply(scroll);
         scroll.setFillViewport(true);
-        scroll.setBackground(new GradientDrawable(
-                GradientDrawable.Orientation.TL_BR,
-                new int[]{0xFF080F1C,0xFF0D2231,0xFF070D19}));
+        // A dedicated Canvas paints moving pollen across the entire GUI
+        // behind translucent cards. It cannot obscure icons, labels or touches.
+        scroll.setBackgroundColor(Color.TRANSPARENT);
         content=column();
         content.setPadding(dp(10),dp(8),dp(10),dp(10));
         scroll.addView(content);
-        setContentView(scroll);
+        android.widget.FrameLayout screen=new android.widget.FrameLayout(this);
+        screen.addView(new BoraPollenBackground(this),
+                new android.widget.FrameLayout.LayoutParams(-1,-1));
+        screen.addView(scroll,new android.widget.FrameLayout.LayoutParams(-1,-1));
+        setContentView(screen);
         LinearLayout header=horizontal();
         header.setPadding(dp(9),dp(6),dp(9),dp(6));
         header.setBackground(glass(0xD51C3749,0xD10D1D32,18));
@@ -426,12 +478,9 @@ public final class MainActivity extends Activity {
             turnOnWindowsButton.setText(wineBooting?"POKRETANJE…":ready?"WINDOWS ON":"WINDOWS OFF");
             turnOnWindowsButton.setTextColor(neon);
             turnOnWindowsButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
-                    new RetroPowerDrawable(dp(28),neon),null,null,null);
-            turnOnWindowsButton.setCompoundDrawablePadding(dp(7));
-            GradientDrawable surface=glass(ready?0xff143e37:0xff40222f,
-                    ready?0xff092c29:0xff29151f,14);
-            surface.setStroke(dp(1),ready?0xff57e8b0:0xfff26976);
-            turnOnWindowsButton.setBackground(surface);
+                    null,new DashboardIconDrawable(DashboardIconDrawable.POWER,dp(29)),null,null);
+            turnOnWindowsButton.setCompoundDrawablePadding(dp(4));
+            turnOnWindowsButton.setBackground(powerButtonSurface(ready));
             turnOnWindowsButton.setContentDescription(wineBooting?"Windows se pokreće":
                     ready?"Windows upaljen":"Windows ugašen. Pokreni Windows");
         }
@@ -461,13 +510,13 @@ public final class MainActivity extends Activity {
     /** Compact controls keep normal Android layout and touch coordinates. */
     private void actionRow(LinearLayout parent, View left, View right) {
         LinearLayout row=horizontal();
-        row.setMinimumHeight(dp(40));
+        row.setMinimumHeight(dp(66));
         row.addView(left,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f));
         LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f);
         second.leftMargin=dp(6);
         row.addView(right,second);
         LinearLayout.LayoutParams rowParams=pad(3,3);
-        rowParams.height=dp(40);
+        rowParams.height=dp(66);
         rowParams.weight=1f;
         parent.addView(row,rowParams);
     }
@@ -540,19 +589,33 @@ public final class MainActivity extends Activity {
         title.addView(winePowerLed,new LinearLayout.LayoutParams(dp(10),dp(10)));
         desktop.addView(title,pad(0,5));
 
-        turnOnWindowsButton=button("WINDOWS OFF",false,v->startWineboot());
-        resetWineButton=button("↻  RESET WINE",false,v->resetWine());
+        turnOnWindowsButton=iconButton("WINDOWS OFF",DashboardIconDrawable.POWER,v->startWineboot());
+        resetWineButton=iconButton("RESET WINE",DashboardIconDrawable.RESET,v->resetWine());
         actionRow(desktop,turnOnWindowsButton,resetWineButton);
-        windowsExplorerButton=button("EXPLORER",false,v->openWineGui());
-        windowsExplorerButton.setCompoundDrawablesRelativeWithIntrinsicBounds(new RetroWindowsDrawable(dp(28)),null,null,null);
-        windowsExplorerButton.setCompoundDrawablePadding(dp(7));
-        LinearLayout.LayoutParams explorerRow=new LinearLayout.LayoutParams(-1,dp(40),1f);
-        explorerRow.topMargin=dp(3);explorerRow.bottomMargin=dp(3);
-        desktop.addView(windowsExplorerButton,explorerRow);
-
+        windowsExplorerButton=iconButton("EXPLORER",DashboardIconDrawable.FILES,v->openWineGui());
+        actionRow(desktop,windowsExplorerButton,
+                iconButton("XINPUT EDITOR",DashboardIconDrawable.GAMEPAD,
+                        v->startActivity(new Intent(this,XInputLayoutEditorActivity.class))));
         actionRow(desktop,
-                button("▤  PODIJELI LOG",false,v->shareCrashDiagnostics()),
-                button("Options",false,v->showSection("Options")));
+                iconButton("A840 H2.9 AUTO "+(TurnipRuntime.autoH29Enabled(this)?"ON ●":"OFF"),
+                        DashboardIconDrawable.GPU,v->{
+                            boolean on=!TurnipRuntime.autoH29Enabled(this);
+                            TurnipRuntime.setAutoH29Enabled(this,on);
+                            Toast.makeText(this,"A840 H2.9 "+(on?"ON":"OFF")+
+                                    " · primjena pri idućem pokretanju",Toast.LENGTH_SHORT).show();
+                            render();
+                        }),
+                iconButton("DXVK 1.10.3 · "+DxvkVariants.selected(this).toUpperCase(Locale.ROOT),
+                        DashboardIconDrawable.DXVK,v->{
+                            String choice=DxvkVariants.toggle(this);
+                            Toast.makeText(this,"DXVK "+choice+
+                                    " · primjena pri idućem pokretanju Wine",Toast.LENGTH_SHORT).show();
+                            render();
+                        }));
+        actionRow(desktop,
+                iconButton("PODIJELI LOG",DashboardIconDrawable.LOG,v->shareCrashDiagnostics()),
+                iconButton("KONFIGURACIJA",DashboardIconDrawable.SETTINGS,
+                        v->showSection("Options")));
 
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         wineStartupBar.setMax(100);
@@ -568,8 +631,9 @@ public final class MainActivity extends Activity {
         fillRemainingHeight(folder,1f);
         sectionEyebrow(folder,"ANDROID FILES  /  R:");
         actionRow(folder,
-                button("▣  ODABERI MAPU",false,v->requestSharedFolder()),
-                button("↻  OSVJEŽI R:",false,v->synchronizeSharedFolder(false)));
+                iconButton("ODABERI MAPU",DashboardIconDrawable.FOLDER,v->requestSharedFolder()),
+                iconButton("OSVJEŽI R:",DashboardIconDrawable.RESET,
+                        v->synchronizeSharedFolder(false)));
         content=page;
         TextView runtimeInfo=label("1280 × 720 · Proton 11 · FEX 2609 · DXVK",10,MUTED,false);
         runtimeInfo.setGravity(Gravity.CENTER_HORIZONTAL);
