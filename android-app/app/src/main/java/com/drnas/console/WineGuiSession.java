@@ -259,7 +259,7 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.pipe(task,"[Task Manager] ",tools.log,30,tools.raw);
         tools.log.accept("Task Manager requested in existing shell desktop and Wine prefix.");
     }
-    void testVulkanPresentation(Context context,boolean immediate) throws IOException {
+    void testVulkanPresentation(Context context,String mode) throws IOException {
         GuestTools tools;
         synchronized(this) {
             tools=guestTools;
@@ -269,7 +269,7 @@ final class WineGuiSession implements AutoCloseable {
         }
         try {
             TurnipRuntime.probeWine(context,new File(context.getFilesDir(),"gui-runtime/v1"),
-                    new HashMap<>(tools.env),tools.log,tools.raw,true,immediate);
+                    new HashMap<>(tools.env),tools.log,tools.raw,true,mode);
         } finally { synchronized(this){vulkanProbeThread=null;} }
     }
     @Override public synchronized void close() {
