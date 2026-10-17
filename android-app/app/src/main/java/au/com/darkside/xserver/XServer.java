@@ -88,6 +88,9 @@ public class XServer {
     public void setFrameDiagnosticsEnabled(boolean enabled) {
         frameDiagnosticsEnabled=enabled;
     }
+    public boolean isFrameDiagnosticsEnabled() {
+        return frameDiagnosticsEnabled;
+    }
     public void setDiagnosticListener(java.util.function.Consumer<String> listener) { diagnosticListener=listener; }
     public void diagnostic(String message) { if(diagnosticListener!=null)diagnosticListener.accept(message); }
     public synchronized int mappedWindowCount() { return liveMappedWindows.size(); }
