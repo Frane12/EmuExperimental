@@ -47,6 +47,12 @@ public final class WineGuiActivity extends Activity {
     private VirtualStickView virtualStick;
     private XInputSharedState xinputState;
     private XInputControlsView xinputLeft,xinputRight;
+    private RelativeLookOverlay relativeLookOverlay;
+    private void syncVirtualPadConnection() {
+        if(xinputState==null)return;
+        boolean visiblePad=xinputLeft!=null && xinputLeft.getVisibility()==View.VISIBLE;
+        xinputState.setVirtualEnabled(visiblePad || relativeCameraEnabled);
+    }
     private volatile boolean desktopLaunchRequested;
     private volatile boolean desktopFailed;
     private Button shareLog;
@@ -116,7 +122,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         xserver.getScreen().setRelativeTouchMode(true);
-        xserver.getScreen().setCameraTouchMode(relativeCameraEnabled);
+        xserver.getScreen().setCameraTouchMode(false);
         // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
         // This does NOT implement X11 DRI3/Present or Wine Vulkan WSI.
         xserver.getScreen().setLayerType(View.LAYER_TYPE_NONE,null);
@@ -254,10 +260,14 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==21) {
                         relativeCameraEnabled=!relativeCameraEnabled;
-                        xserver.getScreen().setCameraTouchMode(relativeCameraEnabled);
                         getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
+                        if(relativeLookOverlay!=null) {
+                            if(!relativeCameraEnabled)relativeLookOverlay.release();
+                            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
+                        }
+                        syncVirtualPadConnection();
                         Toast.makeText(this,relativeCameraEnabled?
-                                "Relativna kamera ON (prst po ekranu)":"Relativna kamera OFF (touchpad)",
+                                "Kamera bilo gdje: XInput analog ON":"Kamera bilo gdje OFF (normalni dodir)",
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==22) {
@@ -280,9 +290,9 @@ public final class WineGuiActivity extends Activity {
                                 virtualStick.setVisibility(View.GONE);
                             }
                             if(!show){xinputLeft.release();xinputRight.release();}
-                            xinputState.setVirtualEnabled(show);
                             xinputLeft.setVisibility(show?View.VISIBLE:View.GONE);
                             xinputRight.setVisibility(show?View.VISIBLE:View.GONE);
+                            syncVirtualPadConnection();
                             log("DRNAS_XINPUT "+(show?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
                             Toast.makeText(this,show?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
                         }
@@ -305,9 +315,9 @@ public final class WineGuiActivity extends Activity {
                         boolean show=virtualStick.getVisibility()!=View.VISIBLE;
                         if(show && xinputState!=null && xinputLeft!=null) {
                             xinputLeft.release();xinputRight.release();
-                            xinputState.setVirtualEnabled(false);
                             xinputLeft.setVisibility(View.GONE);
                             xinputRight.setVisibility(View.GONE);
+                            syncVirtualPadConnection();
                         }
                         if(!show)virtualStick.releaseAll();
                         virtualStick.setVisibility(show?View.VISIBLE:View.GONE);
@@ -342,6 +352,14 @@ public final class WineGuiActivity extends Activity {
             keyboardAttempts=0;
             showKeyboard();
         });
+        // This view is below XInput buttons and toolbar; any free screen touch
+        // becomes a movable right thumbstick. Existing XInput buttons win hits.
+        if(xinputState!=null) {
+            relativeLookOverlay=new RelativeLookOverlay(this,xinputState);
+            relativeLookOverlay.setVisibility(relativeCameraEnabled?View.VISIBLE:View.GONE);
+            layout.addView(relativeLookOverlay,new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         // Opt-in: leaves Wine desktop unobstructed until a game is running.
         // Sends real X11 keyboard events; no fake XInput claims or uinput permissions.
         virtualStick=new VirtualStickView(this,(key,pressed)->{
@@ -372,6 +390,7 @@ public final class WineGuiActivity extends Activity {
             xinputRight.setVisibility(View.GONE);
             layout.addView(xinputRight,rr);
         }
+        syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
                 dp(374),dp(52),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
@@ -840,6 +859,7 @@ public final class WineGuiActivity extends Activity {
         if(virtualStick!=null)virtualStick.releaseAll();
         if(xinputLeft!=null)xinputLeft.release();
         if(xinputRight!=null)xinputRight.release();
+        if(relativeLookOverlay!=null)relativeLookOverlay.release();
         if(xinputState!=null){xinputState.releaseTouch();xinputState.disconnectPhysical();}
         log("DRNAS_X11_LIFECYCLE onPause finishing="+isFinishing()+
                 " changingConfigurations="+isChangingConfigurations());
