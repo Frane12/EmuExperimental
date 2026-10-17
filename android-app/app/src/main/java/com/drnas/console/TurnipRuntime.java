@@ -130,6 +130,15 @@ final class TurnipRuntime {
         env.put("WRAPPER_LOG_LEVEL","error");
     }
 
+    static void configurePresentGuard(Context context,Map<String,String> env) throws IOException {
+        File guard=new File(context.getApplicationInfo().nativeLibraryDir,"libdrnas_xcb_present_guard.so");
+        if(!guard.isFile())throw new IOException("Packaged XCB Present guard missing");
+        String path=guard.getAbsolutePath();
+        String previous=env.getOrDefault("LD_PRELOAD","");
+        if(!previous.contains(path))env.put("LD_PRELOAD",path+(previous.isEmpty()?"":" "+previous));
+        env.put("DRNAS_XCB_PRESENT_GUARD","1");
+    }
+
     static void probeWine(Context context,File gui,Map<String,String> env,
                           Consumer<String> log,RawWineTrace raw) {
         probeWine(context,gui,env,log,raw,false,false);
@@ -170,6 +179,7 @@ final class TurnipRuntime {
                     "Vulkan startup test: enumerate backend only.");
             ProcessBuilder pb=new ProcessBuilder(command).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
+            configurePresentGuard(context,pb.environment());
             log.accept("DRNAS_EXPERIMENT_BEGIN mode="+testMode+" | isolated child; Explorer stays running");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
             boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
@@ -190,4 +200,5 @@ final class TurnipRuntime {
 
     private TurnipRuntime(){}
 }
+
 

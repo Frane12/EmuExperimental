@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.43 WSI deadlock investigation
+name: EmuExperimental - Android APK v0.5.44 XCB absent Present guard
 on:
   push:
     branches:
@@ -20,8 +20,8 @@ on:
       - fix/x11-dependency-diagnostics-v0.5.37
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
-      - experiment/wsi-mode-diagnostics-v0.5.43
-      - experiment/x11-checkpoint-experiments-v0.5.43
+      - experiment/wsi-mode-diagnostics-v0.5.44
+      - fix/xcb-present-guard-v0.5.44
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -89,6 +89,8 @@ jobs:
           i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows -static-libgcc tools/graphics-tests/TestD3D.c -ld3d9 -lgdi32 -luser32 -lm -o android-app/app/src/main/assets/graphics-tests/TestD3D.exe
           python3 -c "import hashlib,pathlib; p=pathlib.Path('android-app/app/src/main/assets/graphics-tests/TestD3D.exe'); p.with_suffix('.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest())"
           file android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+      - name: Test scoped XCB Present guard
+        run: python3 tests/test_xcb_present_guard.py
       - name: Test pinned Turnip packaging policy
         run: python3 -m unittest discover -s tests -p 'test_turnip_bundle.py'
       - name: Run JVM regression tests before checking signing secrets
@@ -138,29 +140,30 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.43-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.43\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.44-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.44\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.43-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.43 LAB\nMenu experiments 1-3: X11 only; Vulkan create/destroy transport checkpoints; Present plus XSync checkpoints. Each child has a 15s timeout. Run in order then send log. No confirmed fix yet.\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0543 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.44-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.44 LAB\nMenu experiments 1-3: X11 only; Vulkan create/destroy transport checkpoints; Present plus XSync checkpoints. Each child has a 15s timeout. Run in order then send log. Scoped absent-Present guard enabled for sw,noshm. On-device validation required.\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0544 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/experiment/x11-checkpoint-experiments-v0.5.43' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/xcb-present-guard-v0.5.44' }}
         with:
-          name: Drnas-Console-v0.5.43-APK-ZIP
+          name: Drnas-Console-v0.5.44-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/experiment/x11-checkpoint-experiments-v0.5.43'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/fix/xcb-present-guard-v0.5.44'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="drnas-emu-v0.5.43-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.43 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="drnas-emu-v0.5.44-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.44 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+
 
 
 

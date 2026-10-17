@@ -17,3 +17,10 @@ add_library(drnas_wine_child_exec SHARED wine_child_exec_compat.c)
 target_compile_features(drnas_wine_child_exec PRIVATE c_std_11)
 target_compile_options(drnas_wine_child_exec PRIVATE -Wall -Wextra -Werror -fstack-protector-strong)
 target_link_libraries(drnas_wine_child_exec PRIVATE dl)
+
+
+# Only suppress unavailable Present subscriptions for the PutImage WSI path.
+add_library(drnas_xcb_present_guard SHARED xcb_present_guard.c)
+target_compile_features(drnas_xcb_present_guard PRIVATE c_std_11)
+target_compile_options(drnas_xcb_present_guard PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(drnas_xcb_present_guard PRIVATE dl)

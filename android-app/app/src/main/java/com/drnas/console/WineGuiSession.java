@@ -183,6 +183,8 @@ final class WineGuiSession implements AutoCloseable {
         try {
             if(stopped)return;
             WineBootProbe.configureChildExeRelay(env,nativeDir,wine);
+            TurnipRuntime.configurePresentGuard(context,env);
+            log.accept("DRNAS_XCB_GUARD enabled: absent Present subscriptions bypassed only for sw,noshm; device validation pending.");
             WineBootProbe.configureSecondStage(env);
             // The desktop is held until one-time prerequisite installers complete.
             // A missing MSI/EXE never masquerades as an installed dependency.
@@ -282,4 +284,5 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 

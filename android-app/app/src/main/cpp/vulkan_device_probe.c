@@ -295,7 +295,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     printf("X11 Vulkan clear/present=%d\n",result);
     x11_checkpoint(xlib,display,"after-queue-present");
     status=(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)?0:43;
-    if(!status)puts("DRNAS_GPU_X11_SWAPCHAIN_PRESENT_VERIFIED");
+    if(!status)puts("DRNAS_GPU_X11_PRESENT_CALL_RETURNED_SUCCESS pixels_unverified");
     if(!status && sync_after_present) {
         /* This Xlib connection is not Mesa's XCB display. A successful
          * XSync proves only this connection's requests completed. */
@@ -404,4 +404,5 @@ int main(int argc,char **argv) {
     if(checkpoint_mode&&status==0)puts("DRNAS_EXPERIMENT_PASS Vulkan and X11 cleanup complete");
     return status;
 }
+
 
