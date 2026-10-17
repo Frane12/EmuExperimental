@@ -95,6 +95,18 @@ public class GContext extends Resource {
         return _paint;
     }
 
+    /** Fast-path predicate for opaque ZPixmap GXcopy.
+     * Bypass intermediate Canvas composition only if neither X11 GC clipping,
+     * raster operations nor plane masks can alter source pixels.
+     */
+    public boolean isUnclippedOpaqueCopy() {
+        return _attributes[AttrFunction] == 3 &&
+                _attributes[AttrPlaneMask] == 0xffffffff &&
+                _attributes[AttrClipMask] == 0 &&
+                _clipRectangles == null && _paint.getAlpha() == 255 &&
+                _paint.getXfermode() == null;
+    }
+
     /**
      * Return the GContext's background color.
      *
