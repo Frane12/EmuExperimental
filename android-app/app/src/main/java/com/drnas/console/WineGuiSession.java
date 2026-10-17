@@ -130,6 +130,11 @@ final class WineGuiSession implements AutoCloseable {
         // A log without device enumeration is not proof of a DXVK adapter.
         env.put("DXVK_LOG_LEVEL","debug"); // LAB diagnostic only; DXVK errors and WSI hints
         env.put("DXVK_LOG_PATH",tmp.getAbsolutePath());
+        // Guest path, not Android /data/..: DXVK's Win32 file stream reads this
+        // application-scoped config. DXVK 1.10.3 ignores other executable sections.
+        env.put("DXVK_CONFIG_FILE",WineGraphicsTests.cubeConfigWindowsPath());
+        log.accept("DRNAS_WSI_EXPERIMENT: DXVK_CONFIG_FILE="+env.get("DXVK_CONFIG_FILE")+
+                " | [TestD3D.exe] d3d9.presentInterval=1, dxgi.syncInterval=1; verify actual Present mode in DXVK log.");
         for(String dll:new String[]{"d3d9.dll","dxgi.dll","d3d11.dll"}) {
             File x64=new File(prefix,"drive_c/windows/system32/"+dll);
             File x86=new File(prefix,"drive_c/windows/syswow64/"+dll);
