@@ -14,6 +14,8 @@ final class WineGuiSession implements AutoCloseable {
     private static WineGuiSession active;
     // Volatile: menu toggle takes effect for Java/X11 diagnostics immediately.
     private volatile boolean diagnosticsEnabled;
+    private volatile int frameCap;
+    void setFrameCap(int cap){frameCap=DxvkFrameCap.clamp(cap);}
     void setDiagnosticsEnabled(boolean enabled) { diagnosticsEnabled=enabled; }
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
     private volatile boolean stopped;
@@ -155,6 +157,9 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        DxvkFrameCap.configure(env,frameCap);
+        log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
+                (frameCap==0?" (no DXVK cap)":" FPS, D3D9 and DXGI"));
         if(xinputReady) {
             env.put("WINEDLLOVERRIDES",env.get("WINEDLLOVERRIDES")+
                     ";xinput1_3=n,b;xinput1_4=n,b;xinput9_1_0=n,b");
