@@ -38,6 +38,32 @@ static int absent_present(void *connection) {
     free(answer);
     return absent;
 }
+/*
+ * Mesa WSI calls QueryCapabilities BEFORE SelectInput.  libxcb-present will
+ * permanently close the XCB connection (error=2) if Present is unavailable.
+ * A real core NoOperation keeps sequence accounting, while a NULL reply
+ * reports that no Present capabilities are available.  Do not claim that
+ * any frame was presented by this interposer.
+ */
+Cookie xcb_present_query_capabilities(void *connection, uint32_t target) {
+    if (absent_present(connection)) {
+        Cookie (*noop)(void *) = resolve("xcb_no_operation", "libxcb.so.1");
+        fprintf(stderr, "DRNAS_XCB_GUARD_QUERY_BYPASS target=%u absent Present; XCB connection preserved\n", target);
+        return noop(connection);
+    }
+    Cookie (*real)(void *, uint32_t) = resolve("xcb_present_query_capabilities", "libxcb-present.so.0");
+    return real(connection, target);
+}
+void *xcb_present_query_capabilities_reply(void *connection, Cookie cookie, void **error) {
+    if (absent_present(connection)) {
+        if (error) *error = NULL;
+        fprintf(stderr, "DRNAS_XCB_GUARD_QUERY_REPLY absent Present; capabilities unavailable\n");
+        return NULL;
+    }
+    void *(*real)(void *, Cookie, void **) = resolve("xcb_present_query_capabilities_reply", "libxcb-present.so.0");
+    return real(connection, cookie, error);
+}
+
 static Cookie select_input(void *connection, uint32_t event, uint32_t window,
                            uint32_t mask, int checked) {
     if (absent_present(connection)) {
