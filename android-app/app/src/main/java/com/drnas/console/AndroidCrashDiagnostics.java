@@ -20,6 +20,7 @@ public final class AndroidCrashDiagnostics {
         Thread.UncaughtExceptionHandler previous=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{
             try {record(logs,FATAL,thread,error);} catch(Throwable ignored){}
+            try {AutomaticCrashLog.fatal(context);}catch(Throwable ignored){}
             // Keep Android's own crash handling and process-exit accounting.
             if(previous!=null)previous.uncaughtException(thread,error);
             else {android.os.Process.killProcess(android.os.Process.myPid());System.exit(10);}
@@ -29,11 +30,13 @@ public final class AndroidCrashDiagnostics {
     public static void recordRenderer(Context context,Throwable error) {
         try {record(new File(context.getFilesDir(),"logs"),RENDER,Thread.currentThread(),error);}
         catch(Exception ignored){}
+        AutomaticCrashLog.request(context,"Android renderer exception");
     }
 
     public static void recordPointer(Context context,Throwable error) {
         try {record(new File(context.getFilesDir(),"logs"),"last-pointer-error.txt",Thread.currentThread(),error);}
         catch(Exception ignored){}
+        AutomaticCrashLog.request(context,"X11 pointer exception");
     }
 
     static synchronized void record(File logs,String name,Thread thread,Throwable error) throws IOException {
@@ -101,3 +104,4 @@ public final class AndroidCrashDiagnostics {
     }
     private AndroidCrashDiagnostics(){}
 }
+

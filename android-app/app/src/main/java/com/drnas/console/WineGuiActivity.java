@@ -180,6 +180,7 @@ public final class WineGuiActivity extends Activity {
         });
         setContentView(layout);
         try {
+            AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
         } catch(IOException e) {
             Toast.makeText(this,"Wine desktop log unavailable: "+e.getMessage(),
@@ -245,6 +246,10 @@ public final class WineGuiActivity extends Activity {
 
     private synchronized void log(String line) {
         if(raw!=null)raw.write("GUI",line);
+        if(!destroyed && AutomaticLogTrigger.matches(line)) {
+            try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
+            AutomaticCrashLog.request(this,line);
+        }
         if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
         if(line.startsWith("Pripremam disk R:") || line.startsWith("Installing Wine Mono") ||
                 line.startsWith("Installing Microsoft VC++") ||
@@ -454,8 +459,10 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onDestroy() {
         destroyed=true;
+        AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
         else if(xserver!=null)xserver.stop();
         super.onDestroy();
     }
 }
+

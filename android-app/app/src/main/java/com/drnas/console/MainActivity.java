@@ -293,7 +293,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph);
         LinearLayout names=column();
         names.addView(label("DRNAS EMU",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.31 · 1280 × 720",10,ACCENT,true));
+        names.addView(label("ADAPTIVE GAMING LAB · V0.5.32 · 1280 × 720",10,ACCENT,true));
         header.addView(names);
         content.addView(header,pad(0,19));
 
@@ -745,3 +745,4 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 }
+

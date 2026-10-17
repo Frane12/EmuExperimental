@@ -131,7 +131,7 @@ public class Client extends Thread {
                     " bytes="+_lastRequestBytes+": "+e);
         } catch (RuntimeException e) {
             android.util.Log.e("DRNAS-X11", "X11 request failed", e);
-            _xServer.diagnostic("X11 request FAILED opcode="+_lastOpcode+" bytes="+_lastRequestBytes+": "+e);
+            _xServer.diagnostic("X11 request FAILED opcode="+_lastOpcode+" bytes="+_lastRequestBytes+": "+android.util.Log.getStackTraceString(e));
         } finally {
             synchronized (_xServer) { close(); }
         }
@@ -805,3 +805,4 @@ public class Client extends Thread {
             _xServer.destroyClientResources(client);
     }
 }
+

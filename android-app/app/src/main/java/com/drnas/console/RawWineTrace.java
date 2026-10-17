@@ -26,6 +26,7 @@ final class RawWineTrace implements AutoCloseable {
     private boolean closed;
     private boolean failed;
     private String issue;
+    private long lastFlushNanos;
 
     RawWineTrace(File directory) throws IOException {
         this(directory,LATEST);
@@ -58,12 +59,15 @@ final class RawWineTrace implements AutoCloseable {
         }
         try {
             out.write(utf8);bytes+=utf8.length;
+            long now=System.nanoTime();
+            if(now-lastFlushNanos>=1000000000L){out.flush();lastFlushNanos=now;}
         } catch(IOException e) {
             failed=true;issue=e.getMessage();
         }
     }
 
     synchronized long size(){return bytes;}
+    synchronized void checkpoint() throws IOException {if(!closed)out.flush();}
     synchronized boolean wasTruncated(){return truncated;}
     synchronized String issue(){return issue;}
     synchronized void copyTo(OutputStream target) throws IOException {
@@ -82,3 +86,4 @@ final class RawWineTrace implements AutoCloseable {
         if(failed) throw new IOException("RAW Wine log write failure: "+issue);
     }
 }
+

@@ -5,5 +5,7 @@ public final class DrnasApplication extends android.app.Application {
     @Override public void onCreate() {
         super.onCreate();
         AndroidCrashDiagnostics.install(this);
+        AutomaticCrashLog.install(this);
     }
 }
+

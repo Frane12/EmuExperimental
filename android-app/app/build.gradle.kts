@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 46
-        versionName = "0.5.31-x11-async-output"
+        versionCode = 47
+        versionName = "0.5.32-automatic-crash-logs"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -50,7 +50,7 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".labv0531"
+                applicationIdSuffix = ".labv0532"
                 manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }
@@ -73,3 +73,4 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
