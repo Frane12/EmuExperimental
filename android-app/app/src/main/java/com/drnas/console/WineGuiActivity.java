@@ -49,6 +49,8 @@ public final class WineGuiActivity extends Activity {
     private DrnasPadLayoutView gamepadLayer;
     private boolean virtualPadEnabled;
     private float cameraSensitivity=5f;
+    private CursorOverlayView desktopCursorOverlay;
+    private boolean stretchFullscreen=true;
     private void syncVirtualPadConnection() {
         if(gamepadLayer!=null) {
             gamepadLayer.setButtonsVisible(virtualPadEnabled);
@@ -128,6 +130,7 @@ public final class WineGuiActivity extends Activity {
         chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
         cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",5f);
+        stretchFullscreen=getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
@@ -155,6 +158,7 @@ public final class WineGuiActivity extends Activity {
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+        xserver.getScreen().setStretchFullscreen(stretchFullscreen);
         xserver.getScreen().setRelativeTouchMode(true);
         xserver.getScreen().setCameraTouchMode(false);
         // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
@@ -168,12 +172,13 @@ public final class WineGuiActivity extends Activity {
 
         // Cursor is a separate accelerated Android layer. Dragging the pointer
         // no longer requests a redraw of every mapped Wine window bitmap.
-        CursorOverlayView cursorOverlay=new CursorOverlayView(this,
+        desktopCursorOverlay=new CursorOverlayView(this,
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
-        xserver.getScreen().setCursorOverlayListener(cursorOverlay::setCursor);
-        cursorOverlay.setClickable(false);
-        cursorOverlay.setFocusable(false);
-        layout.addView(cursorOverlay,new FrameLayout.LayoutParams(
+        desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
+        xserver.getScreen().setCursorOverlayListener(desktopCursorOverlay::setCursor);
+        desktopCursorOverlay.setClickable(false);
+        desktopCursorOverlay.setFocusable(false);
+        layout.addView(desktopCursorOverlay,new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -427,7 +432,8 @@ public final class WineGuiActivity extends Activity {
     }
 
     private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
-            "Eksperiment: brzo dekodiranje (A/B) ON/OFF"};
+            "Eksperiment: brzo dekodiranje (A/B) ON/OFF",
+            "Cijeli zaslon / Stretch ON/OFF"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -438,6 +444,7 @@ public final class WineGuiActivity extends Activity {
             case 21:return relativeCameraEnabled;
             case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
             case 27:return xserver!=null && xserver.isExperimentalBulkDecode();
+            case 28:return stretchFullscreen;
             default:return false;
         }
     }
@@ -519,6 +526,20 @@ public final class WineGuiActivity extends Activity {
                                 "Brzi BGRX dekoder ON — usporedi 5s uzorke":
                                 "Brzi BGRX dekoder OFF — stabilni baseline",
                                 Toast.LENGTH_LONG).show();
+                    }
+                    else if(which==28) {
+                        stretchFullscreen=!stretchFullscreen;
+                        getPreferences(MODE_PRIVATE).edit()
+                                .putBoolean("full_screen_stretch",stretchFullscreen).apply();
+                        xserver.getScreen().setStretchFullscreen(stretchFullscreen);
+                        if(desktopCursorOverlay!=null)
+                            desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
+                        log("DRNAS_DISPLAY_MODE "+(stretchFullscreen?"FILL":"FIT")+
+                                " fixed guest 1280x720, Android-only transform");
+                        Toast.makeText(this,stretchFullscreen?
+                                "Puni zaslon ON — 1280x720 rastegnut do rubova":
+                                "Puni zaslon OFF — izvorni omjer slike",
+                                Toast.LENGTH_SHORT).show();
                     }
                     else if(which==19) {
                         if(xinputState==null) {
