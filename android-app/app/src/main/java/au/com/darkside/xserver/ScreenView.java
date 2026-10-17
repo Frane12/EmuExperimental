@@ -199,6 +199,15 @@ public class ScreenView extends View {
     private long lastDisplaySampleNs;
     private int displayedFrames;
     public float getDisplayedFps(){return displayedFps;}
+    private boolean fpsCounterEnabled;
+    public void setFpsCounterEnabled(boolean enabled) {
+        fpsCounterEnabled=enabled;
+        if(!enabled) {
+            displayedFrames=0;
+            lastDisplaySampleNs=0L;
+            displayedFps=0f;
+        }
+    }
 
     private float _touchLastX, _touchLastY, _touchRemainderX, _touchRemainderY;
     private float _touchTravel;
@@ -849,15 +858,17 @@ public class ScreenView extends View {
                 canvas.clipRect(0,0,_guestWidth,_guestHeight);
             }
             _rootWindow.draw(canvas, _paint);
-            // Count Android/X11 screen compositions, not DXVK game engine FPS.
-            long now=System.nanoTime();
-            displayedFrames++;
-            if(lastDisplaySampleNs==0)lastDisplaySampleNs=now;
-            long elapsed=now-lastDisplaySampleNs;
-            if(elapsed>=500000000L) {
-                displayedFps=(float)(displayedFrames*1000000000.0/elapsed);
-                displayedFrames=0;
-                lastDisplaySampleNs=now;
+            // No timing/counters in HWUI's drawing path when HUD is disabled.
+            if(fpsCounterEnabled) {
+                long now=System.nanoTime();
+                displayedFrames++;
+                if(lastDisplaySampleNs==0)lastDisplaySampleNs=now;
+                long elapsed=now-lastDisplaySampleNs;
+                if(elapsed>=500000000L) {
+                    displayedFps=(float)(displayedFrames*1000000000.0/elapsed);
+                    displayedFrames=0;
+                    lastDisplaySampleNs=now;
+                }
             }
             _xServer.canvasDrawn();
             if (cursorOverlayListener==null && _currentCursor!=null)
