@@ -162,13 +162,25 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     status=(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)?0:43;
     if(!status)puts("DRNAS_GPU_X11_SWAPCHAIN_PRESENT_VERIFIED");
 done:
-    if(device&&idle)idle(device);
+    printf("DRNAS_WSI_TEARDOWN begin after present status=%d\n",status);
+    if(device&&idle) {
+        VkResult drained=idle(device);
+        printf("DRNAS_WSI_TEARDOWN device_idle=%d\n",drained);
+        if(drained!=VK_SUCCESS && status==0)status=44;
+    }
     if(device&&fence&&destroy_fence)destroy_fence(device,fence,NULL);
     if(device&&pool&&destroy_pool)destroy_pool(device,pool,NULL);
     if(device&&chain&&destroy_chain)destroy_chain(device,chain,NULL);
     if(device&&destroy_device)destroy_device(device,NULL);
     if(surface&&vkDestroySurfaceKHR)vkDestroySurfaceKHR(instance,surface,NULL);
-    destroy_window(display,window);sync_display(display,0);close_display(display);dlclose(xlib);
+    puts("DRNAS_WSI_TEARDOWN Vulkan objects destroyed; XDestroyWindow next");
+    destroy_window(display,window);
+    puts("DRNAS_WSI_TEARDOWN XDestroyWindow sent; XSync next");
+    sync_display(display,0);
+    puts("DRNAS_WSI_TEARDOWN XSync completed; XCloseDisplay next");
+    close_display(display);
+    puts("DRNAS_WSI_TEARDOWN XCloseDisplay completed");
+    dlclose(xlib);
     if(status)printf("DRNAS_X11_PRESENT_PROBE_FAILED stage=%d\n",status);
     return status;
 }
