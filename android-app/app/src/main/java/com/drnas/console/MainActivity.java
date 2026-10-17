@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
+import android.content.res.ColorStateList;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -20,7 +22,6 @@ import android.widget.Toast;
 import android.widget.ProgressBar;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
-import android.graphics.drawable.GradientDrawable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -45,13 +46,15 @@ public final class MainActivity extends Activity {
     private static final int PICK_MONO = 305;
     private static final int PICK_VC = 306;
     private static final int PICK_DEPENDENCIES_ZIP = 307;
-    private static final int BACK = 0xFF0A101B;
-    private static final int PANEL = 0xFF132034;
-    private static final int BORDER = 0xFF2C4054;
-    private static final int TEXT = 0xFFE8F3FA;
-    private static final int MUTED = 0xFF9BAFC3;
-    private static final int ACCENT = 0xFF7BE4C3;
-    private static final int WARM = 0xFFFFC476;
+    // Compact Win11/Explorer-inspired dark glass theme, shared visually
+    // with the emulator HUD. All transparency is drawn on Android, not Wine.
+    private static final int BACK = 0xFF080F1C;
+    private static final int PANEL = 0xDF142335;
+    private static final int BORDER = 0x6679B2D2;
+    private static final int TEXT = 0xFFEDF6FD;
+    private static final int MUTED = 0xFFADC2D3;
+    private static final int ACCENT = 0xFF79E4CB;
+    private static final int WARM = 0xFFFFCF83;
 
     private LinearLayout content;
     private StableLogView liveLog;
@@ -213,6 +216,29 @@ public final class MainActivity extends Activity {
         if (stroke != 0) bg.setStroke(dp(1), stroke);
         return bg;
     }
+    private GradientDrawable glass(int top, int bottom, int radius) {
+        GradientDrawable bg=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{top,bottom});
+        bg.setCornerRadius(dp(radius));
+        bg.setStroke(dp(1),0x6079ACC5);
+        return bg;
+    }
+    private StateListDrawable buttonSurface(boolean primary) {
+        StateListDrawable layers=new StateListDrawable();
+        layers.addState(new int[]{android.R.attr.state_pressed},
+                glass(primary?0xFF4DC5A9:0xF0466480,
+                      primary?0xFF36A48F:0xF034536E,14));
+        layers.addState(new int[]{},
+                glass(primary?0xFF81EAD2:0xCF234059,
+                      primary?0xFF4ACDAF:0xCF142C45,14));
+        return layers;
+    }
+    private void sectionEyebrow(LinearLayout root,String text) {
+        TextView heading=label(text,10,ACCENT,true);
+        heading.setLetterSpacing(.14f);
+        root.addView(heading,pad(0,9));
+    }
+
     private LinearLayout column() {
         LinearLayout l = new LinearLayout(this);
         l.setOrientation(LinearLayout.VERTICAL);
@@ -245,8 +271,9 @@ public final class MainActivity extends Activity {
     }
     private LinearLayout card() {
         LinearLayout panel = column();
-        panel.setPadding(dp(17),dp(15),dp(17),dp(17));
-        panel.setBackground(box(PANEL,BORDER,17));
+        panel.setPadding(dp(19),dp(17),dp(19),dp(19));
+        panel.setBackground(glass(0xDF192D43,0xEA0D1C30,21));
+        panel.setElevation(dp(3));
         content.addView(panel,pad(0,14));
         return panel;
     }
@@ -255,11 +282,15 @@ public final class MainActivity extends Activity {
         b.setText(text);
         b.setAllCaps(false);
         b.setTextSize(13);
-        b.setTextColor(prominent ? BACK : TEXT);
-        b.setPadding(dp(12),0,dp(12),0);
-        b.setMinimumHeight(dp(49));
-        b.setMinHeight(dp(49));
-        b.setBackground(box(prominent ? ACCENT : 0xFF21364A, prominent ? ACCENT : BORDER,12));
+        b.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        b.setTextColor(new ColorStateList(
+                new int[][]{new int[]{-android.R.attr.state_enabled},new int[]{}},
+                new int[]{0xFF829BAD,prominent?0xFF08202B:TEXT}));
+        b.setPadding(dp(15),0,dp(15),0);
+        b.setMinimumHeight(dp(46));
+        b.setMinHeight(dp(46));
+        b.setBackground(buttonSurface(prominent));
+        b.setStateListAnimator(null);
         b.setOnClickListener(action);
         return b;
     }
@@ -268,12 +299,14 @@ public final class MainActivity extends Activity {
         root.addView(b,pad(4,4));
     }
     private void heading(String text) {
-        content.addView(label(text,30,TEXT,true),pad(0,9));
+        TextView t=label(text,26,TEXT,true);
+        t.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        content.addView(t,pad(0,12));
     }
     private void note(LinearLayout root,String message) {
         TextView t=label(message,12,WARM,false);
         t.setPadding(dp(12),dp(10),dp(12),dp(10));
-        t.setBackground(box(0xFF30291E,0xFF65503A,11));
+        t.setBackground(glass(0x8A544125,0xB62C261D,13));
         root.addView(t,pad(12,0));
     }
     private void showSection(String s) { section=s; render(); }
@@ -288,19 +321,34 @@ public final class MainActivity extends Activity {
         pageScroll=scroll;renderedSection=section;
         SystemBarInsets.apply(scroll);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BACK);
+        scroll.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF080F1C,0xFF0D2231,0xFF070D19}));
         content=column();
-        content.setPadding(dp(16),dp(26),dp(16),dp(30));
+        content.setPadding(dp(18),dp(22),dp(18),dp(36));
         scroll.addView(content);
         setContentView(scroll);
         LinearLayout header=horizontal();
-        TextView glyph=label("◈",30,ACCENT,true);
-        glyph.setPadding(dp(4),0,dp(13),0);
-        header.addView(glyph);
+        header.setPadding(dp(12),dp(12),dp(12),dp(12));
+        header.setBackground(glass(0xD51C3749,0xD10D1D32,18));
+        TextView glyph=label("◈",26,ACCENT,true);
+        glyph.setGravity(Gravity.CENTER);
+        glyph.setBackground(box(0xAA214A58,0x6685E7D2,15));
+        header.addView(glyph,new LinearLayout.LayoutParams(dp(50),dp(50)));
         LinearLayout names=column();
-        names.addView(label("DRNAS EMU",20,TEXT,true));
-        names.addView(label("ADAPTIVE GAMING LAB · V0.5.32 · 1280 × 720",10,ACCENT,true));
-        header.addView(names);
+        names.setPadding(dp(12),0,0,0);
+        TextView brand=label("EmuDrnas",23,TEXT,true);
+        brand.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        names.addView(brand);
+        TextView subtitle=label("preAlpha 0.1   •   WINDOWS RUNTIME",10,ACCENT,true);
+        subtitle.setLetterSpacing(.09f);
+        names.addView(subtitle);
+        header.addView(names,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        TextView prealpha=label("EARLY ACCESS",9,0xFFE7D6A5,true);
+        prealpha.setGravity(Gravity.CENTER);
+        prealpha.setPadding(dp(7),dp(7),dp(7),dp(7));
+        prealpha.setBackground(box(0x7757422B,0x99866F51,10));
+        header.addView(prealpha);
         content.addView(header,pad(0,19));
 
         HorizontalScrollView bar=new HorizontalScrollView(this);
@@ -314,7 +362,7 @@ public final class MainActivity extends Activity {
             buttons.addView(b,lp);
         }
         bar.addView(buttons);
-        content.addView(bar,pad(0,22));
+        content.addView(bar,pad(0,21));
 
         switch(section) {
             case "Components": showComponents(); break;
@@ -356,10 +404,18 @@ public final class MainActivity extends Activity {
 
     /** Two-step power + Explorer UI; logs exist only in private files. */
     private void showConsole() {
-        heading("DRNAS Windows");
+        sectionEyebrow(content,"YOUR WINDOWS DESKTOP");
+        heading("Ready when you are.");
         LinearLayout desktop=card();
+        LinearLayout title=horizontal();
+        TextView header=label("◈  WINDOWS ENVIRONMENT",11,ACCENT,true);
+        header.setLetterSpacing(.10f);
+        title.addView(header,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
+        TextView secure=label("LOCAL · OFFLINE",10,MUTED,true);
+        title.addView(secure);
+        desktop.addView(title,pad(0,14));
         LinearLayout power=horizontal();
-        turnOnWindowsButton=button("TURN ON WINDOWS",true,v->startWineboot());
+        turnOnWindowsButton=button("⏻  TURN ON WINDOWS",true,v->startWineboot());
         LinearLayout.LayoutParams onParams=new LinearLayout.LayoutParams(0,dp(52),1);
         power.addView(turnOnWindowsButton,onParams);
         winePowerLed=new View(this);
@@ -367,10 +423,10 @@ public final class MainActivity extends Activity {
         ledParams.leftMargin=dp(15);
         power.addView(winePowerLed,ledParams);
         desktop.addView(power,pad(0,8));
-        resetWineButton=button("RESET WINE",false,v->resetWine());
+        resetWineButton=button("↻  RESET WINE",false,v->resetWine());
         desktop.addView(resetWineButton,pad(4,6));
 
-        windowsExplorerButton=button("WINDOWS EXPLORER",false,v->openWineGui());
+        windowsExplorerButton=button("▣  WINDOWS EXPLORER",false,v->openWineGui());
         desktop.addView(windowsExplorerButton,pad(10,12));
         addButton(desktop,"Pošalji zapis pada / zadnjeg desktopa",false,v->shareCrashDiagnostics());
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
@@ -382,10 +438,11 @@ public final class MainActivity extends Activity {
         desktop.addView(wineStartupText,pad(7,6));
         refreshPowerPanel();
 
-        content.addView(label("1280 × 720 · Proton 11 ARM64EC · Wine Start + taskbar",
-                13,MUTED,false),pad(8,12));
+        TextView runtimeInfo=label("1280 × 720    •    Proton 11 ARM64EC    •    DXVK / FEX",12,MUTED,false);
+        runtimeInfo.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.addView(runtimeInfo,pad(9,17));
         LinearLayout folder=card();
-        folder.addView(label("ANDROID FILES",12,ACCENT,true),pad(0,8));
+        sectionEyebrow(folder,"EXPLORER  /  ANDROID FILES");
         addButton(folder,"Select Android folder for R:",false,v->requestSharedFolder());
         addButton(folder,"Refresh R: files",false,v->synchronizeSharedFolder(false));
         note(folder,"While the desktop is running, R: checks for new Android folders every 20 seconds. SAF uses a private import-only mirror, not a real Android filesystem mount.");
@@ -393,7 +450,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showComponents() {
-        content.addView(label("VERSIONED COMPONENT VAULT",11,ACCENT,true),pad(0,6));
+        sectionEyebrow(content,"VERSIONED COMPONENT VAULT");
         heading("Your engine parts.");
         content.addView(label("Proton 11.0-2 ARM64EC, FEXCore 2609 and DXVK 1.10.3 are included and provisioned automatically. Optional import is for alternative WCPs and Turnip ZIP.",13,MUTED,false),pad(0,18));
         LinearLayout panel=card();
