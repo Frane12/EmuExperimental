@@ -9,9 +9,34 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public final class RawWineTraceTest {
+    @Test public void quietModeSkipsRoutineFramesButKeepsCriticalEvents() throws Exception {
+        Path dir=Files.createTempDirectory("drnas-raw-quiet");
+        try {
+            try(RawWineTrace trace=new RawWineTrace(dir.toFile())) {
+                assertFalse(trace.isVerbose());
+                trace.write("GUI","X11 PutImage frame 123");
+                trace.writeEssential("GUI","Desktop stopped: crash");
+                java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();
+                trace.copyTo(out);
+                assertFalse(out.toString("UTF-8").contains("PutImage frame"));
+                assertTrue(out.toString("UTF-8").contains("Desktop stopped: crash"));
+                trace.setVerbose(true);
+                trace.write("GUI","manual enabled");
+                trace.setVerbose(false);
+                trace.write("GUI","routine disabled again");
+            }
+            String result=Files.readString(dir.resolve(RawWineTrace.LATEST));
+            assertTrue(result.contains("manual enabled"));
+            assertFalse(result.contains("routine disabled again"));
+        } finally {
+            WineBootProbe.removeWithoutFollowingLinks(dir.toFile());
+        }
+    }
+
     @Test public void exportsFlushedSnapshotWhileRecordingAndAfterClose() throws Exception {
         Path dir=Files.createTempDirectory("drnas-raw-export");
         RawWineTrace trace=new RawWineTrace(dir.toFile(),"latest-wine-gui-raw.txt");
+        trace.setVerbose(true);
         try {
             trace.write("GUI","first line");
             java.io.ByteArrayOutputStream first=new java.io.ByteArrayOutputStream();
@@ -29,6 +54,7 @@ public final class RawWineTraceTest {
         Path dir=Files.createTempDirectory("drnas-raw-trace");
         try {
             try(RawWineTrace trace=new RawWineTrace(dir.toFile())) {
+                trace.setVerbose(true);
                 for(int i=0;i<25000;i++)trace.write("wineboot",
                         "002c:trace:module:line-"+i+" wineboot.exe");
                 assertFalse(trace.wasTruncated());
@@ -47,6 +73,7 @@ public final class RawWineTraceTest {
         Path dir=Files.createTempDirectory("drnas-raw-capped");
         try {
             try(RawWineTrace trace=new RawWineTrace(dir.toFile())) {
+                trace.setVerbose(true);
                 String payload="x".repeat(8192);
                 for(int i=0;i<4000;i++)trace.write("server",payload);
                 assertTrue(trace.wasTruncated());
