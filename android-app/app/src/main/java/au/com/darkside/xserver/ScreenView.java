@@ -156,31 +156,39 @@ public class ScreenView extends View {
     // re-create the live X11 root window.
     private int _guestWidth;
     private int _guestHeight;
-
+    // Non-uniform Android scaling only; Wine/X11 stays 1280x720.
+    private volatile boolean stretchFullscreen=true;
+    private volatile DrnasScreenTransform cachedTransform;
+    public void setStretchFullscreen(boolean enabled) {
+        stretchFullscreen=enabled;
+        recalculateScreenTransform();
+        postInvalidateOnAnimation();
+    }
+    public boolean isStretchFullscreen(){return stretchFullscreen;}
+    private void recalculateScreenTransform() {
+        cachedTransform=DrnasScreenTransform.forSize(getWidth(),getHeight(),
+                getGuestWidth(),getGuestHeight(),stretchFullscreen);
+    }
+    private DrnasScreenTransform screenTransform() {
+        DrnasScreenTransform t=cachedTransform;
+        if(t==null) {
+            recalculateScreenTransform();
+            t=cachedTransform;
+        }
+        return t;
+    }
     public void setGuestResolution(int width,int height) {
         if (_rootWindow != null) throw new IllegalStateException("X11 screen already started");
         if (width < 640 || height < 480 || width > 4096 || height > 2160)
             throw new IllegalArgumentException("Unsupported guest resolution");
-        _guestWidth = width;
-        _guestHeight = height;
+        _guestWidth=width;
+        _guestHeight=height;
+        recalculateScreenTransform();
     }
-    public int getGuestWidth() { return _guestWidth > 0 ? _guestWidth : getWidth(); }
-    public int getGuestHeight() { return _guestHeight > 0 ? _guestHeight : getHeight(); }
-    private float guestScale() {
-        if (_guestWidth == 0 || _guestHeight == 0 || getWidth() == 0 || getHeight() == 0)
-            return 1f;
-        return Math.min((float)getWidth()/_guestWidth,(float)getHeight()/_guestHeight);
-    }
-    private float guestLeft(float scale) { return (getWidth() - getGuestWidth()*scale)/2f; }
-    private float guestTop(float scale) { return (getHeight() - getGuestHeight()*scale)/2f; }
-    private int guestX(float physicalX) {
-        float scale=guestScale();
-        return Math.max(0,Math.min(getGuestWidth()-1,Math.round((physicalX-guestLeft(scale))/scale)));
-    }
-    private int guestY(float physicalY) {
-        float scale=guestScale();
-        return Math.max(0,Math.min(getGuestHeight()-1,Math.round((physicalY-guestTop(scale))/scale)));
-    }
+    public int getGuestWidth() {return _guestWidth>0?_guestWidth:getWidth();}
+    public int getGuestHeight() {return _guestHeight>0?_guestHeight:getHeight();}
+    private int guestX(float physicalX){return screenTransform().guestX(physicalX);}
+    private int guestY(float physicalY){return screenTransform().guestY(physicalY);}
 
 
     // Laptop-style touchpad: one-finger movement is relative, not a warp to
@@ -253,10 +261,10 @@ public class ScreenView extends View {
                 updatePointerButtons(1,true);
                 _touchDragging=true;
             }
-            float scale=Math.max(0.01f,guestScale());
+            DrnasScreenTransform t=screenTransform();
             float gain=_cameraTouchMode?_cameraSensitivity:1f;
-            _touchRemainderX+=dx/scale*gain;
-            _touchRemainderY+=dy/scale*gain;
+            _touchRemainderX+=t.deltaX(dx)*gain;
+            _touchRemainderY+=t.deltaY(dy)*gain;
             int stepX=(int)_touchRemainderX;
             int stepY=(int)_touchRemainderY;
             _touchRemainderX-=stepX;
@@ -848,14 +856,14 @@ public class ScreenView extends View {
             }
 
             _paint.reset();
-            // Keep a constant 1280x720 X11 coordinate system, scaled uniformly
-            // with letterboxing; drawing and touch use the SAME transformation.
+            // The X11 framebuffer is unchanged. FILL scales X/Y independently
+            // into the full Android View; FIT retains original letterboxing.
             int checkpoint=canvas.save();
             if (_guestWidth>0 && _guestHeight>0) {
-                float scale=guestScale();
-                canvas.drawColor(0xff000000);
-                canvas.translate(guestLeft(scale),guestTop(scale));
-                canvas.scale(scale,scale);
+                DrnasScreenTransform t=screenTransform();
+                if(!t.fill)canvas.drawColor(0xff000000);
+                canvas.translate(t.offsetX,t.offsetY);
+                canvas.scale(t.scaleX,t.scaleY);
                 canvas.clipRect(0,0,_guestWidth,_guestHeight);
             }
             _rootWindow.draw(canvas, _paint);
@@ -905,6 +913,7 @@ public class ScreenView extends View {
     @Override
     protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
+        recalculateScreenTransform();
 
         // Android insets / keyboard can resize the physical View. Do not
         // destroy X11 root resources while Explorer has active client windows.
@@ -981,11 +990,11 @@ public class ScreenView extends View {
         // Dirty only the area covered by the old/new pointer in Android
         // physical pixels. Repainting the entire Wine desktop on EVERY cursor
         // event makes software X11 noticeably sluggish.
-        float scale=guestScale(),offsetX=guestLeft(scale),offsetY=guestTop(scale);
-        postInvalidateOnAnimation((int)Math.floor(offsetX+left*scale)-3,
-                       (int)Math.floor(offsetY+top*scale)-3,
-                       (int)Math.ceil(offsetX+right*scale)+3,
-                       (int)Math.ceil(offsetY+bottom*scale)+3);
+        DrnasScreenTransform t=screenTransform();
+        postInvalidateOnAnimation((int)Math.floor(t.physicalX(left))-3,
+                       (int)Math.floor(t.physicalY(top))-3,
+                       (int)Math.ceil(t.physicalX(right))+3,
+                       (int)Math.ceil(t.physicalY(bottom))+3);
     }
 
     private void movePointer(int x, int y, Cursor cursor) {
