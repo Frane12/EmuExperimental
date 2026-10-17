@@ -15,6 +15,8 @@ final class WineGuiSession implements AutoCloseable {
     // Volatile: menu toggle takes effect for Java/X11 diagnostics immediately.
     private volatile boolean diagnosticsEnabled;
     private volatile int frameCap;
+    private volatile String dxvkVariant;
+    void setDxvkVariant(String value){dxvkVariant=value;}
     void setFrameCap(int cap){frameCap=DxvkFrameCap.clamp(cap);}
     void setDiagnosticsEnabled(boolean enabled) { diagnosticsEnabled=enabled; }
     private final java.util.concurrent.CountDownLatch finished=new java.util.concurrent.CountDownLatch(1);
@@ -96,6 +98,7 @@ final class WineGuiSession implements AutoCloseable {
         // R: is persistent. Import only on explicit folder selection / manual refresh.
         // Starting a desktop or shortcut must never rescan the Android document tree.
         if(stopped)return;
+        log.accept("[Startup] Priprema Windows okruženja");
         File base=new File(context.getFilesDir(),"containers/default");
         JSONObject plan=new JSONObject(new String(Files.readAllBytes(
                 new File(base,"boot-plan.json").toPath()),StandardCharsets.UTF_8));
@@ -127,7 +130,8 @@ final class WineGuiSession implements AutoCloseable {
         }
         // DLLs are swapped exclusively before launching Wine: switching mode
         // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
-        boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log);
+        String selectedDxvk=dxvkVariant==null?AppLaunchSettings.load(context,app).dxvk(DxvkVariants.selected(context)):dxvkVariant;
+        boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log,selectedDxvk);
         WineGraphicsTests.install(context,prefix,log);
         // Always available source-owned Paint, independent of Wine's optional mspaint.
         try { DrnasPaintRuntime.install(context,prefix,log); }
@@ -202,8 +206,8 @@ final class WineGuiSession implements AutoCloseable {
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
         // after an APK upgrade, without rewriting the Wine prefix.
-        boolean h29Selected=TurnipRuntime.selectBundledA840H29(context,plan,log);
-        log.accept("DRNAS_A840_H29_SELECTION="+(h29Selected?
+        boolean pinnedTurnipSelected=TurnipRuntime.selectBundledA840H29(context,plan,log);
+        log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
         TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
@@ -229,6 +233,7 @@ final class WineGuiSession implements AutoCloseable {
         log.accept("DRNAS_WSI_ISOLATED: startup swapchain probe SKIPPED after confirmed vkDestroySwapchainKHR stall; manual Vulkan test remains available from the menu.");
         log.accept("DRNAS_WSI_ISOLATED: Wine/DXVK will exercise its own swapchain; X11 and DXVK markers identify the first actual frame.");
         if(stopped)return;
+        log.accept("[Startup] Pokretanje Wine servisa");
         server=WineServerDiagnostics.prestart(linker,serverElf,proton,nativeDir,env,log,raw);
         if(server==null)throw new IOException("GUI wineserver failed to start");
         try {
@@ -239,15 +244,18 @@ final class WineGuiSession implements AutoCloseable {
             WineBootProbe.configureSecondStage(env);
             // The desktop is held until one-time prerequisite installers complete.
             // A missing MSI/EXE never masquerades as an installed dependency.
+            log.accept("[Startup] Provjera Wine dodataka");
             WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
             if(stopped)return;
             // Only locally imported, offline setup files. No .NET or websetup.
             // The [Dependencies] progress messages drive the first-install bar.
+            log.accept("[Startup] Provjera offline DirectX / VC++ paketa");
             WineDependencyBundle.installPending(context,prefix,linker,wine,proton,env,raw,log);
             if(stopped)return;
             // Wine explorer.exe's /desktop=shell paints a solid background unless
             // the guest desktop wallpaper is installed and registered. A proper
             // Windows BMP is staged inside xuser/Pictures; failure never blocks GUI.
+            log.accept("[Startup] Priprema Windows pozadine");
             try { WineWallpaper.ensure(prefix,linker,wine,proton,env,log,raw); }
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
@@ -264,6 +272,7 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
             ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
+            log.accept("[Startup] Pokretanje Explorera · čekam Windows prozor");
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);

@@ -190,12 +190,22 @@ final class WineDependencyBundle {
             for(Path p:paths)Files.deleteIfExists(p);
         }
     }
+    static void requestRetry(Context ctx){
+        ctx.getSharedPreferences("drnas-dependencies",Context.MODE_PRIVATE).edit()
+                .putString("retry_epoch",java.util.UUID.randomUUID().toString()).apply();
+    }
+    static boolean installedExit(int exit){return exit==0||exit==3010||exit==1641;}
+    static boolean alreadyAttempted(Properties state,String key,String mark,String epoch){
+        return (mark+":"+epoch).equals(state.getProperty("attempt."+key));
+    }
     private static void emit(Consumer<String> log,int percent,String label) {
         log.accept("[Dependencies] "+Math.min(100,Math.max(0,percent))+"|"+label);
     }
     static void installPending(Context ctx,File prefix,File linker,File wine,
                                File cwd,Map<String,String> env,RawWineTrace raw,
                                Consumer<String> log) throws Exception {
+        String retryEpoch=ctx.getSharedPreferences("drnas-dependencies",Context.MODE_PRIVATE).getString("retry_epoch","initial");
+        int failures=0,unavailable=0;
         File archive=bundle(ctx);
         if(!archive.isFile()) {
             log.accept("No imported Dependencies.zip; use Components > Import Dependencies.zip. No network installers run.");
@@ -227,6 +237,7 @@ final class WineDependencyBundle {
                    LABELS[Arrays.asList(INSTALLERS).indexOf(entryName)];
                 ZipEntry source=zip.getEntry(entryName);
                 if(!isWindowsInstaller(source)) {
+                    unavailable++;
                     log.accept("[Dependencies] not available: "+label);
                     finished++;
                     emit(log,(100*finished)/total,label+" – nedostaje");
@@ -239,11 +250,20 @@ final class WineDependencyBundle {
                     emit(log,(100*finished)/total,label+" – već instalirano");
                     continue;
                 }
+                if(alreadyAttempted(state,key,mark,retryEpoch)){
+                    failures++;finished++;
+                    emit(log,(100*finished)/total,label+" – prethodni pokušaj nije uspio; Components > Ponovi");
+                    continue;
+                }
+                // Persist BEFORE execution: app termination must not start an install loop.
+                // This is an attempt marker, never an installation-success marker.
+                state.setProperty("attempt."+key,mark+":"+retryEpoch);save(state,stateFile);
                 emit(log,(100*finished)/total,"Instalacija: "+label);
                 File stageDir=new File(setup,"Current");
                 cleanDir(stageDir);
                 if(!stageDir.mkdirs())throw new IOException("Cannot create installer staging");
                 int exit=-1;
+                boolean timedOut=false;
                 try {
                     File installer;
                     String guestPath;
@@ -292,15 +312,21 @@ final class WineDependencyBundle {
                                 entryName.equals(BASE+"vcredist_x64.exe"))args.add("/q");
                         else {args.add("/install");args.add("/quiet");args.add("/norestart");}
                     }
-                    ProcessBuilder pb=new ProcessBuilder(args).directory(cwd).redirectErrorStream(true);
+                    ProcessBuilder pb=new ProcessBuilder(args).directory(installer.getParentFile()).redirectErrorStream(true);
                     pb.environment().clear();pb.environment().putAll(env);
                     log.accept("Running offline dependency installer: "+label);
                     Process process=pb.start();
                     Thread reader=WineServerDiagnostics.pipe(process,"[offline "+label+"] ",log,14,raw);
                     try {
-                        if(process.waitFor(entryName.equals(DX+"DXSETUP.exe")?300:180,TimeUnit.SECONDS))
-                            exit=process.exitValue();
+                        int limit=entryName.equals(DX+"DXSETUP.exe")?300:180;
+                        int elapsed=0;
+                        while(elapsed<limit&&!process.waitFor(Math.min(10,limit-elapsed),TimeUnit.SECONDS)){
+                            elapsed+=Math.min(10,limit-elapsed);
+                            emit(log,(100*finished)/total,"Instalacija: "+label+" · "+elapsed+" s (limit "+limit+" s)");
+                        }
+                        if(!process.isAlive())exit=process.exitValue();
                         else {
+                            timedOut=true;
                             process.destroyForcibly();
                             process.waitFor(3,TimeUnit.SECONDS);
                             log.accept(label+" timed out; not marked installed");
@@ -310,7 +336,7 @@ final class WineDependencyBundle {
                         reader.join(1600);
                         process.getInputStream().close();
                     }
-                    if(exit==0||exit==3010||exit==1641) {
+                    if(installedExit(exit)) {
                         state.setProperty(key,mark);
                         save(state,stateFile);
                         log.accept(label+" installer exit="+exit+"; marked installed for this prefix");
@@ -321,11 +347,17 @@ final class WineDependencyBundle {
                 } finally {
                     cleanDir(stageDir);
                 }
+                if(timedOut)throw new IOException(label+" nije završio u zadanom roku. "+
+                        "Windows sesija je zaustavljena. Reset Wine preskače neuspjeli pokušaj; "+
+                        "Components > Ponovi pokreće ga ponovno.");
+                if(!installedExit(exit))failures++;
                 finished++;
-                emit(log,(100*finished)/total,label+(exit==0||exit==3010||exit==1641 ?
+                emit(log,(100*finished)/total,label+(installedExit(exit) ?
                         " – gotovo":" – nije uspjelo (vidi log)"));
             }
-            emit(log,100,"Offline dependencies: provjera završena");
+            emit(log,100,"Provjera završena · neuspjelo: "+failures+" · nedostaje: "+unavailable);
+            log.accept("DRNAS_DEPENDENCY_RESULT failed="+failures+" missing="+unavailable+
+                    "; 100% means checked, NOT all installed. Retry failures via Components.");
         }
     }
     private WineDependencyBundle(){}

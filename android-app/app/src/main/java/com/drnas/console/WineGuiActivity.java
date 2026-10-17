@@ -38,6 +38,8 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean started;
     private volatile boolean destroyed;
     private TextView startupStatus;
+    private StartupAnimationView startupAnimation;
+    private final ExitConfirmation exitConfirmation=new ExitConfirmation();
     private LinearLayout dependencyPanel;
     private TextView dependencyProgressText;
     private ProgressBar dependencyProgressBar;
@@ -78,6 +80,7 @@ public final class WineGuiActivity extends Activity {
     private int keyboardAttempts;
     private DrnasPerformanceHud performanceHud;
     private int chosenFrameCap;
+    private String launchProfileId;
     private boolean renderCaptureRunning;
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
@@ -135,13 +138,18 @@ public final class WineGuiActivity extends Activity {
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        if(android.os.Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,()->exitConfirmation.back(this));
         // Keep toggle through Reset Wine (which recreates this Activity).
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
-        chosenFrameCap=savedFrameCap(this);
+        String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
+        launchProfileId=WineShortcuts.isLaunchRequest(profileRequest)?profileRequest:null;
+        AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(this,launchProfileId);
+        chosenFrameCap=appProfile.fps(savedFrameCap(this));
         final int startupFrameCap=chosenFrameCap;
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
-        cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f);
-        stretchFullscreen=getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true);
+        cameraSensitivity=appProfile.sensitivity(getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f));
+        stretchFullscreen=appProfile.stretch(getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true));
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
@@ -208,14 +216,17 @@ public final class WineGuiActivity extends Activity {
 
         // Quiet startup notice, not diagnostics. An offline Mono installation
         // may need time before the Wine desktop maps its first X11 window.
+        startupAnimation=new StartupAnimationView(this);
+        layout.addView(startupAnimation,new FrameLayout.LayoutParams(-1,-1));
         startupStatus=new TextView(this);
-        startupStatus.setText("Preparing Windows desktop…");
+        startupStatus.setText("Priprema Windows desktopa…");
         startupStatus.setTextColor(0xFFE0EFF8);
-        startupStatus.setTextSize(16);
+        startupStatus.setTextSize(14);
+        startupStatus.setPadding(dp(24),dp(8),dp(24),dp(8));
         startupStatus.setGravity(Gravity.CENTER);
-        startupStatus.setBackgroundColor(0xA9000000);
+        startupStatus.setBackgroundColor(0x00000000);
         layout.addView(startupStatus,new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,dp(56),Gravity.CENTER));
+                ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
 
         // Separate factual progress bar for first-time offline redistributable installs.
         // Shown only when a Dependencies.zip has been imported; percentage means
@@ -351,6 +362,7 @@ public final class WineGuiActivity extends Activity {
         setToolbarExpanded(false);
         performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
+        addDesktopKeys(layout);
         setContentView(layout);
         if(performanceHud.isActive())performanceHud.postDelayed(hudTicker,650);
         try {
@@ -366,6 +378,7 @@ public final class WineGuiActivity extends Activity {
 
         session=new WineGuiSession();
         session.setDiagnosticsEnabled(verboseLogs);
+        session.setDxvkVariant(appProfile.dxvk(DxvkVariants.selected(this)));
         String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
         // Default always starts Explorer, never Wine configuration.
         final String launchApp="files".equals(requested) ? "files":
@@ -392,6 +405,7 @@ public final class WineGuiActivity extends Activity {
                         runOnUiThread(()->{
                             if(!destroyed) {
                                 startupStatus.setText("Windows se nije pokrenuo. Pritisni Pošalji log.\n"+e.getClass().getSimpleName()+": "+e.getMessage());
+                                startupAnimation.stop();
                                 startupStatus.setVisibility(View.VISIBLE);
                             }
                         });
@@ -406,8 +420,12 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null)return;
-                if(!desktopFailed && desktopLaunchRequested && xserver.mappedWindowCount()>0)
+                if(!desktopFailed && desktopLaunchRequested && xserver.mappedWindowCount()>0) {
                     startupStatus.setVisibility(View.GONE);
+                    startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
+                    dependencyPanel.setVisibility(View.GONE);
+                    log("DRNAS_DESKTOP_CONFIRMED: mapped X11 window after Explorer launch");
+                }
                 else xserver.getScreen().postDelayed(this,700);
             }
         },700);
@@ -415,8 +433,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(()->{
             if(!destroyed && !desktopFailed && (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
                 log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
-                if(!startupStatus.getText().toString().startsWith("Pripremam disk R:"))
-                    startupStatus.setText("Windows se još pokreće… Pošalji log ako ekran ostane siv.");
+                // Preserve the actual startup phase, including long installer waits.
                 startupStatus.setVisibility(View.VISIBLE);
             }
         },20000);
@@ -435,7 +452,8 @@ public final class WineGuiActivity extends Activity {
 
     private void setFrameCapAndContinue(int cap,boolean beforeStartup) {
         chosenFrameCap=DxvkFrameCap.clamp(cap);
-        saveFrameCap(this,chosenFrameCap);
+        if(launchProfileId==null)saveFrameCap(this,chosenFrameCap);
+        else saveLaunchProfile(AppLaunchSettings.load(this,launchProfileId).withFps(chosenFrameCap));
         Toast.makeText(this,"DXVK "+(chosenFrameCap==0?"bez limita":chosenFrameCap+" FPS")+
                 (beforeStartup?"":" (primijenit će se nakon Reset Wine)"),
                 Toast.LENGTH_SHORT).show();
@@ -465,7 +483,7 @@ public final class WineGuiActivity extends Activity {
             case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
             case 27:return xserver!=null && xserver.isExperimentalBulkDecode();
             case 28:return stretchFullscreen;
-            case 29:return DxvkVariants.ASYNC.equals(DxvkVariants.selected(this));
+            case 29:return DxvkVariants.ASYNC.equals(AppLaunchSettings.load(this,launchProfileId).dxvk(DxvkVariants.selected(this)));
             default:return false;
         }
     }
@@ -489,7 +507,8 @@ public final class WineGuiActivity extends Activity {
                                 "CPU Canvas fallback":"GPU Canvas enabled",Toast.LENGTH_SHORT).show();
                     }
                     else if(which==2) {
-                        Intent restart=new Intent(this,WineGuiActivity.class);
+                        Intent restart=new Intent(this,WineGuiActivity.class)
+                                .putExtra("DRNAS_GUI_APP",getIntent().getStringExtra("DRNAS_GUI_APP"));
                         new Thread(()->{
                             try {
                                 WineGuiSession.stopActive();
@@ -497,7 +516,7 @@ public final class WineGuiActivity extends Activity {
                                 runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
                             } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
                         },"drnas-desktop-reset").start();
-                    } else if(which==3)finish();
+                    } else if(which==3)exitConfirmation.confirm(this);
                     else if(which==4)shareGuiLog();
                     else if(which==5)saveGuiLog();
                     else if(which==6)openTaskManager();
@@ -549,7 +568,14 @@ public final class WineGuiActivity extends Activity {
                                 Toast.LENGTH_LONG).show();
                     }
                     else if(which==29) {
-                        String variant=DxvkVariants.toggle(this);
+                        String variant;
+                        if(launchProfileId==null)variant=DxvkVariants.toggle(this);
+                        else {
+                            AppLaunchSettings.Profile profile=AppLaunchSettings.load(this,launchProfileId);
+                            variant=DxvkVariants.ASYNC.equals(profile.dxvk(DxvkVariants.selected(this)))?
+                                    DxvkVariants.STANDARD:DxvkVariants.ASYNC;
+                            saveLaunchProfile(profile.withDxvk(variant));
+                        }
                         log("DRNAS_DXVK_SELECTED_FOR_NEXT_START="+variant);
                         Toast.makeText(this,"DXVK 1.10.3 "+variant+
                                 " — za promjenu u igri koristi Reset Wine",
@@ -557,8 +583,9 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==28) {
                         stretchFullscreen=!stretchFullscreen;
-                        getPreferences(MODE_PRIVATE).edit()
+                        if(launchProfileId==null)getPreferences(MODE_PRIVATE).edit()
                                 .putBoolean("full_screen_stretch",stretchFullscreen).apply();
+                        else saveLaunchProfile(AppLaunchSettings.load(this,launchProfileId).withStretch(stretchFullscreen));
                         xserver.getScreen().setStretchFullscreen(stretchFullscreen);
                         if(desktopCursorOverlay!=null)
                             desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
@@ -619,7 +646,17 @@ public final class WineGuiActivity extends Activity {
         });
     }
 
+    private void saveLaunchProfile(AppLaunchSettings.Profile profile){
+        try{AppLaunchSettings.save(this,launchProfileId,profile);}
+        catch(Exception error){Toast.makeText(this,"Postavke nisu spremljene: "+error.getMessage(),Toast.LENGTH_LONG).show();}
+    }
+    private void restoreCameraSensitivity(float value){
+        cameraSensitivity=value;
+        if(gamepadLayer!=null)gamepadLayer.setCameraGain(value);
+    }
+
     private void editCameraSensitivity(){
+        final float originalGain=cameraSensitivity;
         android.widget.LinearLayout box=new android.widget.LinearLayout(this);
         box.setOrientation(android.widget.LinearLayout.VERTICAL);
         box.setPadding(dp(28),dp(12),dp(28),dp(8));
@@ -645,9 +682,11 @@ public final class WineGuiActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("XInput / relativna kamera")
                 .setMessage("Pomak prsta određuje brzinu kamere. 0.5x–10x.")
                 .setView(box).setPositiveButton("Spremi",(d,w)->{
-                    getPreferences(MODE_PRIVATE).edit()
+                    if(launchProfileId==null)getPreferences(MODE_PRIVATE).edit()
                         .putFloat("relative_sensitivity",cameraSensitivity).apply();
-                }).setNegativeButton("Odustani",null).show();
+                    else saveLaunchProfile(AppLaunchSettings.load(this,launchProfileId).withSensitivity(cameraSensitivity));
+                }).setNegativeButton("Odustani",(d,w)->restoreCameraSensitivity(originalGain))
+                  .setOnCancelListener(d->restoreCameraSensitivity(originalGain)).show();
     }
 
     private void captureRenderForFiveSeconds() {
@@ -693,7 +732,9 @@ public final class WineGuiActivity extends Activity {
         // In quiet mode do not block the rendering or X11 event paths on disk.
         boolean critical=AutomaticLogTrigger.matches(line) ||
                 line.contains(":err:") || line.contains("dlerror") ||
-                line.contains("fatal IO error") || line.startsWith("Audio unavailable:");
+                line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
+                line.startsWith("[Dependencies] ") || line.startsWith("DRNAS_DEPENDENCY_RESULT") ||
+                line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("Desktop stopped:");
         if(raw!=null) {
             if(verboseLogs)raw.write("GUI",line);
             else if(critical)raw.writeEssential("GUI",line);
@@ -703,6 +744,9 @@ public final class WineGuiActivity extends Activity {
             AutomaticCrashLog.request(this,line);
         }
         if(line.startsWith("Launching Wine explorer"))desktopLaunchRequested=true;
+        if(line.startsWith("[Startup] "))runOnUiThread(()->{
+            if(!destroyed){startupStatus.setText(line.substring(10));dependencyPanel.setVisibility(View.GONE);}
+        });
         if(line.startsWith("[Dependencies] ")) {
             int separator=line.indexOf('|',15);
             if(separator>0) {
@@ -713,6 +757,7 @@ public final class WineGuiActivity extends Activity {
                         if(destroyed || dependencyPanel==null)return;
                         dependencyProgressBar.setProgress(Math.max(0,Math.min(100,percent)));
                         dependencyProgressText.setText(label+"  •  "+percent+"%");
+                        startupStatus.setText(label);
                         dependencyPanel.setVisibility(View.VISIBLE);
                         if(percent>=100)dependencyPanel.postDelayed(()->{
                             if(!destroyed && dependencyPanel!=null)
@@ -733,6 +778,38 @@ public final class WineGuiActivity extends Activity {
                             "Opening Windows desktop…":line);
             });
         }
+    }
+
+    private void addDesktopKeys(FrameLayout layout) {
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
+        String[] labels={"Left mouse","Right mouse","Enter","Esc","Backspace"};
+        int[] keys={-1,-3,KeyEvent.KEYCODE_ENTER,KeyEvent.KEYCODE_ESCAPE,KeyEvent.KEYCODE_DEL};
+        for(int i=0;i<labels.length;i++){
+            final int key=keys[i];
+            Button button=new Button(this);button.setText(labels[i]);button.setTextSize(11);
+            button.setPadding(dp(8),0,dp(8),0);styleToolbar(button,false);
+            button.setOnTouchListener((v,e)->{
+                int action=e.getActionMasked();
+                if(action==MotionEvent.ACTION_DOWN||action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
+                    boolean down=action==MotionEvent.ACTION_DOWN;v.setPressed(down);
+                    if(xserver!=null&&!destroyed){
+                        if(key<0)xserver.getScreen().updatePointerButtons(-key,down);
+                        else {
+                            KeyEvent ev=new KeyEvent(down?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,key);
+                            if(down)xserver.getScreen().onKeyDown(key,ev);
+                            else xserver.getScreen().onKeyUp(key,ev);
+                        }
+                    }
+                    if(action==MotionEvent.ACTION_UP)v.performClick();
+                }
+                return true;
+            });
+            row.addView(button,new LinearLayout.LayoutParams(0,dp(42),1));
+        }
+        FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(
+                Math.min(dp(550),getResources().getDisplayMetrics().widthPixels-dp(20)),
+                dp(42),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
+        p.bottomMargin=dp(8);layout.addView(row,p);
     }
 
     private void openTaskManager() {
@@ -931,6 +1008,10 @@ public final class WineGuiActivity extends Activity {
     // Android USB/Bluetooth pads use the same XInput state as the touch overlay.
     // Recognized physical gamepad buttons are consumed; keyboard remains X11.
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if(event.getKeyCode()==KeyEvent.KEYCODE_BACK && !isControllerSource(event.getSource())) {
+            if(event.getAction()==KeyEvent.ACTION_UP&&!event.isCanceled())exitConfirmation.back(this);
+            return true;
+        }
         if(xinputState!=null && isControllerSource(event.getSource())) {
             int bit=0;
             switch(event.getKeyCode()) {
@@ -1020,6 +1101,8 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations());
         super.onStop();
     }
+    @Override public void onBackPressed(){exitConfirmation.back(this);}
+
     @Override protected void onDestroy() {
         log("DRNAS_X11_LIFECYCLE onDestroy finishing="+isFinishing()+
                 " changingConfigurations="+isChangingConfigurations()+

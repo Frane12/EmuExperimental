@@ -66,10 +66,16 @@ def drnas_turnip_assets():
          "Drnas-Turnip-NeuroFlow-A840-H2.9-TESTING-ONLY.zip",
          "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d"),
     ]
-    return [{"kind": "Turnip", "name": "Drnas-Turnip-" + gpu + ".zip",
+    own = [{"kind": "Turnip", "name": "Drnas-Turnip-" + gpu + ".zip",
              "compression": "ZIP", "url": base + tag + "/" + name,
              "sha256": sha, "gpuTarget": gpu, "releaseAssetName": name}
             for gpu, tag, name, sha in pinned]
+    # Unmodified upstream A7xx driver, distinct from Drnas A8xx experiments.
+    a740 = {"kind":"Turnip", "name":"Turnip-A740-R8.zip", "compression":"ZIP",
+            "url":"https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc08/Turnip_v26.0.0_R8.zip",
+            "sha256":"e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715",
+            "gpuTarget":"A740", "releaseAssetName":"Turnip_v26.0.0_R8.zip"}
+    return [a740] + own
 
 
 def check_turnip_zip(archive):

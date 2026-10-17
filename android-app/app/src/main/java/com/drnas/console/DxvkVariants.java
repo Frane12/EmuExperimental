@@ -67,10 +67,14 @@ final class DxvkVariants {
     }
     static boolean install(Context context,File preparedPrefix,File activePrefix,
                            Consumer<String> log) throws Exception {
+        return install(context,preparedPrefix,activePrefix,log,selected(context));
+    }
+    static boolean install(Context context,File preparedPrefix,File activePrefix,
+                           Consumer<String> log,String variant) throws Exception {
         // Always restore known-good standard DLLs first. This also handles
         // changing from async back to standard after Reset Wine.
         DxvkRuntime.install(preparedPrefix,activePrefix,log);
-        if(!ASYNC.equals(selected(context))){
+        if(!ASYNC.equals(variant)){
             log.accept("DRNAS_DXVK_VARIANT=STANDARD 1.10.3; async OFF");
             return false;
         }

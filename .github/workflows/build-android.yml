@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r10 - ICO shortcut icons, LED clock and manual R import
+name: EmuDrnas preAlpha 0.1 r11 - app profiles, animated startup, A740 and guarded exit
 on:
   push:
     branches:
@@ -231,6 +231,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Dxvk-1.10.3-async.wcp
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A740-R8.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
@@ -248,26 +249,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r10-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r11-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r10 - optional ICO shortcut icons, system LED clock and manual-only R import
+          EmuDrnas preAlpha 0.1 r11 - per-icon profiles, startup animation, A740, guarded exit and desktop keys
           Package: com.drnas.console
-          versionCode: 75
+          versionCode: 76
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: optional ICO picker and preview when adding EXE shortcuts, imported icons stored privately; system HH:mm LED clock in header; removed Android R: import and recursive Crysis discovery from every Wine/shortcut start. Existing mirror files preserved; selection and manual refresh still import new files. Retains r9 File Explorer and Copy/Paste.
+          Changed: Long-press any icon for per-app name, FPS, DXVK, Fit/Stretch and sensitivity with Accept/Discard. Retro flag Explorer icon; native animated startup with actual phases; failed offline installers require explicit retry and timeouts stop the session; DirectX runs beside its CABs. Dedicated pinned upstream Turnip R8 for A740, without A840 tuning. Double Android Back then audible Yes/Decline; always-visible left/right mouse, Enter, Esc, Backspace. Retains r10 ICO picker, LED clock, native C/R file explorer and manual-only R import.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r10-icons-clock.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r10-icons-clock.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r11-app-profiles.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r11-app-profiles.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r10-icons-clock-ZIP
+          name: EmuDrnas-preAlpha-0.1-r11-app-profiles-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -276,8 +277,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r10-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r10-icons-clock.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r10 - icons and clock draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r11-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r11-app-profiles.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r11 - app profiles and startup draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 

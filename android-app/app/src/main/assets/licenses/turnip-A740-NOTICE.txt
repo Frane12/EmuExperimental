@@ -1,0 +1,11 @@
+A740: upstream Mesa Turnip v26.0.0 R8, unmodified AdrenoTools archive.
+Publisher: K11MCH1/AdrenoToolsDrivers
+Release: https://github.com/K11MCH1/AdrenoToolsDrivers/releases/tag/v26.0.0-rc08
+Asset: Turnip_v26.0.0_R8.zip (regular driver, not turnip_a8xx.zip)
+SHA-256: e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715
+Source base as published: Mesa e9a83d530cce.
+Mesa sources and licenses: https://gitlab.freedesktop.org/mesa/mesa
+See vulkan-wrapper-Mesa-license.txt for bundled Mesa license text.
+This upstream package is distinct from the Drnas A810/A830/A840 experiments.
+Exact A740 detection required. Inclusion does not establish device performance
+or that this Android Vulkan loader successfully activates the custom driver.

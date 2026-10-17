@@ -55,10 +55,13 @@ final class TurnipRuntime {
      */
     static boolean selectBundledA840H29(Context context,JSONObject plan,
                                         Consumer<String> log) {
-        final String gpu=NativeHost.vulkanDeviceName();
-        if(!"A840".equals(gpuTarget(gpu))) {
+        String target=gpuTarget(NativeHost.vulkanDeviceName());
+        if("A740".equals(target))return selectPinned(context,plan,log,"A740",
+                "Turnip-A740-R8.zip","Turnip_v26.0.0_R8.zip",
+                "e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715","A740_R8");
+        if(!"A840".equals(target)) {
             log.accept("DRNAS_A840_H29_SKIP gpu="+
-                    (gpu==null||gpu.isEmpty()?"not detected":gpu)+
+                    target+
                     " (never force H2.9 onto another Adreno)");
             return false;
         }
@@ -66,6 +69,12 @@ final class TurnipRuntime {
             log.accept("DRNAS_A840_H29_DISABLED: keeping previous Vulkan driver selection");
             return false;
         }
+        return selectPinned(context,plan,log,"A840",A840_H29_ARCHIVE,
+                A840_H29_ORIGINAL,A840_H29_SHA256,"A840_H2.9");
+    }
+
+    private static boolean selectPinned(Context context,JSONObject plan,Consumer<String> log,
+            String target,String assetName,String sourceName,String sha,String selection){
         try {
             // First-run and upgrade path; cached archives are reused. This does
             // not install any global Android driver or touch other packages.
@@ -82,46 +91,46 @@ final class TurnipRuntime {
             for(int i=0;i<assets.length();i++) {
                 JSONObject item=assets.getJSONObject(i);
                 if("Turnip".equals(item.optString("kind")) &&
-                        "A840".equals(item.optString("gpuTarget")) &&
-                        A840_H29_ARCHIVE.equals(item.optString("name")) &&
-                        A840_H29_SHA256.equals(item.optString("sha256")) &&
-                        item.optString("source").endsWith("/"+A840_H29_ORIGINAL)) {
+                        target.equals(item.optString("gpuTarget")) &&
+                        assetName.equals(item.optString("name")) &&
+                        sha.equals(item.optString("sha256")) &&
+                        item.optString("source").endsWith("/"+sourceName)) {
                     present=true;break;
                 }
             }
-            if(!present)throw new IOException("APK manifest lacks pinned A840 H2.9");
+            if(!present)throw new IOException("APK manifest lacks pinned Turnip");
             File vault=new File(context.getFilesDir(),"wcp-vault").getCanonicalFile();
-            File archive=new File(vault,A840_H29_SHA256+".wcp").getCanonicalFile();
+            File archive=new File(vault,sha+".wcp").getCanonicalFile();
             if(!archive.toPath().startsWith(vault.toPath()) ||
                     !archive.isFile() || java.nio.file.Files.isSymbolicLink(archive.toPath()))
-                throw new IOException("A840 H2.9 archive not staged");
-            JSONObject meta=WcpRuntimeStager.readJson(new File(vault,A840_H29_SHA256+".json"));
-            if(!A840_H29_SHA256.equals(meta.optString("sha256")) ||
-                    !"A840".equals(meta.optString("gpuTarget")) ||
+                throw new IOException("pinned Turnip archive not staged");
+            JSONObject meta=WcpRuntimeStager.readJson(new File(vault,sha+".json"));
+            if(!sha.equals(meta.optString("sha256")) ||
+                    !target.equals(meta.optString("gpuTarget")) ||
                     !"Turnip".equals(meta.optString("componentType")) ||
                     !meta.optBoolean("bundledFromApk"))
-                throw new IOException("A840 H2.9 metadata mismatch");
-            if(!A840_H29_SHA256.equals(sha256(archive)))
-                throw new IOException("A840 H2.9 ZIP SHA-256 mismatch");
+                throw new IOException("pinned Turnip metadata mismatch");
+            if(!sha.equals(sha256(archive)))
+                throw new IOException("pinned Turnip ZIP SHA-256 mismatch");
             WcpRuntimeStager.PackageInfo staged=WcpRuntimeStager.stageTurnipZip(
-                    archive,vault,A840_H29_SHA256,log);
+                    archive,vault,sha,log);
             File icd=writeIcd(staged,vault,log);
             plan.put("turnipIcd",icd.getCanonicalPath());
-            plan.put("turnipArchive",A840_H29_ORIGINAL);
+            plan.put("turnipArchive",sourceName);
             plan.put("turnipPreferenceRequested",true);
-            plan.put("turnipAutoSelected","A840_H2.9");
-            log.accept("DRNAS_A840_H29_AUTOPICK_SUCCESS: pinned ZIP "+A840_H29_SHA256+
+            plan.put("turnipAutoSelected",selection);
+            log.accept("DRNAS_TURNIP_AUTOPICK_SUCCESS target="+target+": pinned ZIP "+sha+
                     " staged for this Explorer session; Vulkan load remains unverified");
             return true;
         } catch(Exception ex) {
-            log.accept("DRNAS_A840_H29_AUTOPICK_FAILED: "+ex.getMessage()+
+            log.accept("DRNAS_TURNIP_AUTOPICK_FAILED target="+target+": "+ex.getMessage()+
                     "; preserving previous driver selection");
             return false;
         }
     }
 
     private static final Pattern ADRENO =
-            Pattern.compile("(?i)adreno\\s*(?:\\(tm\\))?[^0-9]{0,12}(810|830|840)(?![0-9])");
+            Pattern.compile("(?i)adreno\\s*(?:\\(tm\\))?[^0-9]{0,12}(740|810|830|840)(?![0-9])");
 
     static String gpuTarget(String gpuName) {
         if(gpuName==null) return "";

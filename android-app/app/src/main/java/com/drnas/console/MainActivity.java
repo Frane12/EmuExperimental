@@ -93,6 +93,8 @@ public final class MainActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if(android.os.Build.VERSION.SDK_INT>=33)getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,()->exitConfirmation.back(this));
         getWindow().setStatusBarColor(BACK);
         getWindow().setNavigationBarColor(BACK);
         try {
@@ -526,7 +528,9 @@ public final class MainActivity extends Activity {
         turnOnWindowsButton=button("WINDOWS OFF",false,v->startWineboot());
         resetWineButton=button("↻  RESET WINE",false,v->resetWine());
         actionRow(desktop,turnOnWindowsButton,resetWineButton);
-        windowsExplorerButton=button("▣  EXPLORER",false,v->openWineGui());
+        windowsExplorerButton=button("EXPLORER",false,v->openWineGui());
+        windowsExplorerButton.setCompoundDrawablesRelativeWithIntrinsicBounds(new RetroWindowsDrawable(dp(28)),null,null,null);
+        windowsExplorerButton.setCompoundDrawablePadding(dp(7));
         actionRow(desktop,windowsExplorerButton,
                 button("🎮  XINPUT EDITOR",false,
                     v->startActivity(new Intent(this,XInputLayoutEditorActivity.class))));
@@ -626,19 +630,15 @@ public final class MainActivity extends Activity {
             }
             LinearLayout.LayoutParams iconParams=new LinearLayout.LayoutParams(dp(28),dp(28));
             tile.addView(icon,iconParams);
-            TextView name=label(entry.title,11,TEXT,false);
+            String displayName=AppLaunchSettings.load(this,entry.id).title(entry.title);
+            TextView name=label(displayName,11,TEXT,false);
             name.setSingleLine(true);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             name.setGravity(Gravity.CENTER);
             tile.addView(name,pad(5,0));
-            tile.setContentDescription(entry.title+" · "+entry.status);
+            tile.setContentDescription(displayName+" · "+entry.status+" · Dugi dodir za postavke");
             tile.setOnClickListener(v->launchWineShortcut(entry));
-            if(UserShortcuts.isId(entry.id))tile.setOnLongClickListener(v->{
-                new AlertDialog.Builder(this).setTitle(entry.title)
-                        .setItems(new String[]{"Ukloni prečac"},(d,w)->{
-                            UserShortcuts.remove(this,entry.id);render();
-                        }).show();return true;
-            });
+            tile.setOnLongClickListener(v->{AppSettingsDialog.show(this,entry,this::render);return true;});
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(56),1);
             if(i%columns!=0)lp.leftMargin=dp(5);
             row.addView(tile,lp);
@@ -654,7 +654,7 @@ public final class MainActivity extends Activity {
             addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
             addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
                     v->openWineGui());
-            note(panel,"Za svoju igru otvori File Explorer, pronađi .exe na C: ili R: i odaberi Dodaj na početni ekran. Dugi dodir na svoju ikonu uklanja samo prečac. Postojeći Wine Desktop / Start Menu prečaci također se prikazuju.");
+            note(panel,"Za svoju igru otvori File Explorer, pronađi .exe na C: ili R: i odaberi Dodaj na početni ekran. Dugi dodir na ikonu otvara postavke. Prihvati sprema, Odbaci zanemaruje promjene. Postojeći Wine Desktop / Start Menu prečaci također se prikazuju.");
         }
         TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
                 (!wineReady?"Pokreni Windows za instalirane programe.":""),11,MUTED,false);
@@ -686,6 +686,10 @@ public final class MainActivity extends Activity {
         addButton(panel,"Import Wine Mono (.msi)",false,v->selectPrerequisite(PICK_MONO));
         addButton(panel,"Import VC++ Redist x64 (.exe)",false,v->selectPrerequisite(PICK_VC));
         addButton(panel,"IMPORT DEPENDENCIES.ZIP (offline)",true,v->selectPrerequisite(PICK_DEPENDENCIES_ZIP));
+        addButton(panel,"PONOVI NEUSPJELE DIRECTX / VC++ INSTALACIJE",false,v->{
+            WineDependencyBundle.requestRetry(this);
+            Toast.makeText(this,"Neuspjeli paketi pokušat će se ponovno pri idućem paljenju Windowsa.",Toast.LENGTH_LONG).show();
+        });
         dependencyImportProgress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         dependencyImportProgress.setMax(100);
         dependencyImportProgress.setProgress(dependencyImportPercent);
@@ -695,7 +699,7 @@ public final class MainActivity extends Activity {
         dependencyImportStatus=label(dependencyImportLabel+
                 (dependencyImporting?"  •  "+dependencyImportPercent+"%":""),12,MUTED,false);
         panel.addView(dependencyImportStatus,pad(7,6));
-        note(panel,"Dependencies.zip is imported once through Android Files, not downloaded. Offline first-time installation starts before Wine Explorer: DirectX June 2010, VC++ x86/x64, OpenAL, XNA and VulkanRT. .NET and websetup are skipped. Check the GUI install progress bar and private log for failures.");
+        note(panel,"Dependencies.zip is imported once through Android Files, not downloaded. Failed or interrupted installers wait for the retry button; they are never marked installed. Offline first-time installation starts before Wine Explorer: DirectX June 2010, VC++ x86/x64, OpenAL, XNA and VulkanRT. .NET and websetup are skipped. Check the GUI install progress bar and private log for failures.");
         note(panel,"Imported prerequisite installers run automatically ONCE per SHA-256 in each persistent Wine prefix. No installer is marked successful until its Wine process exits 0 (or 3010). Supply a genuine Wine Mono MSI and Microsoft VC++ x64 EXE. An APK-bundled wine-mono.msi is used automatically if present.");
         LinearLayout sharing=card();
         sharing.addView(label("WINDOWS R: · ANDROID SHARED FILES",11,ACCENT,true),pad(0,9));
@@ -1071,6 +1075,9 @@ public final class MainActivity extends Activity {
             if("Components".equals(section))render();
         });
     }
+    private final ExitConfirmation exitConfirmation=new ExitConfirmation();
+    @Override public void onBackPressed(){exitConfirmation.back(this);}
+
     @Override protected void onDestroy() {
         sessions.stop();
         vault.close();
