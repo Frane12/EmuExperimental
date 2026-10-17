@@ -167,6 +167,17 @@ DWORD WINAPI XInputGetDSoundAudioDeviceGuids(DWORD index,GUID *render,GUID *capt
     if(capture)ZeroMemory(capture,sizeof(*capture));
     return ERROR_SUCCESS;
 }
+/* XInput 1.4: controllers do not expose Windows playback/capture IDs. */
+DWORD WINAPI XInputGetAudioDeviceIds(DWORD index,WCHAR *render_id,UINT *render_count,
+                                     WCHAR *capture_id,UINT *capture_count) {
+    DrnasState snapshot;
+    if(index!=0 || !read_state(&snapshot))return ERROR_DEVICE_NOT_CONNECTED;
+    if(render_id && render_count && *render_count)render_id[0]=0;
+    if(capture_id && capture_count && *capture_count)capture_id[0]=0;
+    if(render_count)*render_count=0;
+    if(capture_count)*capture_count=0;
+    return ERROR_SUCCESS;
+}
 DWORD WINAPI XInputGetBatteryInformation(DWORD index,BYTE dev_type,XINPUT_BATTERY_INFORMATION *battery) {
     DrnasState snapshot;
     (void)dev_type;
