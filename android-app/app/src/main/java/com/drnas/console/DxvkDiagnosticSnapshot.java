@@ -10,6 +10,14 @@ import java.util.function.Consumer;
 
 /** Incremental, bounded DXVK logs. No game files are touched. */
 final class DxvkDiagnosticSnapshot {
+    /** A reused Wine prefix may contain DXVK logs from old runs. Mark the
+     * existing files as seen without deleting user diagnostic evidence. */
+    static void prime(File directory,Map<String,String> seen) {
+        File[] files=directory.listFiles((dir,name)->name.endsWith(".log") &&
+                (name.contains("d3d") || name.contains("dxgi")));
+        if(files==null)return;
+        for(File file:files)seen.put(file.getName(),file.length()+":"+file.lastModified());
+    }
     static void report(File directory,Map<String,String> seen,Consumer<String> log) {
         File[] files=directory.listFiles((dir,name)->name.endsWith(".log") &&
                 (name.contains("d3d") || name.contains("dxgi")));
