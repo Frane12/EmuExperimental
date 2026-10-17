@@ -114,6 +114,11 @@ final class WineGuiSession implements AutoCloseable {
         }
         DxvkRuntime.install(new File(base,"prefix"),prefix,log);
         WineGraphicsTests.install(context,prefix,log);
+        // Local source-built XInput ABI shim: no Wine bus/uinput/root access.
+        // If installation fails, retain the original Wine XInput built-ins.
+        boolean xinputReady=false;
+        try {DrnasXInputRuntime.install(context,prefix,log);xinputReady=true;}
+        catch(Exception error){log.accept("DRNAS_XINPUT_SETUP_FAILED: "+error.getMessage()+"; Wine default preserved");}
         SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
@@ -150,6 +155,11 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        if(xinputReady) {
+            env.put("WINEDLLOVERRIDES",env.get("WINEDLLOVERRIDES")+
+                    ";xinput1_3=n,b;xinput1_4=n,b;xinput9_1_0=n,b");
+            log.accept("DRNAS_XINPUT_NATIVE_OVERRIDE xinput1_3/xinput1_4/xinput9_1_0 enabled; startup probe still requires game test.");
+        }
         // These two native environment switches are read by Wine/DXVK when
         // their processes start; Java/X11 logging can also change mid-session.
         env.put("WINEDEBUG",diagnosticsEnabled?
