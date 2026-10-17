@@ -881,6 +881,7 @@ public class ScreenView extends View {
                     lastDisplaySampleNs=now;
                 }
             }
+            _xServer.captureCanvasDraw();
             _xServer.canvasDrawn();
             if (cursorOverlayListener==null && _currentCursor!=null)
                 canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
