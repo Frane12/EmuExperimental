@@ -251,12 +251,25 @@ final class WineDependencyBundle {
                         // CAB files must remain beside DXSETUP.exe on the guest disk.
                         File dxDir=new File(stageDir,"DX");
                         if(!dxDir.mkdir())throw new IOException("Cannot create DirectX stage");
+                        int dxCount=0;
+                        Enumeration<? extends ZipEntry> countEntries=zip.entries();
+                        while(countEntries.hasMoreElements())
+                            if(isDirectXFile(countEntries.nextElement().getName()))dxCount++;
+                        int dxDone=0,dxLastPercent=-1;
                         Enumeration<? extends ZipEntry> entries=zip.entries();
                         while(entries.hasMoreElements()) {
                             ZipEntry item=entries.nextElement();
                             if(!isDirectXFile(item.getName()))continue;
                             File dest=new File(dxDir,item.getName().substring(DX.length()));
                             copy(zip,item,dest);
+                            dxDone++;
+                            // DX cab staging can take a while; show actual milestones
+                            // during unpacking rather than leaving the bar frozen at 0%.
+                            int percent=(100*finished)/total + (7*dxDone/Math.max(1,dxCount));
+                            if(percent!=dxLastPercent) {
+                                emit(log,percent,"Raspakiranje DirectX: "+dxDone+"/"+dxCount+" datoteka");
+                                dxLastPercent=percent;
+                            }
                         }
                         installer=new File(dxDir,"DXSETUP.exe");
                         guestPath="C:\\DRNAS-Setup\\OfflineBundle\\Current\\DX\\DXSETUP.exe";
