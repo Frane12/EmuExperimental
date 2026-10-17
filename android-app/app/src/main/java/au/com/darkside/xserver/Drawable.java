@@ -27,6 +27,9 @@ public class Drawable {
     private byte[] _zUploadBytes;
     private int[] _zUploadColors;
     private Bitmap _zUploadBitmap;
+    private final Paint _tailClearPaint = new Paint();
+    private static volatile boolean safeEdgeCleanup = true;
+    public static void setSafeEdgeCleanup(boolean enabled) { safeEdgeCleanup=enabled; }
 
 
     private static final byte BITMAP_FORMAT = 0;
@@ -848,6 +851,21 @@ public class Drawable {
             io.readBytes(_zUploadBytes,0,n);
             io.readSkip(pad);
             X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
+            // C path: when WSI submits a *near-full* new frame at origin,
+            // zero only uncovered right/bottom strips. Do not clear normal
+            // partial X11 updates or the entire framebuffer every frame:
+            // that would destroy legitimate preserved pixels and waste RAM.
+            if (safeEdgeCleanup && X11FrameTailCleanup.shouldScrub(
+                    (int)dstX,(int)dstY,width,height,_bitmap.getWidth(),
+                    _bitmap.getHeight(),directCopy)) {
+                _tailClearPaint.setColor(0xff000000);
+                int canvasSave=_canvas.save();
+                if(width<_bitmap.getWidth())
+                    _canvas.drawRect(width,0,_bitmap.getWidth(),_bitmap.getHeight(),_tailClearPaint);
+                if(height<_bitmap.getHeight())
+                    _canvas.drawRect(0,height,width,_bitmap.getHeight(),_tailClearPaint);
+                _canvas.restoreToCount(canvasSave);
+            }
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
             } else {
