@@ -67,6 +67,9 @@ final class WineShortcuts {
             discover(drive,new File(home,"AppData/Roaming/Microsoft/Windows/Start Menu/Programs"),
                     0,visited,discovered);
         }
+        // Per-machine installer-created Start Menu entries.
+        discover(drive,new File(drive,"ProgramData/Microsoft/Windows/Start Menu/Programs"),
+                 0,visited,discovered);
         Collections.sort(discovered,Comparator.comparing(x->x.title.toLowerCase(Locale.ROOT)));
         entries.addAll(discovered);
         return entries;
