@@ -35,10 +35,11 @@ on:
       - "tests/test_turnip_bundle.py"
       - "tests/test_xinput_build_sources.py"
       - ".github/workflows/build-android.yml"
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
+# Serialise first-run identity generation to prevent different build signatures.
+concurrency:
+  group: emudrnas-signing-identity-v1
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
@@ -141,35 +142,73 @@ jobs:
       - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
-      - name: Restore mandatory persistent signing key (never use ephemeral CI certificates)
-        if: github.event_name != 'pull_request'
+      - name: Load or create one permanent signing identity in a PRIVATE draft release
         env:
-          DRNAS_KEYSTORE_BASE64: ${{ secrets.DRNAS_KEYSTORE_BASE64 }}
-          DRNAS_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
-          DRNAS_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
-          DRNAS_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -z "$DRNAS_KEYSTORE_BASE64" || -z "$DRNAS_STORE_PASSWORD" || -z "$DRNAS_KEY_ALIAS" || -z "$DRNAS_KEY_PASSWORD" ]]; then
-            echo "::error::Permanent APK signing is required. Configure all four DRNAS signing secrets. No transient APK will be built or uploaded."
-            exit 1
-          fi
           umask 077
-          printf '%s' "$DRNAS_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/drnas-signing.p12"
-          keytool -list -storetype PKCS12 -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" >/dev/null
-          keytool -exportcert -storetype PKCS12 -keystore "$RUNNER_TEMP/drnas-signing.p12" -storepass "$DRNAS_STORE_PASSWORD" -alias "$DRNAS_KEY_ALIAS" -file "$RUNNER_TEMP/drnas-signing.der" >/dev/null
-          echo "DRNAS_EXPECTED_CERT_SHA256=$(sha256sum "$RUNNER_TEMP/drnas-signing.der" | cut -d' ' -f1)" >> "$GITHUB_ENV"
-          echo "DRNAS_SIGNING_KEYSTORE_FILE=$RUNNER_TEMP/drnas-signing.p12" >> "$GITHUB_ENV"
+          # Security boundary: this convenient private alpha identity store is NOT suitable
+          # for public repositories. It can later be migrated to GitHub Actions Secrets.
+          [[ "$GITHUB_REPOSITORY" == "Frane12/EmuExperimental" ]] || { echo "::error::Wrong repository"; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" == "true" ]] || {
+            echo "::error::Permanent signing key MUST NOT be restored or generated in a public repository."
+            exit 1
+          }
+          identity_tag="drnas-private-signing-identity-v1"
+          root="$RUNNER_TEMP/drnas-permanent-signing"
+          mkdir -p "$root"
+          if gh release view "$identity_tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx 'true'; then
+            echo "Reusing existing permanent signing certificate from private draft release."
+            gh release download "$identity_tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern "drnas-identity-v1.tar.gz" --dir "$root"
+            tar -xzf "$root/drnas-identity-v1.tar.gz" -C "$root" drnas-signing.p12 password.txt
+          else
+            echo "First run: generating ONE permanent PKCS12 signing identity, never a runner-debug key."
+            password="$(openssl rand -hex 32)"
+            printf '%s' "$password" > "$root/password.txt"
+            keytool -genkeypair -storetype PKCS12 \
+              -keystore "$root/drnas-signing.p12" -alias drnas-stable \
+              -keyalg RSA -keysize 3072 -validity 10000 -noprompt \
+              -storepass "$password" -keypass "$password" \
+              -dname "CN=EmuDrnas Permanent Alpha,O=Drnas,C=HR"
+            tar -czf "$root/drnas-identity-v1.tar.gz" -C "$root" drnas-signing.p12 password.txt
+            cat > "$root/identity-notes.txt" <<'IDENTITY'
+          PRIVATE SIGNING IDENTITY - NEVER PUBLISH THIS DRAFT RELEASE.
+          The archive contains BOTH the permanent PKCS12 signing key and its
+          strong random password. It can sign future Android APKs and MUST
+          be backed up to a secure offline location by the repository owner.
+          GitHub collaborators able to access private draft releases can read it.
+          Do not share this draft release, and do not make the repo public.
+          For production, transfer this identity to protected Actions Secrets
+          and delete the draft release only after verifying a secure backup.
+          IDENTITY
+            gh release create "$identity_tag" "$root/drnas-identity-v1.tar.gz" \
+              --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
+              --title "PRIVATE - EmuDrnas permanent APK signing identity (DO NOT PUBLISH)" \
+              --notes-file "$root/identity-notes.txt"
+          fi
+          password="$(cat "$root/password.txt")"
+          test -n "$password"
+          echo "::add-mask::$password"
+          keytool -list -storetype PKCS12 -keystore "$root/drnas-signing.p12" \
+            -storepass "$password" -alias drnas-stable >/dev/null
+          keytool -exportcert -storetype PKCS12 -keystore "$root/drnas-signing.p12" \
+            -storepass "$password" -alias drnas-stable \
+            -file "$root/drnas-signing.der" >/dev/null
+          cert="$(sha256sum "$root/drnas-signing.der" | cut -d' ' -f1)"
+          echo "DRNAS_EXPECTED_CERT_SHA256=$cert" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEYSTORE_FILE=$root/drnas-signing.p12" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_STORE_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEY_ALIAS=drnas-stable" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEY_PASSWORD=$password" >> "$GITHUB_ENV"
           echo "DRNAS_SIGNING_MODE=stable" >> "$GITHUB_ENV"
-      - name: Build persistently signed debug APK (no transient fallback)
-        if: github.event_name != 'pull_request'
+          echo "Permanent signing certificate SHA-256: $cert"
+      - name: Build APK using the reused permanent signing identity
         working-directory: android-app
         env:
           DRNAS_REQUIRE_STABLE_SIGNING: "1"
-          DRNAS_SIGNING_STORE_PASSWORD: ${{ secrets.DRNAS_KEYSTORE_PASSWORD }}
-          DRNAS_SIGNING_KEY_ALIAS: ${{ secrets.DRNAS_KEY_ALIAS }}
-          DRNAS_SIGNING_KEY_PASSWORD: ${{ secrets.DRNAS_KEY_PASSWORD }}
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK contains native ARM64 host and Android manifest
         if: github.event_name != 'pull_request'
@@ -212,7 +251,7 @@ jobs:
           Package: com.drnas.console
           versionCode: 70
           Signing certificate SHA-256: $CERT
-          Signing: persistent project key from protected GitHub Actions secrets, NOT a runner debug key.
+          Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
@@ -227,7 +266,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-fullscreen-stretch-prealpha-r4'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-retro-shortcuts-tools-r5'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
