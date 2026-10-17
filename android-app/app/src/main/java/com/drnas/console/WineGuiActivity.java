@@ -114,6 +114,18 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void immersive() {
+        // Include camera-hole/notch safe inset in landscape. The X11 desktop
+        // remains 1280x720; ScreenView scales to the *actual* full View area.
+        if(android.os.Build.VERSION.SDK_INT>=28) {
+            WindowManager.LayoutParams attributes=getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode=
+                    android.os.Build.VERSION.SDK_INT>=30?
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(attributes);
+        }
+        if(android.os.Build.VERSION.SDK_INT>=30)
+            getWindow().setDecorFitsSystemWindows(false);
         getWindow().getDecorView().setSystemUiVisibility(
                 View.SYSTEM_UI_FLAG_FULLSCREEN |
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
