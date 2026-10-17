@@ -35,8 +35,12 @@ final class BundledComponents {
         }
         if (manifest.getInt("schema") != 1) throw new IOException("Unsupported bundled schema");
         JSONArray items = manifest.getJSONArray("items");
-        if (items.length() < 3 || items.length() > 7)
-            throw new IOException("Expected three WCPs and optional Turnip variants");
+        // 2 core WCPs (Proton, FEXCore) + 2 DXVK WCP variants +
+        // 4 per-GPU Turnip ZIPs (A740, A810, A830, A840) = 8 entries.
+        // The count is a sanity guard, not a requirement for every optional GPU.
+        log.accept("[bundle] Manifest lists " + items.length() + " bundled components");
+        if (items.length() < 3 || items.length() > 8)
+            throw new IOException("Bundled manifest component count out of range: " + items.length());
         Set<String> kinds = new HashSet<>();
         File vault = new File(context.getFilesDir(), "wcp-vault");
         if (!vault.isDirectory() && !vault.mkdirs()) throw new IOException("Cannot create component vault");
@@ -58,7 +62,8 @@ final class BundledComponents {
                     !(kind.equals("Proton") || kind.equals("FEXCore") ||
                       kind.equals("DXVK") || kind.equals("Turnip")) ||
                     (kind.equals("Turnip") &&
-                       !(gpuTarget.equals("A810") || gpuTarget.equals("A830") || gpuTarget.equals("A840"))) ||
+                       !(gpuTarget.equals("A740") || gpuTarget.equals("A810") ||
+                         gpuTarget.equals("A830") || gpuTarget.equals("A840"))) ||
                     !name.matches("[A-Za-z0-9][A-Za-z0-9_.-]{1,100}\\.(?:wcp|zip)") ||
                     !asset.equals("bundled/" + name) ||
                     !sha.matches("[0-9a-f]{64}") ||
