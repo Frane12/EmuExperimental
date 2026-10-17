@@ -873,8 +873,10 @@ public class Drawable {
         }else previousGeometryLogged=false;
         if (fastBgrx) {
             try {
-                if (_zUploadBytes == null || _zUploadBytes.length < n)
+                if (_zUploadBytes == null || _zUploadBytes.length < n) {
                     _zUploadBytes = new byte[n];
+                    _bulkWords = null; // rebuild view only on backing-array growth
+                }
                 if (_zUploadColors == null || _zUploadColors.length < pixels)
                     _zUploadColors = new int[pixels];
                 if (!directCopy && (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
@@ -892,7 +894,14 @@ public class Drawable {
             io.readBytes(_zUploadBytes,0,n);
             io.readSkip(pad);
             long tDecodedStart=measure?System.nanoTime():0L;
-            X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
+            if(xServer.isExperimentalBulkDecode()) {
+                if(_bulkWords==null)
+                    _bulkWords=java.nio.ByteBuffer.wrap(_zUploadBytes)
+                            .order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+                X11PixelCodec.decodeBgrxBulk(_bulkWords,_zUploadColors,pixels);
+            }else {
+                X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
+            }
             long tUploadedStart=measure?System.nanoTime():0L;
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
