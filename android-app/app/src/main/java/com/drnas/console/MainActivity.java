@@ -352,8 +352,7 @@ public final class MainActivity extends Activity {
         header.addView(glyph,new LinearLayout.LayoutParams(dp(34),dp(34)));
         LinearLayout names=column();
         names.setPadding(dp(8),0,0,0);
-        TextView brand=label("EmuDrnas",23,TEXT,true);
-        brand.setTypeface(Typeface.create("sans-serif-medium",Typeface.BOLD));
+        TextView brand=new RetroWordmarkView(this);
         brand.setSingleLine(true);
         brand.setEllipsize(android.text.TextUtils.TruncateAt.END);
         names.addView(brand);
