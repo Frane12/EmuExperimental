@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r7 - Compact neon and meadow breeze
+name: EmuDrnas preAlpha 0.1 r8 - Safe viewport fit and neon power
 on:
   push:
     branches:
@@ -248,26 +248,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r7-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r8-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r7 - compact neon layout, gentle meadow animation, saved DXVK FPS
+          EmuDrnas preAlpha 0.1 r8 - safe viewport fill and red/green neon power icon
           Package: com.drnas.console
-          versionCode: 72
+          versionCode: 73
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: compact two-column controls; original meadow with gentle breeze/pollen; saved DXVK FPS in configuration, applied after reset without startup prompts.
+          Changed: bottom control cards and button rows expand into spare safe viewport height; drawn red/green neon power icon with readable state. Meadow wind/pollen now animate independently of system transition animation scale, with clearer motion. Retains FPS preferences and shortcuts.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r8-fit-power.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r8-fit-power.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r7-compact-breeze-ZIP
+          name: EmuDrnas-preAlpha-0.1-r8-fit-power-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -276,8 +276,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r7-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r7-compact-breeze.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r7 - compact breeze draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r8-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r8-fit-power.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r8 - fit and power draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 

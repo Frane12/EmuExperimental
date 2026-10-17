@@ -392,7 +392,21 @@ public final class MainActivity extends Activity {
             winePowerLed.setBackground(powerLight(ready));
             winePowerLed.setContentDescription(ready?"Wine ready":"Wine not ready");
         }
-        if(turnOnWindowsButton!=null)turnOnWindowsButton.setEnabled(!wineBooting && !ready);
+        if(turnOnWindowsButton!=null) {
+            turnOnWindowsButton.setEnabled(!wineBooting && !ready);
+            int neon=ready?0xff72ffc2:0xffff727c;
+            turnOnWindowsButton.setText(wineBooting?"POKRETANJE…":ready?"WINDOWS ON":"WINDOWS OFF");
+            turnOnWindowsButton.setTextColor(neon);
+            turnOnWindowsButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    new RetroPowerDrawable(dp(28),neon),null,null,null);
+            turnOnWindowsButton.setCompoundDrawablePadding(dp(7));
+            GradientDrawable surface=glass(ready?0xff143e37:0xff40222f,
+                    ready?0xff092c29:0xff29151f,14);
+            surface.setStroke(dp(1),ready?0xff57e8b0:0xfff26976);
+            turnOnWindowsButton.setBackground(surface);
+            turnOnWindowsButton.setContentDescription(wineBooting?"Windows se pokreće":
+                    ready?"Windows upaljen":"Windows ugašen. Pokreni Windows");
+        }
         if(windowsExplorerButton!=null)windowsExplorerButton.setEnabled(ready);
         if(resetWineButton!=null)resetWineButton.setEnabled(!wineBooting && !container.isBusy() && readyForDesktop());
         if(wineStartupBar!=null) {
@@ -410,11 +424,23 @@ public final class MainActivity extends Activity {
     /** Compact controls keep normal Android layout and touch coordinates. */
     private void actionRow(LinearLayout parent, View left, View right) {
         LinearLayout row=horizontal();
-        row.addView(left,new LinearLayout.LayoutParams(0,dp(40),1f));
-        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,dp(40),1f);
+        row.setMinimumHeight(dp(40));
+        row.addView(left,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f));
+        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f);
         second.leftMargin=dp(6);
         row.addView(right,second);
-        parent.addView(row,pad(3,3));
+        LinearLayout.LayoutParams rowParams=pad(3,3);
+        rowParams.height=dp(40);
+        rowParams.weight=1f;
+        parent.addView(row,rowParams);
+    }
+
+    /** WRAP_CONTENT preserves minimum sizes in small/landscape windows.
+     * ScrollView.fillViewport distributes only spare safe viewport height. */
+    private void fillRemainingHeight(View panel,float weight) {
+        LinearLayout.LayoutParams lp=(LinearLayout.LayoutParams)panel.getLayoutParams();
+        lp.weight=weight;
+        panel.setLayoutParams(lp);
     }
 
     private void showConfigurationMenu() {
@@ -440,11 +466,12 @@ public final class MainActivity extends Activity {
             dashboard.setGravity(Gravity.TOP);
             LinearLayout left=column();
             right=column();
-            dashboard.addView(left,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
-            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1.2f);
+            dashboard.addView(left,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f));
+            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1.2f);
             rp.leftMargin=dp(8);
             dashboard.addView(right,rp);
-            page.addView(dashboard);
+            page.addView(dashboard,new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,1f));
             content=left;
         }
         MeadowBannerView meadow=new MeadowBannerView(this);
@@ -453,6 +480,7 @@ public final class MainActivity extends Activity {
         showShortcuts(true);
         if(wide)content=right;
         LinearLayout desktop=card();
+        fillRemainingHeight(desktop,3f);
         LinearLayout title=horizontal();
         TextView header=label("◈  WINDOWS ENVIRONMENT",11,ACCENT,true);
         header.setLetterSpacing(.06f);
@@ -461,7 +489,7 @@ public final class MainActivity extends Activity {
         title.addView(winePowerLed,new LinearLayout.LayoutParams(dp(10),dp(10)));
         desktop.addView(title,pad(0,5));
 
-        turnOnWindowsButton=button("⏻  WINDOWS ON",true,v->startWineboot());
+        turnOnWindowsButton=button("WINDOWS OFF",false,v->startWineboot());
         resetWineButton=button("↻  RESET WINE",false,v->resetWine());
         actionRow(desktop,turnOnWindowsButton,resetWineButton);
         windowsExplorerButton=button("▣  EXPLORER",false,v->openWineGui());
@@ -511,6 +539,7 @@ public final class MainActivity extends Activity {
         refreshPowerPanel();
 
         LinearLayout folder=card();
+        fillRemainingHeight(folder,1f);
         sectionEyebrow(folder,"ANDROID FILES  /  R:");
         actionRow(folder,
                 button("▣  ODABERI MAPU",false,v->requestSharedFolder()),

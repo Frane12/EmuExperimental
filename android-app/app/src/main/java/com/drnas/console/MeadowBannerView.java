@@ -1,6 +1,5 @@
 package com.drnas.console;
 
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -19,11 +18,11 @@ import java.io.InputStream;
 
 /** Original r6 artwork with a quiet breeze and drifting pollen.
  * Fixed mesh and particles: no frame allocations, decoding, threads or I/O.
- * Only visible draws request another frame, at 20 FPS; no background timer.
+ * Only visible draws request another frame, at 25 FPS; no background timer.
  */
 public final class MeadowBannerView extends View {
     private static final String ASSET="emudrnas-meadow-r6.webp";
-    private static final int MESH_X=20, MESH_Y=8, POLLEN_COUNT=18;
+    private static final int MESH_X=20, MESH_Y=8, POLLEN_COUNT=26;
     private final Paint bitmapPaint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
     private final Paint borderPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint pollenPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -67,7 +66,9 @@ public final class MeadowBannerView extends View {
         super.onDraw(canvas);
         final float width=getWidth(),height=getHeight();
         if(width<2||height<2)return;
-        final boolean animate=ValueAnimator.areAnimatorsEnabled();
+        // This decorative scene is explicitly enabled by the user; do not let
+        // the system transition-duration scale freeze its Canvas frames.
+        final boolean animate=isShown()&&getWindowVisibility()==VISIBLE;
         // 120 seconds is a seamless common period for breeze and pollen.
         final double t=animate?((SystemClock.uptimeMillis()-origin)%120000)/1000.0:0;
         int saved=canvas.save();
@@ -79,14 +80,14 @@ public final class MeadowBannerView extends View {
                     float fy=(float)y/MESH_Y;
                     for(int x=0;x<=MESH_X;x++) {
                         float fx=(float)x/MESH_X;
-                        // Fix the image edges and trunk. The canopy moves < 1 px
-                        // at ordinary banner sizes, the grass even less.
+                        // Fix the image edges and trunk; let the canopy gently sway
+                        // a few physical pixels, with a softer breeze in the grass.
                         double edge=Math.sin(Math.PI*fx)*Math.sin(Math.PI*fy);
                         double canopy=Math.exp(-18*(fx-.25)*(fx-.25)-12*(fy-.38)*(fy-.38));
                         double grass=fy>.68?Math.sin((fy-.68)/.32*Math.PI)*.20:0;
                         double breeze=Math.sin(t*Math.PI/6+fx*5+fy*2);
-                        vertices[index++]=fx*width+(float)(edge*(canopy+grass)*breeze*height*.009);
-                        vertices[index++]=fy*height+(float)(edge*canopy*Math.sin(t*Math.PI/10+fx*4)*height*.002);
+                        vertices[index++]=fx*width+(float)(edge*(canopy+grass)*breeze*height*.022);
+                        vertices[index++]=fy*height+(float)(edge*canopy*Math.sin(t*Math.PI/10+fx*4)*height*.006);
                     }
                 }
                 canvas.drawBitmapMesh(meadow,MESH_X,MESH_Y,vertices,0,null,0,bitmapPaint);
@@ -94,14 +95,14 @@ public final class MeadowBannerView extends View {
         } else canvas.drawRect(destination,fallbackPaint);
         if(animate) {
             for(int i=0;i<POLLEN_COUNT;i++) {
-                double cycle=(t/40.0+i*.61803398875)%1;
+                double cycle=(t/20.0+i*.61803398875)%1;
                 float x=(float)(cycle*width);
                 float base=(float)((i*.38196601125)%1);
                 float y=height*(.14f+base*.72f)+(float)Math.sin(t*Math.PI/6+i)*height*.028f;
                 float fade=(float)Math.min(1,Math.min(cycle,1-cycle)*9);
                 pollenPaint.setColor(0xfffff6d5);
-                pollenPaint.setAlpha((int)((65+(i%4)*18)*fade));
-                float r=height*(.004f+(i%3)*.0015f);
+                pollenPaint.setAlpha((int)((120+(i%4)*25)*fade));
+                float r=height*(.006f+(i%3)*.0025f);
                 canvas.drawCircle(x,y,Math.max(.45f,r),pollenPaint);
             }
         }
@@ -111,7 +112,7 @@ public final class MeadowBannerView extends View {
         borderPaint.setColor(0xff4ae9f5);
         canvas.drawRoundRect(border,radius,radius,borderPaint);
         if(animate&&isShown()&&getWindowVisibility()==VISIBLE&&getLocalVisibleRect(visible))
-            postInvalidateDelayed(50);
+            postInvalidateDelayed(40);
     }
 
     @Override protected void onWindowVisibilityChanged(int visibility) {
