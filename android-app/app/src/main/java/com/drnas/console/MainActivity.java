@@ -430,6 +430,26 @@ public final class MainActivity extends Activity {
                 v->startActivity(new Intent(this,XInputLayoutEditorActivity.class)));
         windowsExplorerButton=button("▣  WINDOWS EXPLORER",false,v->openWineGui());
         desktop.addView(windowsExplorerButton,pad(10,12));
+        // Exact-GPU H2.9 auto selection. This is a Vulkan loader *request*;
+        // whether the driver actually loaded is reported by Wine probe logs.
+        final Button turnipPreference=button("",false,v->{});
+        final Runnable updateTurnipLabel=()->turnipPreference.setText(
+                "A840 NeuroFlow H2.9 auto: "+
+                (TurnipRuntime.autoH29Enabled(this)?"ON  ●":"OFF  ○"));
+        updateTurnipLabel.run();
+        turnipPreference.setOnClickListener(v->{
+            boolean next=!TurnipRuntime.autoH29Enabled(this);
+            TurnipRuntime.setAutoH29Enabled(this,next);
+            updateTurnipLabel.run();
+            android.widget.Toast.makeText(this,
+                    next?"A840 H2.9 automatski će se pokušati učitati pri sljedećem pokretanju Explorera":
+                            "A840 H2.9 auto isključen; koristi prethodni odabir",
+                    android.widget.Toast.LENGTH_LONG).show();
+        });
+        desktop.addView(turnipPreference,pad(7,4));
+        note(desktop,"A840 H2.9 je ugrađen u APK. Automatska aktivacija " +
+                "zahtijeva potvrđen Adreno 840 i ispravan Vulkan loader. " +
+                "Točan rezultat provjeri u Wine/Vulkan logu; ON nije dokaz aktivacije.");
         addButton(desktop,"Pošalji zapis pada / zadnjeg desktopa",false,v->shareCrashDiagnostics());
         wineStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
         wineStartupBar.setMax(100);
