@@ -79,16 +79,43 @@ public class XServer {
     private final Hashtable<String, Extension> _extensions;
     private OnXSeverStartListener _onStartListener = null;
     private java.util.function.Consumer<String> diagnosticListener;
-    private int mappedWindows;
+    // Track LIVE mapped window IDs, not lifetime map operations. A destroyed
+    // Direct3D window must not count as an active on-screen render target.
+    private final HashSet<Integer> liveMappedWindows = new HashSet<>();
+    private long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
     private boolean canvasReported;
     public void setDiagnosticListener(java.util.function.Consumer<String> listener) { diagnosticListener=listener; }
     public void diagnostic(String message) { if(diagnosticListener!=null)diagnosticListener.accept(message); }
-    public synchronized int mappedWindowCount() { return mappedWindows; }
-    public synchronized void windowMapped(int id) { mappedWindows++; diagnostic("X11 mapped window id="+id+", total="+mappedWindows); }
+    public synchronized int mappedWindowCount() { return liveMappedWindows.size(); }
+    public synchronized void windowMapped(int id) {
+        if(liveMappedWindows.add(id))diagnostic("X11 MAP window id="+id+", live="+liveMappedWindows.size());
+    }
+    public synchronized void windowUnmapped(int id) {
+        if(liveMappedWindows.remove(id))diagnostic("X11 UNMAP/DESTROY window id="+id+", live="+liveMappedWindows.size());
+    }
+    public synchronized void recordPutImage(int drawableId,boolean accepted,int bodyBytes) {
+        putImageRequests++;
+        if(accepted)putImageAccepted++;
+        if(putImageRequests<=3 || putImageRequests%120==0 || !accepted && putImageRequests<=12)
+            diagnostic("X11 PutImage drawable="+drawableId+" accepted="+accepted+
+                " payloadBytes="+bodyBytes+" requests="+putImageRequests+" acceptedTotal="+putImageAccepted);
+    }
+    public synchronized void recordWindowImageInvalidation(int windowId) {
+        windowImageInvalidations++;
+        if(windowImageInvalidations==1 || windowImageInvalidations%120==0)
+            diagnostic("X11 PutImage window invalidated id="+windowId+" count="+windowImageInvalidations);
+    }
     public synchronized void canvasDrawn() {
-        if(mappedWindows>0 && !canvasReported) {
-            canvasReported=true;diagnostic("X11 Canvas drew a mapped client window; verify Wine GUI visually.");
+        canvasDrawCalls++;
+        if(!canvasReported && !liveMappedWindows.isEmpty()) {
+            canvasReported=true;
+            diagnostic("X11 Canvas drew root with live mapped window; D3D pixels NOT yet verified; "
+                    +"PutImage accepted="+putImageAccepted+" redraws="+windowImageInvalidations);
         }
+        if(canvasDrawCalls%120==0)
+            diagnostic("X11 frame audit CanvasDraw="+canvasDrawCalls+" liveWindows="+liveMappedWindows.size()+
+                " PutImage="+putImageAccepted+"/"+putImageRequests+
+                " windowInvalidations="+windowImageInvalidations);
     }
 
     /**
