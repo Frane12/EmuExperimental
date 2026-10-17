@@ -10,6 +10,8 @@
         android:label="${appLabel}"
         android:usesCleartextTraffic="false"
         android:theme="@style/DrnasTheme">
+        <activity android:name=".XInputLayoutEditorActivity" android:exported="false"
+            android:screenOrientation="landscape" />
         <activity android:name=".WineGuiActivity" android:exported="false"
             android:hardwareAccelerated="true"
             android:screenOrientation="landscape"
