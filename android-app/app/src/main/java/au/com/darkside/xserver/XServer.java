@@ -84,6 +84,10 @@ public class XServer {
     private final HashSet<Integer> liveMappedWindows = new HashSet<>();
     private long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
     private boolean canvasReported;
+    private volatile boolean frameDiagnosticsEnabled;
+    public void setFrameDiagnosticsEnabled(boolean enabled) {
+        frameDiagnosticsEnabled=enabled;
+    }
     public void setDiagnosticListener(java.util.function.Consumer<String> listener) { diagnosticListener=listener; }
     public void diagnostic(String message) { if(diagnosticListener!=null)diagnosticListener.accept(message); }
     public synchronized int mappedWindowCount() { return liveMappedWindows.size(); }
@@ -93,7 +97,9 @@ public class XServer {
     public synchronized void windowUnmapped(int id) {
         if(liveMappedWindows.remove(id))diagnostic("X11 UNMAP/DESTROY window id="+id+", live="+liveMappedWindows.size());
     }
-    public synchronized void recordPutImage(int drawableId,boolean accepted,int bodyBytes,Client client) {
+    public void recordPutImage(int drawableId,boolean accepted,int bodyBytes,Client client) {
+        if(!frameDiagnosticsEnabled)return;
+        synchronized(this) {
         putImageRequests++;
         if(accepted)putImageAccepted++;
         if(putImageRequests<=3 || putImageRequests%120==0 || !accepted && putImageRequests<=12)
@@ -101,13 +107,19 @@ public class XServer {
                 " clientBase="+Integer.toHexString(client.resourceIdBase())+
                 " clientSeq="+client.getSequenceNumber()+
                 " payloadBytes="+bodyBytes+" requests="+putImageRequests+" acceptedTotal="+putImageAccepted);
+        }
     }
-    public synchronized void recordWindowImageInvalidation(int windowId) {
+    public void recordWindowImageInvalidation(int windowId) {
+        if(!frameDiagnosticsEnabled)return;
+        synchronized(this) {
         windowImageInvalidations++;
         if(windowImageInvalidations==1 || windowImageInvalidations%120==0)
             diagnostic("X11 PutImage window invalidated id="+windowId+" count="+windowImageInvalidations);
+        }
     }
-    public synchronized void canvasDrawn() {
+    public void canvasDrawn() {
+        if(!frameDiagnosticsEnabled)return;
+        synchronized(this) {
         canvasDrawCalls++;
         if(!canvasReported && !liveMappedWindows.isEmpty()) {
             canvasReported=true;
@@ -118,6 +130,7 @@ public class XServer {
             diagnostic("X11 frame audit CanvasDraw="+canvasDrawCalls+" liveWindows="+liveMappedWindows.size()+
                 " PutImage="+putImageAccepted+"/"+putImageRequests+
                 " windowInvalidations="+windowImageInvalidations);
+        }
     }
 
     /**
