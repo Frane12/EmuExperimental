@@ -17,6 +17,109 @@ import java.util.regex.Pattern;
  * a working AdrenoTools injection path. We log this distinction explicitly.
  */
 final class TurnipRuntime {
+    /** Exact published A840 NeuroFlow H2.9 archive already embedded in APK. */
+    static final String A840_H29_SHA256=
+            "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d";
+    static final String A840_H29_ARCHIVE="Drnas-Turnip-A840.zip";
+    static final String A840_H29_ORIGINAL="Drnas-Turnip-NeuroFlow-A840-H2.9-TESTING-ONLY.zip";
+
+    static boolean autoH29Enabled(Context ctx) {
+        return ctx.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE)
+                .getBoolean("auto-a840-h29",true);
+    }
+
+    static void setAutoH29Enabled(Context ctx,boolean enabled) {
+        ctx.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE)
+                .edit().putBoolean("auto-a840-h29",enabled).apply();
+    }
+
+    static String sha256(File file) throws Exception {
+        java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+        try(InputStream in=new java.io.BufferedInputStream(new FileInputStream(file))) {
+            byte[] buf=new byte[65536];
+            for(int n;(n=in.read(buf))!=-1;)if(n>0)digest.update(buf,0,n);
+        }
+        StringBuilder hex=new StringBuilder(64);
+        for(byte b:digest.digest())hex.append(String.format(Locale.ROOT,"%02x",b&255));
+        return hex.toString();
+    }
+
+    /**
+     * Invoked at EACH Explorer launch. Existing Wineboot boot plans may still
+     * reference old A840 H2.8: replace only this session's in-memory choice.
+     * Never update the saved boot plan, user-imported ZIPs or system driver.
+     *
+     * The APK manifest/asset SHA and embedded target are checked *before*
+     * selecting H2.9. Exact GPU family required; do not spoof Adreno IDs.
+     * When unsupported or invalid, leave the known-good plan unchanged.
+     */
+    static boolean selectBundledA840H29(Context context,JSONObject plan,
+                                        Consumer<String> log) {
+        final String gpu=NativeHost.vulkanDeviceName();
+        if(!"A840".equals(gpuTarget(gpu))) {
+            log.accept("DRNAS_A840_H29_SKIP gpu="+
+                    (gpu==null||gpu.isEmpty()?"not detected":gpu)+
+                    " (never force H2.9 onto another Adreno)");
+            return false;
+        }
+        if(!autoH29Enabled(context)) {
+            log.accept("DRNAS_A840_H29_DISABLED: keeping previous Vulkan driver selection");
+            return false;
+        }
+        try {
+            // First-run and upgrade path; cached archives are reused. This does
+            // not install any global Android driver or touch other packages.
+            BundledComponents.install(context,log);
+            String manifestJson;
+            try(InputStream in=context.getAssets().open("runtime-components-v1.json")) {
+                java.io.ByteArrayOutputStream tmp=new java.io.ByteArrayOutputStream();
+                byte[] buf=new byte[4096];
+                for(int n;(n=in.read(buf))!=-1;)tmp.write(buf,0,n);
+                manifestJson=tmp.toString("UTF-8");
+            }
+            org.json.JSONArray assets=new JSONObject(manifestJson).getJSONArray("items");
+            boolean present=false;
+            for(int i=0;i<assets.length();i++) {
+                JSONObject item=assets.getJSONObject(i);
+                if("Turnip".equals(item.optString("kind")) &&
+                        "A840".equals(item.optString("gpuTarget")) &&
+                        A840_H29_ARCHIVE.equals(item.optString("name")) &&
+                        A840_H29_SHA256.equals(item.optString("sha256")) &&
+                        item.optString("source").endsWith("/"+A840_H29_ORIGINAL)) {
+                    present=true;break;
+                }
+            }
+            if(!present)throw new IOException("APK manifest lacks pinned A840 H2.9");
+            File vault=new File(context.getFilesDir(),"wcp-vault").getCanonicalFile();
+            File archive=new File(vault,A840_H29_SHA256+".wcp").getCanonicalFile();
+            if(!archive.toPath().startsWith(vault.toPath()) ||
+                    !archive.isFile() || java.nio.file.Files.isSymbolicLink(archive.toPath()))
+                throw new IOException("A840 H2.9 archive not staged");
+            JSONObject meta=WcpRuntimeStager.readJson(new File(vault,A840_H29_SHA256+".json"));
+            if(!A840_H29_SHA256.equals(meta.optString("sha256")) ||
+                    !"A840".equals(meta.optString("gpuTarget")) ||
+                    !"Turnip".equals(meta.optString("componentType")) ||
+                    !meta.optBoolean("bundledFromApk"))
+                throw new IOException("A840 H2.9 metadata mismatch");
+            if(!A840_H29_SHA256.equals(sha256(archive)))
+                throw new IOException("A840 H2.9 ZIP SHA-256 mismatch");
+            WcpRuntimeStager.PackageInfo staged=WcpRuntimeStager.stageTurnipZip(
+                    archive,vault,A840_H29_SHA256,log);
+            File icd=writeIcd(staged,vault,log);
+            plan.put("turnipIcd",icd.getCanonicalPath());
+            plan.put("turnipArchive",A840_H29_ORIGINAL);
+            plan.put("turnipPreferenceRequested",true);
+            plan.put("turnipAutoSelected","A840_H2.9");
+            log.accept("DRNAS_A840_H29_AUTOPICK_SUCCESS: pinned ZIP "+A840_H29_SHA256+
+                    " staged for this Explorer session; Vulkan load remains unverified");
+            return true;
+        } catch(Exception ex) {
+            log.accept("DRNAS_A840_H29_AUTOPICK_FAILED: "+ex.getMessage()+
+                    "; preserving previous driver selection");
+            return false;
+        }
+    }
+
     private static final Pattern ADRENO =
             Pattern.compile("(?i)adreno\\s*(?:\\(tm\\))?[^0-9]{0,12}(810|830|840)(?![0-9])");
 
@@ -94,6 +197,15 @@ final class TurnipRuntime {
         env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParentFile().getAbsolutePath()+"/");
         env.put("ADRENOTOOLS_DRIVER_NAME",driver.getName());
         env.put("DRNAS_TURNIP_PREFERRED","1");
+        if("A840_H2.9".equals(plan.optString("turnipAutoSelected"))) {
+            env.put("DRNAS_TURNIP_EXPECTED_SO",driver.getAbsolutePath());
+            env.put("DRNAS_TURNIP_BUILD_ID","A840-H2.9");
+            env.put("TU_FRANE_A840_AGGRESSIVE","1");
+            log.accept("DRNAS_A840_H29_WRAPPER_CONFIGURED: hooks="+
+                    env.getOrDefault("ADRENOTOOLS_HOOKS_PATH","")+
+                    " driver="+driver.getAbsolutePath()+
+                    " (not evidence of actual Vulkan device creation)");
+        }
         // Passed to the initial native Vulkan probe AND inherited by Wine/DXVK.
         // This requests profiling-based Mesa/Turnip autotuning when supported by
         // the installed driver. It never forces a GMEM/SYSMEM render path.
