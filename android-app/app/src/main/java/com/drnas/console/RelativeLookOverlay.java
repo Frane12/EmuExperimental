@@ -19,12 +19,12 @@ final class RelativeLookOverlay extends View {
     private int pointer=-1;
     private float previousX,previousY;
     private float sensitivity=1.45f;
-    private int neutralGeneration;
-    private final Runnable neutralize=()->state.setTouchRight(0f,0f);
+    private final Runnable neutralize;
 
     RelativeLookOverlay(Context context,XInputSharedState state) {
         super(context);
         this.state=state;
+        this.neutralize=()->this.state.setTouchRight(0f,0f);
         density=getResources().getDisplayMetrics().density;
         setClickable(true);
         setFocusable(false);
