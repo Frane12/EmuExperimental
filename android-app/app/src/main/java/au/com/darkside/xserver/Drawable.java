@@ -822,6 +822,13 @@ public class Drawable {
         // Use bulk reads, a linear decoder and reusable staging resources.
         // Preserve the generic renderer when a shape mask needs compositing.
         final int pixels = width * height;
+        // GXcopy without clipping can write the destination bitmap itself.
+        // This eliminates one 800x600 staging bitmap write AND Canvas blit
+        // per frame while retaining the existing path for unusual X11 GCs.
+        final boolean directCopy = gc.isUnclippedOpaqueCopy() &&
+                _shapeMask == null && dstX >= 0 && dstY >= 0 &&
+                dstX + width <= _bitmap.getWidth() &&
+                dstY + height <= _bitmap.getHeight();
         if (format == Z_PIXMAP_FORMAT && depth == 24
                 && pixels >= 4096 && n <= 8 * 1024 * 1024
                 && (_shapeMask == null || _shapeMask.length != pixels)) {
@@ -830,8 +837,8 @@ public class Drawable {
                     _zUploadBytes = new byte[n];
                 if (_zUploadColors == null || _zUploadColors.length < pixels)
                     _zUploadColors = new int[pixels];
-                if (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
-                        || _zUploadBitmap.getHeight() != height)
+                if (!directCopy && (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
+                        || _zUploadBitmap.getHeight() != height))
                     _zUploadBitmap = Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888);
             } catch (OutOfMemoryError error) {
                 io.readSkip(bytesRemaining);
@@ -841,8 +848,12 @@ public class Drawable {
             io.readBytes(_zUploadBytes,0,n);
             io.readSkip(pad);
             X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
-            _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
-            _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
+            if (directCopy) {
+                _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
+            } else {
+                _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
+                _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
+            }
             return true;
         }
 
