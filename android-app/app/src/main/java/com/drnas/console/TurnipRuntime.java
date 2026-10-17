@@ -161,20 +161,27 @@ final class TurnipRuntime {
             else if("immediate".equals(testMode))command.add("--present-immediate");
             else if("create-only".equals(testMode))command.add("--create-destroy");
             else if("sync".equals(testMode))command.add("--present-sync");
+            else if("x11-only".equals(testMode))command.add("--x11-only");
+            else if("create-checkpoints".equals(testMode))command.add("--create-checkpoints");
+            else if("present-checkpoints".equals(testMode))command.add("--present-checkpoints");
+            else if(present&&!"fifo".equals(testMode))throw new IOException("Unknown experiment: "+testMode);
             log.accept(present ? "DRNAS_WSI_TEST mode="+testMode+
                     " (15 second isolated child, native watcher at 3s; inspect complete cleanup)" :
                     "Vulkan startup test: enumerate backend only.");
             ProcessBuilder pb=new ProcessBuilder(command).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
+            log.accept("DRNAS_EXPERIMENT_BEGIN mode="+testMode+" | isolated child; Explorer stays running");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
             boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
+            log.accept("DRNAS_EXPERIMENT_END mode="+testMode+" result="+(!ended?"TIMEOUT":p.exitValue()==0?"PASS":"FAIL exit="+p.exitValue()));
             if(!ended)
                 log.accept("DRNAS_WSI_TIMEOUT: native "+(present?"present/teardown":"enumeration")+
                         " probe exceeded 15 seconds; check LAST DRNAS_WSI_TEARDOWN marker to locate blocked cleanup. VK_SUCCESS on Present does not imply clean shutdown.");
             else if(p.exitValue()==0)
-                log.accept(present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
+                log.accept("x11-only".equals(testMode)?"Native X11 lifecycle PASSED (no Vulkan loaded).":
+                        "create-checkpoints".equals(testMode)||"create-only".equals(testMode)?"Native Vulkan create/destroy and X11 cleanup PASSED (no Present attempted).":present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
                         "Native Vulkan GPU enumeration PASSED. Windows DXVK adapter/presentation remain unverified.");
             else log.accept("Native Vulkan "+(present?"presentation/cleanup":"enumeration")+" FAILED (exit="+p.exitValue()+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
         } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
@@ -183,3 +190,4 @@ final class TurnipRuntime {
 
     private TurnipRuntime(){}
 }
+

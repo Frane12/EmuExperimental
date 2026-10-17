@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <time.h>
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 
 /* Opaque Xlib ABI, dynamically loaded from the exact Wine dependency path.
  * No compile-time dependency on host Xlib headers or host Vulkan libraries. */
@@ -23,6 +26,72 @@ typedef struct {
     Window window;
 } XlibSurfaceInfo;
 typedef VkResult (VKAPI_PTR *CreateXlibSurface)(VkInstance,const XlibSurfaceInfo *,const VkAllocationCallbacks *,VkSurfaceKHR *);
+
+/* Read-only transport snapshots: never consume X11/XCB socket bytes. */
+static int checkpoint_mode;
+static void x11_checkpoint(void *xlib,Display *display,const char *stage) {
+    if(!checkpoint_mode)return;
+    int (*connection_number)(Display *)=(int (*)(Display *))dlsym(xlib,"XConnectionNumber");
+    int fd=connection_number?connection_number(display):-1;
+    errno=0;
+    int flags=fd>=0?fcntl(fd,F_GETFD):-1;
+    int fd_errno=errno;
+    struct pollfd item={.fd=fd,.events=POLLIN};
+    errno=0;
+    int polled=fd>=0?poll(&item,1,0):-1;
+    int poll_errno=errno;
+    char path[64],target[192]="unavailable";
+    snprintf(path,sizeof(path),"/proc/self/fd/%d",fd);
+    ssize_t n=readlink(path,target,sizeof(target)-1);
+    if(n>=0)target[n]=0;
+    /* Optional inspection, resolved from the same runtime, never inferred. */
+    static void *xlib_xcb,*xcb;
+    if(!xlib_xcb)xlib_xcb=dlopen("libX11-xcb.so.1",RTLD_NOW|RTLD_LOCAL);
+    if(!xcb)xcb=dlopen("libxcb.so.1",RTLD_NOW|RTLD_LOCAL);
+    void *(*get_xcb)(Display *)=xlib_xcb?(void *(*)(Display *))dlsym(xlib_xcb,"XGetXCBConnection"):NULL;
+    int (*has_error)(void *)=xcb?(int (*)(void *))dlsym(xcb,"xcb_connection_has_error"):NULL;
+    void *connection=get_xcb?get_xcb(display):NULL;
+    int xcb_error=connection&&has_error?has_error(connection):-1;
+    printf("DRNAS_X11_CHECK stage=%s pid=%ld display=%p fd=%d flags=%d fd_errno=%d poll=%d poll_errno=%d revents=0x%x target=%s xcb_error=%d (-1=unavailable)\n",
+           stage,(long)getpid(),(void *)display,fd,flags,fd_errno,polled,poll_errno,
+           (unsigned)item.revents,target,xcb_error);
+}
+
+/* Experiment 1 never loads Vulkan: baseline for Xlib/server lifecycle. */
+static int x11_only_probe(void) {
+    void *xlib=dlopen("libX11.so.6",RTLD_NOW|RTLD_LOCAL);
+    if(!xlib){fprintf(stderr,"DRNAS_X11_ONLY load failed: %s\n",dlerror());return 60;}
+    int (*init)(void)=(int (*)(void))dlsym(xlib,"XInitThreads");
+    Display *(*open)(const char *)=(Display *(*)(const char *))dlsym(xlib,"XOpenDisplay");
+    Window (*root)(Display *)=(Window (*)(Display *))dlsym(xlib,"XDefaultRootWindow");
+    Window (*create)(Display *,Window,int,int,unsigned,unsigned,unsigned,unsigned long,unsigned long)=
+        (Window (*)(Display *,Window,int,int,unsigned,unsigned,unsigned,unsigned long,unsigned long))dlsym(xlib,"XCreateSimpleWindow");
+    int (*map)(Display *,Window)=(int (*)(Display *,Window))dlsym(xlib,"XMapWindow");
+    int (*sync)(Display *,int)=(int (*)(Display *,int))dlsym(xlib,"XSync");
+    int (*destroy)(Display *,Window)=(int (*)(Display *,Window))dlsym(xlib,"XDestroyWindow");
+    int (*close)(Display *)=(int (*)(Display *))dlsym(xlib,"XCloseDisplay");
+    if(!init||!open||!root||!create||!map||!sync||!destroy||!close)return 61;
+    printf("DRNAS_X11_ONLY XInitThreads=%d\n",init());
+    Display *display=open(NULL);
+    if(!display)return 62;
+    for(int i=0;i<3;i++) {
+        printf("DRNAS_X11_ONLY cycle=%d/3\n",i+1);
+        x11_checkpoint(xlib,display,"baseline-before-create");
+        Window window=create(display,root(display),0,0,64,64,0,0,0);
+        map(display,window);
+        sync(display,0);
+        x11_checkpoint(xlib,display,"baseline-after-map-sync");
+        destroy(display,window);
+        sync(display,0);
+        x11_checkpoint(xlib,display,"baseline-after-destroy-sync");
+    }
+    puts("DRNAS_X11_ONLY BEFORE XCloseDisplay");
+    close(display);
+    puts("DRNAS_EXPERIMENT_PASS x11-only: 3 complete cycles; Vulkan NOT loaded");
+    /* Optional XCB handles stay loaded for this short-lived child. */
+    dlclose(xlib);
+    return 0;
+}
 
 /* The diagnostic child is process-isolated. Never skip Vulkan teardown:
  * report which native threads remain blocked after a timed observation. */
@@ -75,6 +144,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     if(!display){dlclose(xlib);return 22;}
     Window window=create_window(display,root_window(display),0,0,64,64,0,0,0);
     map_window(display,window);sync_display(display,0);
+    x11_checkpoint(xlib,display,"after-initial-map-sync");
     VkSurfaceKHR surface=VK_NULL_HANDLE;
     VkDevice device=VK_NULL_HANDLE;
     VkSwapchainKHR chain=VK_NULL_HANDLE;
@@ -101,6 +171,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     XlibSurfaceInfo si={.sType=VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,.dpy=display,.window=window};
     VkResult result=vkCreateXlibSurfaceKHR(instance,&si,NULL,&surface);
     printf("X11 Vulkan surface create=%d\n",result);
+    x11_checkpoint(xlib,display,"after-create-surface");
     if(result!=VK_SUCCESS){status=23;goto done;}
     uint32_t n=0,family=UINT32_MAX;
     vkGetPhysicalDeviceQueueFamilyProperties(gpu,&n,NULL);
@@ -118,6 +189,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     VkDeviceCreateInfo di={.sType=VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,.queueCreateInfoCount=1,.pQueueCreateInfos=&qi,.enabledExtensionCount=1,.ppEnabledExtensionNames=&extension};
     result=vkCreateDevice(gpu,&di,NULL,&device);
     printf("Vulkan logical device create=%d\n",result);
+    x11_checkpoint(xlib,display,"after-create-device");
     if(result!=VK_SUCCESS){status=26;goto done;}
 #define DEVICE(type,name) type name=(type)vkGetDeviceProcAddr(device,#name)
     destroy_device=(PFN_vkDestroyDevice)vkGetDeviceProcAddr(device,"vkDestroyDevice");
@@ -175,6 +247,7 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
         .preTransform=cap.currentTransform,.compositeAlpha=alpha,.presentMode=requested_mode,.clipped=VK_TRUE};
     result=vkCreateSwapchainKHR(device,&sci,NULL,&chain);
     printf("X11 Vulkan swapchain create=%d\n",result);
+    x11_checkpoint(xlib,display,"after-create-swapchain");
     if(result!=VK_SUCCESS){status=32;goto done;}
     if(create_only) {
         puts("DRNAS_WSI_EXPERIMENT CREATE_ONLY: swapchain created, NO acquire/submit/present");
@@ -216,13 +289,16 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
     VkPresentInfoKHR present={.sType=VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,.swapchainCount=1,.pSwapchains=&chain,.pImageIndices=&index};
     result=vkQueuePresentKHR(queue,&present);
     printf("X11 Vulkan clear/present=%d\n",result);
+    x11_checkpoint(xlib,display,"after-queue-present");
     status=(result==VK_SUCCESS||result==VK_SUBOPTIMAL_KHR)?0:43;
     if(!status)puts("DRNAS_GPU_X11_SWAPCHAIN_PRESENT_VERIFIED");
     if(!status && sync_after_present) {
         /* This Xlib connection is not Mesa's XCB display. A successful
          * XSync proves only this connection's requests completed. */
         puts("DRNAS_WSI_XSYNC BEFORE XSync (different connection from Mesa WSI)");
+        x11_checkpoint(xlib,display,"before-post-present-xsync");
         sync_display(display,0);
+        x11_checkpoint(xlib,display,"after-post-present-xsync");
         puts("DRNAS_WSI_XSYNC AFTER XSync; NOT PROOF of Mesa queue completion");
         struct timespec delay={.tv_sec=0,.tv_nsec=400000000};
         nanosleep(&delay,NULL);
@@ -247,14 +323,19 @@ done:
             pthread_detach(watcher);
             puts("DRNAS_WSI_WATCHDOG armed: kernel wchan snapshot if destroy blocks >3s");
         } else puts("DRNAS_WSI_WATCHDOG thread creation failed");
+        x11_checkpoint(xlib,display,"before-destroy-swapchain");
         destroy_chain(device,chain,NULL);
+        x11_checkpoint(xlib,display,"after-destroy-swapchain");
         atomic_store(&drnas_destroy_completed,1);
     }
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroySwapchainKHR; BEFORE vkDestroyDevice");
     if(device&&destroy_device)destroy_device(device,NULL);
+    x11_checkpoint(xlib,display,"after-destroy-device");
     puts("DRNAS_WSI_TEARDOWN AFTER vkDestroyDevice; BEFORE vkDestroySurfaceKHR");
     if(surface&&vkDestroySurfaceKHR)vkDestroySurfaceKHR(instance,surface,NULL);
+    x11_checkpoint(xlib,display,"after-destroy-surface");
     puts("DRNAS_WSI_TEARDOWN Vulkan objects destroyed; XDestroyWindow next");
+    x11_checkpoint(xlib,display,"before-destroy-window");
     destroy_window(display,window);
     puts("DRNAS_WSI_TEARDOWN XDestroyWindow sent; XSync next");
     sync_display(display,0);
@@ -269,10 +350,13 @@ done:
 int main(int argc,char **argv) {
     setvbuf(stdout,NULL,_IONBF,0);setvbuf(stderr,NULL,_IONBF,0);
     if(argc!=2&&argc!=3)return 2;
+    checkpoint_mode=argc==3&&(strcmp(argv[2],"--x11-only")==0||
+            strcmp(argv[2],"--create-checkpoints")==0||strcmp(argv[2],"--present-checkpoints")==0);
+    if(argc==3&&strcmp(argv[2],"--x11-only")==0)return x11_only_probe();
     int enumerate_only=argc==3&&strcmp(argv[2],"--enumerate-only")==0;
     int immediate=argc==3&&strcmp(argv[2],"--present-immediate")==0;
-    int create_only=argc==3&&strcmp(argv[2],"--create-destroy")==0;
-    int sync_after_present=argc==3&&strcmp(argv[2],"--present-sync")==0;
+    int create_only=argc==3&&(strcmp(argv[2],"--create-destroy")==0||strcmp(argv[2],"--create-checkpoints")==0);
+    int sync_after_present=argc==3&&(strcmp(argv[2],"--present-sync")==0||strcmp(argv[2],"--present-checkpoints")==0);
     if(argc==3&&!enumerate_only&&!immediate&&!create_only&&!sync_after_present)return 2;
     if(create_only)puts("DRNAS_WSI_TEST_A create-destroy only, no Present");
     if(sync_after_present)puts("DRNAS_WSI_TEST_B FIFO Present + XSync/delay observation");
@@ -312,5 +396,7 @@ int main(int argc,char **argv) {
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);
+    if(checkpoint_mode&&status==0)puts("DRNAS_EXPERIMENT_PASS Vulkan and X11 cleanup complete");
     return status;
 }
+
