@@ -890,12 +890,14 @@ public class Drawable {
                 return false;
             }
             boolean profile=xServer.isFrameDiagnosticsEnabled();
-            long tRead=profile?System.nanoTime():0L;
+            boolean sampled=xServer.isRenderCaptureEnabled();
+            boolean measure=profile || sampled;
+            long tRead=measure?System.nanoTime():0L;
             io.readBytes(_zUploadBytes,0,n);
             io.readSkip(pad);
-            long tDecodedStart=profile?System.nanoTime():0L;
+            long tDecodedStart=measure?System.nanoTime():0L;
             X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
-            long tUploadedStart=profile?System.nanoTime():0L;
+            long tUploadedStart=measure?System.nanoTime():0L;
             // C path: when WSI submits a *near-full* new frame at origin,
             // zero only uncovered right/bottom strips. Do not clear normal
             // partial X11 updates or the entire framebuffer every frame:
@@ -919,14 +921,20 @@ public class Drawable {
                 _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
                 _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());
             }
-            if(profile) {
+            if(measure) {
                 long end=System.nanoTime();
-                if(profiler==null)profiler=new X11PutImageProfiler();
-                String summary=profiler.record(
+                if(sampled)xServer.capturePutImage(
                         tDecodedStart-tRead,tUploadedStart-tDecodedStart,
-                        end-tUploadedStart,n,end);
-                if(summary!=null)
-                    xServer.diagnostic("drawable="+drawableId+" "+summary);
+                        end-tUploadedStart,n,drawableId,width,height,
+                        _bitmap.getWidth(),_bitmap.getHeight());
+                if(profile) {
+                    if(profiler==null)profiler=new X11PutImageProfiler();
+                    String summary=profiler.record(
+                            tDecodedStart-tRead,tUploadedStart-tDecodedStart,
+                            end-tUploadedStart,n,end);
+                    if(summary!=null)
+                        xServer.diagnostic("drawable="+drawableId+" "+summary);
+                }
             }
             return true;
         }
