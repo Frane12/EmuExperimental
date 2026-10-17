@@ -18,8 +18,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Drnas Console"
-        versionCode = 45
-        versionName = "0.5.30-desktop-crash-recovery"
+        versionCode = 46
+        versionName = "0.5.31-x11-async-output"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -50,7 +50,7 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".labv0530"
+                applicationIdSuffix = ".labv0531"
                 manifestPlaceholders["appLabel"] = "Drnas Console LAB"
             }
         }

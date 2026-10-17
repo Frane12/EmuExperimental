@@ -14,6 +14,7 @@ import java.net.Socket;
 public class InputOutput {
     private final BufferedInputStream _inStream;
     private final BufferedOutputStream _outStream;
+    private final X11OutputQueue _outputQueue;
     private boolean _msb = true;
     private static final byte[] PadBytes = new byte[]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -25,7 +26,10 @@ public class InputOutput {
      */
     public InputOutput(Socket socket) throws IOException {
         _inStream = new BufferedInputStream(socket.getInputStream(), 16384);
-        _outStream = new BufferedOutputStream(socket.getOutputStream(), 16384);
+        _outputQueue = new X11OutputQueue(socket.getOutputStream(),()->{
+            try {socket.close();}catch(IOException ignored){}
+        });
+        _outStream = new BufferedOutputStream(_outputQueue, 16384);
     }
 
     /**
@@ -312,10 +316,10 @@ public class InputOutput {
         if (n > 0) _outStream.write(PadBytes, 0, n);
     }
 
-    /** Flush in protocol order on the existing X11 client thread. */
+    /** Enqueue in protocol order; actual socket I/O is always off the UI thread. */
     public synchronized void flush() throws IOException {
-        // A new joined thread per reply creates avoidable scheduling pressure
-        // during WSI readback. Propagate socket errors to the owning Client.
+        // UI touch/key callbacks also send X11 events. The queued stream
+        // copies buffered bytes and returns without blocking on socket writes.
         _outStream.flush();
     }
 
@@ -325,7 +329,9 @@ public class InputOutput {
      * @throws IOException
      */
     public void close() throws IOException {
+        // Abort first so a blocked socket writer is cancelled. Do not flush
+        // pending output while closing a disconnected X11 connection.
+        _outputQueue.close();
         _inStream.close();
-        _outStream.close();
     }
 }
