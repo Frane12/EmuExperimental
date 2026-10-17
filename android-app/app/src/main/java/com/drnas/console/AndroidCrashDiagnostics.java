@@ -100,6 +100,7 @@ public final class AndroidCrashDiagnostics {
         appendExitHistory(context,out);
         appendSaved(context.getFilesDir(),out);
         appendInitializationLogs(context.getFilesDir(),out);
+        copy(new File(context.getFilesDir(),"containers/default/wineboot-probe/template/.wine/drive_c/DRNAS/Tools/DesktopStyle.log"),out,256*1024);
         copy(new File(context.getFilesDir(),"logs/latest-wine-gui-raw.txt"),out,8*1024*1024);
     }
 

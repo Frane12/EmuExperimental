@@ -601,6 +601,7 @@ public final class WineGuiActivity extends Activity {
                                 .putBoolean("full_screen_stretch",stretchFullscreen).apply();
                         else saveLaunchProfile(AppLaunchSettings.load(this,launchProfileId).withStretch(stretchFullscreen));
                         xserver.getScreen().setStretchFullscreen(stretchFullscreen);
+                        positionDesktopKeys();
                         if(desktopCursorOverlay!=null)
                             desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
                         log("DRNAS_DISPLAY_MODE "+(stretchFullscreen?"FILL":"FIT")+
@@ -798,6 +799,16 @@ public final class WineGuiActivity extends Activity {
         }
     }
 
+    private View desktopKeyRow;
+    private void positionDesktopKeys(){
+        if(desktopKeyRow==null)return;
+        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+        float scale=stretchFullscreen?metrics.heightPixels/720f:Math.min(metrics.widthPixels/1280f,metrics.heightPixels/720f);
+        float gap=stretchFullscreen?0:(metrics.heightPixels-720*scale)/2f;
+        int bar=getPreferences(MODE_PRIVATE).getBoolean("desktop_taskbar_large",true)?44:24;
+        FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)desktopKeyRow.getLayoutParams();
+        p.bottomMargin=Math.round(gap+bar*scale)+dp(8);desktopKeyRow.setLayoutParams(p);
+    }
     private void addDesktopKeys(FrameLayout layout) {
         LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
         String[] labels={"Left mouse","Right mouse","Enter","Esc","Backspace"};
@@ -827,7 +838,7 @@ public final class WineGuiActivity extends Activity {
         FrameLayout.LayoutParams p=new FrameLayout.LayoutParams(
                 Math.min(dp(550),getResources().getDisplayMetrics().widthPixels-dp(20)),
                 dp(42),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);
-        p.bottomMargin=dp(8);layout.addView(row,p);
+        layout.addView(row,p);desktopKeyRow=row;positionDesktopKeys();
     }
 
     private void openTaskManager() {

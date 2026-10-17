@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r12 - Options tab, HR/EN app language and separate controller settings
+name: EmuDrnas preAlpha 0.1 r13 - live Wine meadow and larger taskbar with Options
 on:
   push:
     branches:
@@ -129,6 +129,10 @@ jobs:
               "tools/windows-tools/${app}.c" -luser32 -lgdi32 -lcomdlg32 \
               -o "android-app/app/src/main/assets/windows-tools/${app/DrnasRetro/DRNAS}.exe"
           done
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc \
+            tools/windows-tools/DrnasDesktop.c -luser32 -lgdi32 -lm \
+            -o android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
           test -s android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
           test -s android-app/app/src/main/assets/windows-tools/DRNASPad.exe
           file android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
@@ -224,6 +228,8 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep emudrnas-meadow-r6.webp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPaint.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPad.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASDesktop.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep emudrnas-desktop-meadow-r13.webp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x86/xinput1_3.dll
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x64/xinput1_3.dll
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/XInputProbe.exe
@@ -249,26 +255,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r12-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r13-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r12 - Options tab, HR/EN interface, joystick settings and compact launchpad
+          EmuDrnas preAlpha 0.1 r13 - Wine meadow wallpaper, idle pollen, larger taskbar, Options and joystick settings
           Package: com.drnas.console
-          versionCode: 77
+          versionCode: 78
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Separate Options tab for HR/EN Android app interface, global FPS/DXVK/Stretch, HUD, desktop keys, startup control mode, camera sensitivity and XInput layout editor. Moved configuration off the launchpad; adaptive compact banner and safe viewport layout. Actual initialization error is shown with a log-sharing action. Retains r11 per-icon profiles, A740, ICO, native C/R explorer, manual R import, guarded exit and animated startup.
+          Changed: Includes r12 Options, HR/EN app labels, separate joystick preferences, compact home and complete initialization support logs. New original 1920x1080 meadow asset staged as a 1280x720 Wine wallpaper. Own source-built message-only desktop helper requests real Wine wallpaper refresh, low-priority sparse pollen in the clipped desktop DC, pause when a maximized/fullscreen foreground covers the desktop, and 44px taskbar/button height. Live wallpaper and larger taskbar are separately configurable in Options. Android desktop keys stay above the Wine taskbar. Device verification pending.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r12-options.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r12-options.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r12-options-ZIP
+          name: EmuDrnas-preAlpha-0.1-r13-desktop-meadow-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -277,8 +283,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r12-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r12-options.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r12 - Options and language draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r13-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r13 - Wine desktop meadow draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 

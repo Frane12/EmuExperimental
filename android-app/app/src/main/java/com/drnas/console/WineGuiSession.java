@@ -35,6 +35,7 @@ final class WineGuiSession implements AutoCloseable {
         }
     }
     private volatile Process launcher;
+    private volatile Process desktopCompanion;
     private volatile WineServerDiagnostics.ManagedServer server;
 
     static final int DESKTOP_WIDTH=1280;
@@ -256,7 +257,7 @@ final class WineGuiSession implements AutoCloseable {
             // the guest desktop wallpaper is installed and registered. A proper
             // Windows BMP is staged inside xuser/Pictures; failure never blocks GUI.
             log.accept("[Startup] Priprema Windows pozadine");
-            try { WineWallpaper.ensure(prefix,linker,wine,proton,env,log,raw); }
+            try { WineWallpaper.ensure(context,prefix,linker,wine,proton,env,log,raw); }
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
             FexPerformanceProfile.apply(env);
@@ -276,6 +277,20 @@ final class WineGuiSession implements AutoCloseable {
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);
+            try{
+                File helper=new File(prefix,"drive_c/DRNAS/Tools/DRNASDesktop.exe");
+                if(helper.isFile()){
+                    android.content.SharedPreferences options=AppOptionsView.desktop(context);
+                    List<String> desktopArgs=command(linker,wine,"exec:"+helper.getAbsolutePath());
+                    desktopArgs.add(options.getBoolean("desktop_live",true)?"/live:1":"/live:0");
+                    desktopArgs.add(options.getBoolean("desktop_taskbar_large",true)?"/taskbar:44":"/taskbar:0");
+                    ProcessBuilder companion=new ProcessBuilder(desktopArgs).directory(proton).redirectErrorStream(true);
+                    companion.environment().clear();companion.environment().putAll(env);
+                    desktopCompanion=companion.start();
+                    WineServerDiagnostics.pipe(desktopCompanion,"[Desktop style] ",log,20,raw);
+                    log.accept("DRNAS_DESKTOP_STYLE requested: original 1280x720 meadow + optional idle pollen; taskbar 44 guest pixels when enabled. Actual visual verification pending.");
+                }
+            }catch(Exception styleError){log.accept("Desktop style helper unavailable: "+styleError.getMessage());}
             long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
             long nextDxvkAudit=0;
@@ -341,6 +356,7 @@ final class WineGuiSession implements AutoCloseable {
         Thread worker=sessionThread;if(worker!=null && worker!=Thread.currentThread())worker.interrupt();
         PulseAudioRuntime a=audio;if(a!=null)a.close();
         Process p=launcher;if(p!=null&&p.isAlive())p.destroyForcibly();
+        Process companion=desktopCompanion;if(companion!=null&&companion.isAlive())companion.destroyForcibly();
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }

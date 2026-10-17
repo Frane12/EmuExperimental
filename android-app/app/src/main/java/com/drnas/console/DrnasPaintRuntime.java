@@ -15,6 +15,7 @@ final class DrnasPaintRuntime {
         if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Cannot make DRNAS Tools directory");
         stage(context,dir,"windows-tools/DRNASPaint.exe","DRNASPaint.exe",log);
         stage(context,dir,"windows-tools/DRNASPad.exe","DRNASPad.exe",log);
+        stage(context,dir,"windows-tools/DRNASDesktop.exe","DRNASDesktop.exe",log);
     }
     private static void stage(Context context,File dir,String source,String name,
                               Consumer<String> log) throws IOException {

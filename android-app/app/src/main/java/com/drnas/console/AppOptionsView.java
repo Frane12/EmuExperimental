@@ -34,6 +34,8 @@ final class AppOptionsView extends LinearLayout {
         chooser("DXVK",new String[]{"Standard","Async"},DxvkVariants.ASYNC.equals(DxvkVariants.selected(a))?1:0,
                 value->DxvkVariants.select(a,value==1?DxvkVariants.ASYNC:DxvkVariants.STANDARD));
         toggle("Stretch · puni zaslon","full_screen_stretch",true);
+        toggle("Živa pozadina desktopa","desktop_live",true);
+        toggle("Veći Wine taskbar","desktop_taskbar_large",true);
         toggle("Prikaži FPS / RAM / bateriju","perf_hud",false);
         toggle("Prikaži pet tipki na desktopu","desktop_keys",true);
         Switch turnip=new Switch(a);turnip.setText(AppLanguage.t(a,"A840 H2.9 automatski"));

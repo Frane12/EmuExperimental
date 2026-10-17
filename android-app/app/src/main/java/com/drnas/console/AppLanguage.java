@@ -9,6 +9,8 @@ import android.widget.Toast;
 /** App-owned labels only. Never translates paths, user input, guest programs or logs. */
 final class AppLanguage {
     private static final String[][] LABELS={
+        {"Live desktop wallpaper","Živa pozadina desktopa"},
+        {"Larger Wine taskbar","Veći Wine taskbar"},
         {"Initialization failed","Inicijalizacija nije uspjela"},
         {"SHARE LOG","PODIJELI LOG"},
         {"Keyboard","Tipkovnica"},
