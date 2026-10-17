@@ -956,10 +956,11 @@ public class ScreenView extends View {
         _currentCursorX = x;
         _currentCursorY = y;
 
-        Bitmap bm=cursor.getBitmap();
+        Bitmap bm=cursor==null ? null : cursor.getBitmap();
         CursorOverlayListener listener=cursorOverlayListener;
-        if (listener!=null)listener.onCursorUpdated(bm,x,y,cursor.getHotspotX(),cursor.getHotspotY());
-        else {
+        if (listener!=null)listener.onCursorUpdated(bm,x,y,
+                cursor==null?0:cursor.getHotspotX(),cursor==null?0:cursor.getHotspotY());
+        else if (bm!=null && !bm.isRecycled()) {
             int left=x-cursor.getHotspotX(),top=y-cursor.getHotspotY();
             invalidateGuestRect(left,top,left+bm.getWidth(),top+bm.getHeight());
         }
@@ -972,7 +973,25 @@ public class ScreenView extends View {
      * @param y    New Y coordinate.
      * @param mode 0=Normal, 1=Grab, 2=Ungrab
      */
+    private boolean pointerErrorReported;
     public void updatePointerPosition(int x, int y, int mode) {
+        synchronized(_xServer) {
+            if(_rootWindow==null)return;
+            try { updatePointerPositionOwned(x,y,mode); }
+            catch(RuntimeException error) {
+                if(!pointerErrorReported) {
+                    pointerErrorReported=true;
+                    com.drnas.console.AndroidCrashDiagnostics.recordPointer(_xServer.getContext(),error);
+                    _xServer.diagnostic("X11 pointer update FAILED: "+android.util.Log.getStackTraceString(error));
+                }
+                // Restore a valid origin for the next enter/motion event.
+                _motionWindow=_rootWindow;
+                _motionX=_currentCursorX;_motionY=_currentCursorY;
+            }
+        }
+    }
+
+    private void updatePointerPositionOwned(int x, int y, int mode) {
         Window w;
         Cursor c;
 
@@ -996,7 +1015,7 @@ public class ScreenView extends View {
             movePointer(x, y, c);
 
         if (w != _motionWindow) {
-            _motionWindow.leaveEnterNotify(x, y, w, mode);
+            if(_motionWindow!=null)_motionWindow.leaveEnterNotify(x, y, w, mode);
             _motionWindow = w;
             _motionX = x;
             _motionY = y;

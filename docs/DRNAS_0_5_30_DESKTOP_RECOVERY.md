@@ -31,3 +31,14 @@ startup; Wine startup may create its usual new GUI trace.
 Validation: JVM report-preservation/bounds tests plus full CI APK compilation.
 On-device confirmation remains required. Start Explorer; if it exits, restart
 only the app and use the Console crash-report button before reopening Explorer.
+
+## Additional reproduction detail: first mouse movement triggers exit
+
+The user narrowed the trigger to the first pointer movement after Explorer opens.
+Window.getCursor() previously recursed to _parent.getCursor() whenever a cursor
+was None, including the root whose parent is null. Root Cursor=None is legal
+and must resolve to the server default. Resolve inheritance iteratively with
+that fallback, and allow movePointer to hide an absent bitmap rather than
+null-dereferencing it. Guard pointer event dispatch and retain its original
+exception separately; restore a valid motion origin after a failed event.
+This concrete bug matches the trigger; on-device confirmation is still required.

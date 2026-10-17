@@ -31,6 +31,11 @@ public final class AndroidCrashDiagnostics {
         catch(Exception ignored){}
     }
 
+    public static void recordPointer(Context context,Throwable error) {
+        try {record(new File(context.getFilesDir(),"logs"),"last-pointer-error.txt",Thread.currentThread(),error);}
+        catch(Exception ignored){}
+    }
+
     static synchronized void record(File logs,String name,Thread thread,Throwable error) throws IOException {
         if(!logs.isDirectory()&&!logs.mkdirs())throw new IOException("Crash directory unavailable");
         StringWriter trace=new StringWriter();
@@ -50,6 +55,7 @@ public final class AndroidCrashDiagnostics {
     static void appendSaved(File files,OutputStream out) throws IOException {
         copy(new File(files,"logs/"+FATAL),out,LIMIT);
         copy(new File(files,"logs/"+RENDER),out,LIMIT);
+        copy(new File(files,"logs/last-pointer-error.txt"),out,LIMIT);
         copy(new File(files,"logs/last-process-exits.txt"),out,LIMIT);
     }
 
