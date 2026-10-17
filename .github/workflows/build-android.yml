@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r13 - live Wine meadow and larger taskbar with Options
+name: EmuDrnas preAlpha 0.1 r14 - glass controls and bora pollen boot fix
 on:
   push:
     branches:
@@ -24,6 +24,7 @@ on:
       - feat/emudrnas-fullscreen-stretch-prealpha-r4
       - feat/emudrnas-retro-shortcuts-tools-r5
       - feat/emudrnas-compact-breeze-r7
+      - fix/r13-bundled-wcp-boot
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -255,36 +256,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r13-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r14-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r13 - Wine meadow wallpaper, idle pollen, larger taskbar, Options and joystick settings
+          EmuDrnas preAlpha 0.1 r14 - centered vector icons, tactile raised glass buttons, full-screen background bora pollen and boot manifest fix
           Package: com.drnas.console
-          versionCode: 78
+          versionCode: 79
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Includes r12 Options, HR/EN app labels, separate joystick preferences, compact home and complete initialization support logs. New original 1920x1080 meadow asset staged as a 1280x720 Wine wallpaper. Own source-built message-only desktop helper requests real Wine wallpaper refresh, low-priority sparse pollen in the clipped desktop DC, pause when a maximized/fullscreen foreground covers the desktop, and 44px taskbar/button height. Live wallpaper and larger taskbar are separately configurable in Options. Android desktop keys stay above the Wine taskbar. Device verification pending.
+          Changed: Keeps r13 desktop, Options, icons and Wine functions. Accepts all eight pinned WCP/Turnip assets including A740, avoiding the early BOOT BLOCKED manifest-count failure. Adds centered native vector icons above each dashboard control label; raised three-stop translucent glass gradients and soft press/release response; adds low-priority 18 FPS bora-blown pollen across the Android GUI behind text/buttons, individually configurable in Options. No APK runtime network. Device verification pending.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r14-glass-bora.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r14-glass-bora.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r13-desktop-meadow-ZIP
+          name: EmuDrnas-preAlpha-0.1-r14-glass-bora-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7'
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r13-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r13-desktop-meadow.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r13 - Wine desktop meadow draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r14-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r14-glass-bora.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r14 - glass bora boot-fix private draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
