@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.46 X11 bulk PutImage performance
+name: EmuExperimental - Android APK v0.5.47 fast upload + joystick + quiet logs
 on:
   push:
     branches:
@@ -21,7 +21,7 @@ on:
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
       - experiment/wsi-mode-diagnostics-v0.5.44
-      - perf/x11-putimage-bulk-v0.5.46
+      - feat/virtual-stick-fast-upload-v0.5.47
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -142,29 +142,29 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.46-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.46\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.47-STABLE-SIGNED.apk"
+            printf 'DRNAS Console v0.5.47\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.46-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.46 LAB\nMenu experiments 1-3: X11 only; Vulkan create/destroy transport checkpoints; Present plus XSync checkpoints. Each child has a 15s timeout. Run in order then send log. Preserves v0.5.45 XCB guard. Bulk X11 BGRX PutImage upload reuses staging; compare FPS and window lifetime against v0.5.45. On-device validation required.\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0546 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.47-TRANSIENT-DO-NOT-UPGRADE.apk"
+            printf 'DRNAS Console v0.5.47 LAB\nMenu experiments 1-3: X11 only; Vulkan create/destroy transport checkpoints; Present plus XSync checkpoints. Each child has a 15s timeout. Run in order then send log. Preserves v0.5.45 XCB guard. Direct bitmap PutImage for safe X11 GXcopy, optional virtual touch joystick (WASD), diagnostics OFF by default and selectable from menu; Wine/DXVK native trace level changes require Wine restart. Compare performance and stability against v0.5.46. On-device validation required.\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0547 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/perf/x11-putimage-bulk-v0.5.46' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/virtual-stick-fast-upload-v0.5.47' }}
         with:
-          name: Drnas-Console-v0.5.46-APK-ZIP
+          name: Drnas-Console-v0.5.47-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/perf/x11-putimage-bulk-v0.5.46'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/virtual-stick-fast-upload-v0.5.47'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="drnas-emu-v0.5.46-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.46 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="drnas-emu-v0.5.47-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.47 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
