@@ -128,7 +128,7 @@ final class WineGuiSession implements AutoCloseable {
             if(dir.isDirectory())libs.append(":").append(dir.getAbsolutePath());
         env.put("LD_LIBRARY_PATH",libs.toString());
         // A log without device enumeration is not proof of a DXVK adapter.
-        env.put("DXVK_LOG_LEVEL","info");
+        env.put("DXVK_LOG_LEVEL","debug"); // LAB diagnostic only; DXVK errors and WSI hints
         env.put("DXVK_LOG_PATH",tmp.getAbsolutePath());
         for(String dll:new String[]{"d3d9.dll","dxgi.dll","d3d11.dll"}) {
             File x64=new File(prefix,"drive_c/windows/system32/"+dll);
@@ -163,7 +163,13 @@ final class WineGuiSession implements AutoCloseable {
         }
         File[] dependencies=lib.listFiles((dir,name)->name.startsWith("libX") || name.contains("xcb") || name.contains("freetype") || name.contains("fontconfig"));
         if(dependencies!=null)for(File f:dependencies)log.accept("GUI runtime library: "+f.getName());
+        WineNativeDependencyAudit.report(guiRuntime,lib,env,log);
         WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
+        if(!stopped) {
+            log.accept("DRNAS_WSI_AUDIT: isolated native Vulkan X11 surface/swapchain/present test before Wine GUI; no DRI3 assumption.");
+            TurnipRuntime.probeWine(context,guiRuntime,env,log,raw,true);
+            log.accept("DRNAS_WSI_AUDIT: native probe complete; Wine DXVK Present STILL requires separate confirmation.");
+        }
         if(stopped)return;
         server=WineServerDiagnostics.prestart(linker,serverElf,proton,nativeDir,env,log,raw);
         if(server==null)throw new IOException("GUI wineserver failed to start");
@@ -200,7 +206,14 @@ final class WineGuiSession implements AutoCloseable {
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw);
             long until=System.nanoTime()+TimeUnit.HOURS.toNanos(4);
             boolean exitReported=false;
+            Map<String,String> dxvkSeen=new HashMap<>();
+            long nextDxvkAudit=0;
             while(!stopped && server.alive() && System.nanoTime()<until) {
+                long now=System.nanoTime();
+                if(now>=nextDxvkAudit) {
+                    DxvkDiagnosticSnapshot.report(tmp,dxvkSeen,log);
+                    nextDxvkAudit=now+TimeUnit.SECONDS.toNanos(5);
+                }
                 // Explorer can delegate its window to a child and return.
                 // Exit alone is never proof that a GUI exists.
                 if(!launcher.isAlive()&&!exitReported) {
@@ -209,6 +222,8 @@ final class WineGuiSession implements AutoCloseable {
                 }
                 Thread.sleep(200);
             }
+            DxvkDiagnosticSnapshot.report(tmp,new HashMap<>(),log);
+            log.accept("DRNAS_DXVK_AUDIT: a created swapchain is not proof of the first successful Present.");
             log.accept(stopped?"GUI stopped by user/lifecycle.":"GUI bounded session ended.");
             if(launcher.isAlive())launcher.destroyForcibly();
             server.close();
