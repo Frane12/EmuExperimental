@@ -680,7 +680,7 @@ public class Drawable {
                 // Audit both accepted and rejected requests; DXVK swapchain
                 // creation alone is NOT proof that any rendered frame arrives.
                 changed = processPutImage(client, gc, arg, bytesRemaining);
-                xServer.recordPutImage(id,changed,bytesRemaining);
+                xServer.recordPutImage(id,changed,bytesRemaining,client);
                 break;
             case RequestCode.PolyText8:
             case RequestCode.PolyText16:
