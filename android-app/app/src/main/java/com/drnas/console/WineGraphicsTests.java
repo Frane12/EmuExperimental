@@ -21,8 +21,9 @@ final class WineGraphicsTests {
         }
         String hash;
         try(InputStream in=context.getAssets().open("graphics-tests/TestD3D.sha256")) {
-            byte[] data=new byte[65];int n=in.read(data);
-            hash=new String(data,0,Math.max(0,n),StandardCharsets.US_ASCII).trim();
+            byte[] data=new byte[65];int filled=0,n;
+            while(filled<data.length && (n=in.read(data,filled,data.length-filled))!=-1)filled+=n;
+            hash=new String(data,0,filled,StandardCharsets.US_ASCII).trim();
         }
         install(prefix,exe,hash);
         log.accept("Start > Programs > System Tools > Test Direct3D (DRNAS cube) installed. D3D9 HAL -> selected DXVK/Vulkan driver; rendering still requires device test.");

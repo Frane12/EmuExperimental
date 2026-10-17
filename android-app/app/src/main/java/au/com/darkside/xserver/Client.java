@@ -24,6 +24,7 @@ public class Client extends Thread {
     private final Vector<Resource> _resources;
     private int _sequenceNumber = 0;
     private boolean _closeConnection = false;
+    private int _lastOpcode=-1, _lastRequestBytes;
     private boolean _isConnected = true;
     private int _closeDownMode = Destroy;
     private boolean _imperviousToServerGrabs = false;
@@ -126,8 +127,11 @@ public class Client extends Thread {
             doComms();
         } catch (IOException e) {
             android.util.Log.i("DRNAS-X11", "Client connection ended: " + e);
+            if(!_closeConnection)_xServer.diagnostic("X11 client IO ended after opcode="+_lastOpcode+
+                    " bytes="+_lastRequestBytes+": "+e);
         } catch (RuntimeException e) {
             android.util.Log.e("DRNAS-X11", "X11 request failed", e);
+            _xServer.diagnostic("X11 request FAILED opcode="+_lastOpcode+" bytes="+_lastRequestBytes+": "+e);
         } finally {
             synchronized (_xServer) { close(); }
         }
@@ -255,6 +259,7 @@ public class Client extends Thread {
                 }
             }
 
+            _lastOpcode=opcode&255;_lastRequestBytes=bytesRemaining;
             synchronized (_xServer) {
                 processRequest(opcode, arg, bytesRemaining);
             }
