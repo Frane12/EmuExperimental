@@ -156,6 +156,12 @@ public final class ContainerBootstrap {
                     catch(Exception e){unsupported.add("Turnip: "+e.getMessage());}
                 }
             } else if(!"FEXCore".equals(record.optString("componentType")) && archive.isFile()) {
+                // The async WCP is an OPTIONAL second payload, never the
+                // baseline used to construct a Wineboot prefix. Inventory is
+                // newest-first, so without this guard the newly embedded
+                // async archive would silently displace DXVK Standard.
+                if("DXVK".equals(record.optString("componentType")) &&
+                        "async".equals(record.optString("variant")))continue;
                 if(proton!=null && dxvk!=null)continue;
                 try {
                     WcpRuntimeStager.PackageInfo p=WcpRuntimeStager.stageWcp(archive,vault,sha,this::log);
