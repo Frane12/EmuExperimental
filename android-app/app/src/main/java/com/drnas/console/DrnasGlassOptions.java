@@ -151,7 +151,7 @@ final class DrnasGlassOptions {
         title(panel,"RENDER A/B I MJERENJA");
         option(panel,27);
         title(panel,"WINDOWS / GENERAL");
-        for(int i=11;i<20;i++)option(panel,ORDER[i]);
+        for(int i=11;i<20;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
         title(panel,"WSI DIJAGNOSTIKA");
         for(int i=20;i<ORDER.length;i++)if(ORDER[i]!=27)option(panel,ORDER[i]);
 
