@@ -93,11 +93,13 @@ public class XServer {
     public synchronized void windowUnmapped(int id) {
         if(liveMappedWindows.remove(id))diagnostic("X11 UNMAP/DESTROY window id="+id+", live="+liveMappedWindows.size());
     }
-    public synchronized void recordPutImage(int drawableId,boolean accepted,int bodyBytes) {
+    public synchronized void recordPutImage(int drawableId,boolean accepted,int bodyBytes,Client client) {
         putImageRequests++;
         if(accepted)putImageAccepted++;
         if(putImageRequests<=3 || putImageRequests%120==0 || !accepted && putImageRequests<=12)
             diagnostic("X11 PutImage drawable="+drawableId+" accepted="+accepted+
+                " clientBase="+Integer.toHexString(client.resourceIdBase())+
+                " clientSeq="+client.getSequenceNumber()+
                 " payloadBytes="+bodyBytes+" requests="+putImageRequests+" acceptedTotal="+putImageAccepted);
     }
     public synchronized void recordWindowImageInvalidation(int windowId) {
