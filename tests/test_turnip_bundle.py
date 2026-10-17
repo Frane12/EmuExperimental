@@ -21,4 +21,5 @@ class TurnipBundleTest(unittest.TestCase):
     def test_a830_prerelease_is_not_dropped_and_a840_hash_is_pinned(self):
         by_gpu = {d["gpuTarget"]: d for d in bundle.drnas_turnip_assets()}
         self.assertIn("drnas-turnip-s1-a830-smart", by_gpu["A830"]["url"])
-        self.assertEqual(by_gpu["A840"]["sha256"], "033039c5c9843ced2f119387bdc0b21af3fa359f97d8fabaa3189dbc411510bc")
+        self.assertIn("H2.9",by_gpu["A840"]["url"])
+        self.assertEqual(by_gpu["A840"]["sha256"], "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d")
