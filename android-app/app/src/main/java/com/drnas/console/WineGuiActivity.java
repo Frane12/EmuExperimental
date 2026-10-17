@@ -48,7 +48,7 @@ public final class WineGuiActivity extends Activity {
     private XInputSharedState xinputState;
     private DrnasPadLayoutView gamepadLayer;
     private boolean virtualPadEnabled;
-    private float cameraSensitivity=5f;
+    private float cameraSensitivity=7.5f;
     private CursorOverlayView desktopCursorOverlay;
     private boolean stretchFullscreen=true;
     private void syncVirtualPadConnection() {
@@ -141,7 +141,7 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         chosenFrameCap=DxvkFrameCap.clamp(getPreferences(MODE_PRIVATE).getInt("dxvk_fps_cap",0));
         relativeCameraEnabled=getPreferences(MODE_PRIVATE).getBoolean("relative_camera",false);
-        cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",5f);
+        cameraSensitivity=getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f);
         stretchFullscreen=getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -370,7 +370,8 @@ public final class WineGuiActivity extends Activity {
         String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
         // Default always starts Explorer, never Wine configuration.
         final String launchApp="files".equals(requested) ? "files":
-                "config".equals(requested) ? "config":"desktop";
+                "config".equals(requested) ? "config":
+                WineShortcuts.isLaunchRequest(requested) ? requested:"desktop";
         xserver.setDiagnosticListener(this::log);
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
             @Override public void onStart() {
