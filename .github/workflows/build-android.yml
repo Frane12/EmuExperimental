@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 - Android glass dashboard and 5s render profiling
+name: EmuDrnas preAlpha 0.1 r2 r2 - A840 H2.9 and XML XInput presets
 on:
   push:
     branches:
@@ -21,7 +21,7 @@ on:
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
       - experiment/wsi-mode-diagnostics-v0.5.44
-      - feat/emudrnas-prealpha-glass-ui-v0.5.51
+      - feat/emudrnas-prealpha-0.1-controls-hud-render-v2
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -169,23 +169,23 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-STABLE-SIGNED.apk"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r2-STABLE-SIGNED.apk"
             cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
-          EmuDrnas preAlpha 0.1
+          EmuDrnas preAlpha 0.1 r2
           Certificate: persistent project signing key supplied through GitHub Actions secrets.
           Package: com.drnas.console
-          versionCode: 66
+          versionCode: 67
 
           Future updates can install over this app if the same certificate, applicationId
           and an increased versionCode are retained. To upgrade an older stable app,
           verify its signing certificate matches and its versionCode is lower.
           EOF
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-TRANSIENT-LAB-DO-NOT-UPGRADE.apk"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r2-TRANSIENT-LAB-DO-NOT-UPGRADE.apk"
             cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
-          EmuDrnas preAlpha 0.1 — private test build
+          EmuDrnas preAlpha 0.1 r2 — private test build
           Certificate: TRANSIENT runner debug signing key. NOT persistent.
-          Package: com.drnas.console.prealpha01lab
+          Package: com.drnas.console.prealpha01r2lab
 
           This APK intentionally installs alongside existing builds and DOES NOT
           support in-place upgrades. Never delete your installed working version
@@ -199,19 +199,19 @@ jobs:
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-glass-ui-v0.5.51' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-0.1-controls-hud-render-v2' }}
         with:
-          name: EmuDrnas-preAlpha-0.1-APK-ZIP
+          name: EmuDrnas-preAlpha-0.1-r2-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-glass-ui-v0.5.51'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-0.1-controls-hud-render-v2'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r2-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r2 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
