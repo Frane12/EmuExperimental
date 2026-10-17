@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 /**
  * A/B diagnostic only. Wineserver --version succeeding through linker64 does
@@ -63,11 +64,26 @@ public final class WineServerDiagnostics {
     }
     static Thread pipe(Process process,String prefix,Consumer<String> log,int limit,
                        RawWineTrace raw) {
+        return pipe(process,prefix,log,limit,raw,()->true);
+    }
+    static Thread pipe(Process process,String prefix,Consumer<String> log,int limit,
+                       RawWineTrace raw,BooleanSupplier verbose) {
         Thread reader=new Thread(()->{
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
-                String line;int n=0,priority=0,processEvents=0;
+                String line;int n=0,priority=0,processEvents=0,quietErrors=0;
                 while((line=br.readLine())!=null) {
+                    // Always drain stdout/stderr: guest processes otherwise stall
+                    // when pipe buffers fill. No frame-related writes in quiet mode.
+                    if(!verbose.getAsBoolean()) {
+                        boolean serious=line.contains(":err:") ||
+                                line.contains("fatal") || line.contains("dlerror") ||
+                                line.contains("Failed to") || line.contains("X connection to") ||
+                                AutomaticLogTrigger.matches(line);
+                        if(serious && quietErrors++<40)
+                            log.accept(prefix+line.substring(0,Math.min(line.length(),800)));
+                        continue;
+                    }
                     if(raw!=null)raw.write(prefix.startsWith("[server B]")?
                             "wineserver":"server",line);
                     if(n++<limit)
