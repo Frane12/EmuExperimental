@@ -28,13 +28,17 @@ public final class XInputControlsView extends View {
     private float sx(){return (left?.33f:.25f)*getWidth();}
     private float sy(){return .72f*getHeight();}
     private float radius(){return .235f*dimension();}
+    // Use the SAME physical shoulder-to-trigger spacing for both halves.
+    // Previously LB-LT was .67*214dp (~143dp), while RB-RT was
+    // .29*272dp (~79dp). Keep the narrower ~79dp arrangement on both.
+    private float shoulderGap(){return .37f*dimension();}
     private float d(float x,float y,float cx,float cy){
         return (float)Math.hypot(x-cx,y-cy);
     }
     private float bx(int bit) {
         float w=getWidth();
         if(left) {
-            if(bit==XInputSharedState.LB)return .16f*w;
+            if(bit==XInputSharedState.LB)return .83f*w-shoulderGap();
             if(bit==XInputSharedState.BACK)return .52f*w;
             if(bit==XInputSharedState.LTHUMB)return .75f*w;
             if(bit==0x10000)return .83f*w; // LT touch region
@@ -43,7 +47,7 @@ public final class XInputControlsView extends View {
             if(bit==XInputSharedState.DPAD_RIGHT)return .90f*w;
         } else {
             if(bit==XInputSharedState.START)return .31f*w;
-            if(bit==XInputSharedState.RB)return .61f*w;
+            if(bit==XInputSharedState.RB)return .90f*w-shoulderGap();
             if(bit==XInputSharedState.RTHUMB)return .09f*w;
             if(bit==0x20000)return .90f*w; // RT touch region
             if(bit==XInputSharedState.Y || bit==XInputSharedState.A)return .76f*w;
