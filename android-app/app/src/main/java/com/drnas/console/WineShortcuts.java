@@ -28,6 +28,7 @@ final class WineShortcuts {
         {"notepad","Notepad","▤","notepad.exe"},
         {"wordpad","WordPad","▣","wordpad.exe"},
         {"paint","DRNAS Paint","✎","C:\\DRNAS\\Tools\\DRNASPaint.exe"},
+        {"retropad","DRNAS Pad","▤","C:\\DRNAS\\Tools\\DRNASPad.exe"},
         {"tasks","Task Manager","▥","taskmgr.exe"},
         {"calc","Calculator","▦","calc.exe"},
         {"control","Control Panel","⚙","control.exe"},
