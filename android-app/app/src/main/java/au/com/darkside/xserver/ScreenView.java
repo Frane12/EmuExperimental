@@ -858,6 +858,17 @@ public class ScreenView extends View {
                 canvas.clipRect(0,0,_guestWidth,_guestHeight);
             }
             _rootWindow.draw(canvas, _paint);
+            // When the root is 720 high but a repeatedly confirmed full
+            // game frame ends at 707, overwrite ONLY the stale root stripe.
+            // This is compositor-only; the drawable's contents stay intact.
+            int gameGap=_xServer.getGameTailGap();
+            if(gameGap>0 && gameGap<getGuestHeight()) {
+                _paint.setColor(0xff000000);
+                _paint.setStyle(Paint.Style.FILL);
+                canvas.drawRect(0,getGuestHeight()-gameGap,
+                        getGuestWidth(),getGuestHeight(),_paint);
+                _paint.reset();
+            }
             // No timing/counters in HWUI's drawing path when HUD is disabled.
             if(fpsCounterEnabled) {
                 long now=System.nanoTime();
