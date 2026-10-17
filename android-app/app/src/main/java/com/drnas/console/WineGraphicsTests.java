@@ -43,6 +43,13 @@ final class WineGraphicsTests {
         Path graphics=directory(root,"drive_c/DRNAS/Graphics");
         Path menu=directory(root,"drive_c/ProgramData/Microsoft/Windows/Start Menu/Programs/System Tools");
         write(graphics.resolve("TestD3D.exe"),exe);
+        // DXVK 1.10.3 supports per-executable sections in dxvk.conf.
+        // Restrict the FIFO experiment to our cube so other games stay unchanged.
+        String fifoConfig="# DRNAS experimental: native Vulkan FIFO vs DXVK immediate\\n" +
+                "[TestD3D.exe]\\n" +
+                "d3d9.presentInterval = 1\\n" +
+                "dxgi.syncInterval = 1\\n";
+        write(graphics.resolve("dxvk.conf"),fifoConfig.getBytes(StandardCharsets.US_ASCII));
         write(menu.resolve("Test Direct3D (DRNAS cube).lnk"),shortcut());
     }
 
@@ -71,6 +78,10 @@ final class WineGraphicsTests {
             write(to,data);
             log.accept("DRNAS_CUBE_DLL "+dll+" x86 installed beside TestD3D.exe; bytes="+data.length);
         }
+    }
+
+    static String cubeConfigWindowsPath() {
+        return "C:\\DRNAS\\Graphics\\dxvk.conf";
     }
 
     private static Path directory(Path root,String relative) throws IOException {
