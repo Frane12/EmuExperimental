@@ -32,8 +32,17 @@ FILES = [
     {
         "kind": "DXVK",
         "name": "dxvk_1.10.3.wcp",
+        "variant": "standard",
         "compression": "XZ",
         "url": "https://github.com/K11MCH1/Winlator101/releases/download/dxvk_col/dxvk_1.10.3.wcp",
+    },
+    {
+        "kind": "DXVK",
+        "name": "Dxvk-1.10.3-async.wcp",
+        "variant": "async",
+        "sha256": "19406702e641950d05b154c07b4dcead62aee94cc008bc8ed425cb72a2874914",
+        "compression": "XZ",
+        "url": "https://github.com/Xnick417x/winlator-nightly-wcp/releases/download/Stable-Dxvk/Dxvk-1.10.3-async.wcp",
     },
 ]
 MAGIC = {"XZ": bytes.fromhex("fd377a585a00"),
@@ -133,6 +142,8 @@ def package(directory):
                 "sha256": digest,
                 **({"gpuTarget":component["gpuTarget"], "source":component["url"]}
                    if component["kind"]=="Turnip" else {}),
+                **({"variant":component["variant"], "source":component["url"]}
+                   if component["kind"]=="DXVK" else {}),
             }
         )
     (output / "runtime-components-v1.json").write_text(json.dumps(manifest, indent=2) + "\n")
