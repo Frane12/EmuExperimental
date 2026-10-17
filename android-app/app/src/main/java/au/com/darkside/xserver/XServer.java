@@ -85,6 +85,28 @@ public class XServer {
     private long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
     private boolean canvasReported;
     private volatile boolean frameDiagnosticsEnabled;
+    private final RenderSampleRecorder renderCapture=new RenderSampleRecorder();
+    private volatile boolean renderCaptureEnabled;
+    public synchronized boolean startRenderCapture() {
+        if(renderCaptureEnabled)return false;
+        renderCapture.start(System.nanoTime());
+        renderCaptureEnabled=true;
+        return true;
+    }
+    public boolean isRenderCaptureEnabled() { return renderCaptureEnabled; }
+    public synchronized String finishRenderCapture() {
+        renderCaptureEnabled=false;
+        return renderCapture.finish(System.nanoTime());
+    }
+    public void capturePutImage(long readNs,long decodeNs,long uploadNs,int bytes,
+                                int drawable,int srcW,int srcH,int dstW,int dstH) {
+        if(renderCaptureEnabled)
+            renderCapture.put(readNs,decodeNs,uploadNs,bytes,drawable,srcW,srcH,dstW,dstH);
+    }
+    public void captureCanvasDraw() {
+        if(renderCaptureEnabled)renderCapture.display(System.nanoTime());
+    }
+
     private final X11GameTailGuard gameTailGuard=new X11GameTailGuard();
     // Compositor fix, not guest bitmap tail scrub. Default ON, A/B switch OFF.
     private volatile boolean gameTailGuardEnabled=true;
