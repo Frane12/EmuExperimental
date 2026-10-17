@@ -99,7 +99,7 @@ final class WineShortcuts {
     }
     static File resolveLink(File prefix,String relative) throws IOException {
         if(relative==null || relative.length()>480 || !relative.endsWith(".lnk") ||
-                relative.startsWith("/") || relative.contains("..") || relative.indexOf('\u0000')>=0)
+                relative.startsWith("/") || relative.contains("..") || relative.indexOf((char)0)>=0)
             throw new IOException("Invalid Wine shortcut");
         File drive=new File(prefix,"drive_c").getCanonicalFile();
         File link=new File(drive,relative).getCanonicalFile();
