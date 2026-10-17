@@ -81,6 +81,24 @@ public final class WineGuiActivity extends Activity {
         }
     };
 
+    private android.graphics.drawable.GradientDrawable toolbarGlass(boolean primary) {
+        android.graphics.drawable.GradientDrawable d=
+                new android.graphics.drawable.GradientDrawable(
+                        android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                        new int[]{primary?0xe12d5564:0xbd21394d,0xd2152b40});
+        d.setCornerRadius(dp(17));
+        d.setStroke(dp(1),primary?0xa284dec6:0x758bbfd4);
+        return d;
+    }
+    private void styleToolbar(Button button,boolean primary) {
+        button.setAllCaps(false);
+        button.setTextColor(primary?0xff94f1d1:0xffe6f5f8);
+        button.setBackground(toolbarGlass(primary));
+        button.setMinWidth(0);
+        button.setMinHeight(0);
+        button.setElevation(dp(3));
+    }
+
     private int dp(int value) {
         return Math.round(value*getResources().getDisplayMetrics().density);
     }
@@ -205,6 +223,7 @@ public final class WineGuiActivity extends Activity {
         // Expanded toolbar sits on a second row, not on top of performance HUD.
         sl.topMargin=dp(61);sl.rightMargin=dp(160);
         layout.addView(shareLog,sl);
+        styleToolbar(shareLog,false);
         shareLog.setOnClickListener(v->shareGuiLog());
         Button menu=new Button(this);
         menu.setText("⋮");
@@ -214,7 +233,8 @@ public final class WineGuiActivity extends Activity {
         menu.setMinWidth(0);
         menu.setMinHeight(0);
         menu.setPadding(0,0,0,0);
-        menu.setAlpha(0.60f);
+        styleToolbar(menu,true);
+        menu.setAlpha(.93f);
         FrameLayout.LayoutParams ml=new FrameLayout.LayoutParams(
                 dp(46),dp(46),Gravity.TOP|Gravity.END);
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
@@ -230,6 +250,7 @@ public final class WineGuiActivity extends Activity {
         FrameLayout.LayoutParams op=new FrameLayout.LayoutParams(dp(100),dp(42),Gravity.TOP|Gravity.END);
         op.topMargin=dp(61);op.rightMargin=dp(56);
         layout.addView(toolbarOptions,op);
+        styleToolbar(toolbarOptions,false);
         toolbarOptions.setOnClickListener(v->showGlassControls());
         menu.setOnLongClickListener(v->{saveGuiLog();return true;});
 
@@ -237,7 +258,8 @@ public final class WineGuiActivity extends Activity {
         toolbarTasks.setText("Task Manager");toolbarTasks.setAllCaps(false);
         FrameLayout.LayoutParams tl=new FrameLayout.LayoutParams(dp(140),dp(42),Gravity.TOP|Gravity.END);
         tl.topMargin=dp(61);tl.rightMargin=dp(296);
-        layout.addView(toolbarTasks,tl);toolbarTasks.setOnClickListener(v->openTaskManager());
+        layout.addView(toolbarTasks,tl);styleToolbar(toolbarTasks,false);
+        toolbarTasks.setOnClickListener(v->openTaskManager());
         // An always-visible keyboard button remains usable if a Wine game changes focus.
         toolbarKeyboard=new Button(this);
         toolbarKeyboard.setText("⌨");
@@ -247,6 +269,7 @@ public final class WineGuiActivity extends Activity {
         FrameLayout.LayoutParams kl=new FrameLayout.LayoutParams(dp(60),dp(42),Gravity.TOP|Gravity.END);
         kl.topMargin=dp(61);kl.rightMargin=dp(440);
         layout.addView(toolbarKeyboard,kl);
+        styleToolbar(toolbarKeyboard,false);
         toolbarKeyboard.setOnClickListener(v->{
             keyboardPending=true;
             keyboardAttempts=0;
