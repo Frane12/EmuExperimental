@@ -58,9 +58,8 @@ public final class WineGuiActivity extends Activity {
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
-            if(destroyed||performanceHud==null)return;
-            if(performanceHud.isActive())
-                performanceHud.sample(xserver.getScreen().getDisplayedFps());
+            if(destroyed||performanceHud==null||!performanceHud.isActive())return;
+            performanceHud.sample(xserver.getScreen().getDisplayedFps());
             performanceHud.postDelayed(this,650);
         }
     };
@@ -226,7 +225,8 @@ public final class WineGuiActivity extends Activity {
                         getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
                         performanceHud.setActive(enable);
                         xserver.getScreen().setFpsCounterEnabled(enable);
-                        if(enable)performanceHud.sample(xserver.getScreen().getDisplayedFps());
+                        performanceHud.removeCallbacks(hudTicker);
+                        if(enable)performanceHud.post(hudTicker);
                         Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
                     }
                     else if(which==21) {
@@ -357,7 +357,7 @@ public final class WineGuiActivity extends Activity {
         performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
         setContentView(layout);
-        performanceHud.postDelayed(hudTicker,650);
+        if(performanceHud.isActive())performanceHud.postDelayed(hudTicker,650);
         try {
             AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
