@@ -225,6 +225,7 @@ public final class WineGuiActivity extends Activity {
                         boolean enable=!performanceHud.isActive();
                         getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
                         performanceHud.setActive(enable);
+                        xserver.getScreen().setFpsCounterEnabled(enable);
                         if(enable)performanceHud.sample(xserver.getScreen().getDisplayedFps());
                         Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
                     }
@@ -354,6 +355,7 @@ public final class WineGuiActivity extends Activity {
         hp.topMargin=dp(6);
         layout.addView(performanceHud,hp);
         performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
+        xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
         setContentView(layout);
         performanceHud.postDelayed(hudTicker,650);
         try {
