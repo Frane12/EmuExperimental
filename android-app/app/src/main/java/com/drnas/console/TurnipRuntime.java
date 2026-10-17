@@ -56,6 +56,9 @@ final class TurnipRuntime {
     static boolean selectBundledA840H29(Context context,JSONObject plan,
                                         Consumer<String> log) {
         String target=gpuTarget(NativeHost.vulkanDeviceName());
+        if("A740".equals(target)&&android.os.Build.VERSION.SDK_INT<27){
+            log.accept("A740 Turnip R8 requires Android API 27+; preserving driver");return false;
+        }
         if("A740".equals(target))return selectPinned(context,plan,log,"A740",
                 "Turnip-A740-R8.zip","Turnip_v26.0.0_R8.zip",
                 "e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715","A740_R8");
@@ -175,7 +178,8 @@ final class TurnipRuntime {
 
     private static File findDriver(File root) throws IOException {
         try(java.util.stream.Stream<Path> walk=Files.walk(root.toPath(),5)) {
-            return walk.filter(p->p.getFileName().toString().equals("libvulkan_freedreno.so"))
+            return walk.filter(p->p.getFileName().toString().equals("libvulkan_freedreno.so")||
+                            p.getFileName().toString().equals("vulkan.ad07xx.so"))
                     .filter(p->Files.isRegularFile(p,LinkOption.NOFOLLOW_LINKS))
                     .map(Path::toFile).findFirst().orElse(null);
         }

@@ -29,3 +29,20 @@ class TurnipBundleTest(unittest.TestCase):
         self.assertEqual(d["sha256"], "e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715")
         self.assertIn("/Turnip_v26.0.0_R8.zip", d["url"])
         self.assertNotIn("a8xx", d["url"])
+
+    def test_validates_both_library_names_and_rejects_metadata_path(self):
+        import tempfile, zipfile, json
+        header = bytearray(200001)
+        header[:5] = b"\x7fELF\x02"
+        header[18:20] = (183).to_bytes(2,"little")
+        with tempfile.TemporaryDirectory() as directory:
+            archive=Path(directory)/"driver.zip"
+            for name in ("libvulkan_freedreno.so","vulkan.ad07xx.so"):
+                with zipfile.ZipFile(archive,"w") as z:
+                    z.writestr("meta.json",json.dumps({"libraryName":name}))
+                    z.writestr(name,header)
+                bundle.check_turnip_zip(archive)
+            with zipfile.ZipFile(archive,"w") as z:
+                z.writestr("meta.json",json.dumps({"libraryName":"../untrusted.so"}))
+                z.writestr("../untrusted.so",header)
+            with self.assertRaises(ValueError):bundle.check_turnip_zip(archive)

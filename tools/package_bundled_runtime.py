@@ -80,9 +80,15 @@ def drnas_turnip_assets():
 
 def check_turnip_zip(archive):
     with zipfile.ZipFile(archive) as z:
-        library_names=[n for n in z.namelist() if n.endswith("libvulkan_freedreno.so")]
+        if "meta.json" not in z.namelist():
+            raise ValueError("Turnip ZIP missing AdrenoTools meta.json")
+        meta=json.loads(z.read("meta.json"))
+        library=meta.get("libraryName","libvulkan_freedreno.so")
+        if library not in ("libvulkan_freedreno.so","vulkan.ad07xx.so"):
+            raise ValueError("Unsupported Turnip library name")
+        library_names=[n for n in z.namelist() if n.rsplit("/",1)[-1]==library]
         if len(library_names)!=1:
-            raise ValueError("Turnip ZIP missing unique libvulkan_freedreno.so")
+            raise ValueError("Turnip ZIP missing unique declared Vulkan library")
         info=z.getinfo(library_names[0])
         if info.file_size<200000 or info.file_size>128*1024*1024:
             raise ValueError("Invalid Turnip shared library size")
