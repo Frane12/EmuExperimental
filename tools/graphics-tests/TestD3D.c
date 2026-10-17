@@ -18,8 +18,9 @@ static const Vertex vertices[] = {
 static const WORD indices[] = {0,1,2,0,2,3,4,6,5,4,7,6,0,4,5,0,5,1,
     3,2,6,3,6,7,1,5,6,1,6,2,0,3,7,0,7,4};
 static LRESULT CALLBACK window_proc(HWND w,UINT msg,WPARAM wp,LPARAM lp) {
-    if(msg==WM_KEYDOWN && wp==VK_ESCAPE) { DestroyWindow(w);return 0; }
-    if(msg==WM_DESTROY) { PostQuitMessage(0);return 0; }
+    if(msg==WM_KEYDOWN && wp==VK_ESCAPE) { OutputDebugStringA("DRNAS_CUBE: Escape key requested exit\n");DestroyWindow(w);return 0; }
+    if(msg==WM_CLOSE) OutputDebugStringA("DRNAS_CUBE: WM_CLOSE received\n");
+    if(msg==WM_DESTROY) {OutputDebugStringA("DRNAS_CUBE: WM_DESTROY received\n");PostQuitMessage(0);return 0;}
     return DefWindowProcA(w,msg,wp,lp);
 }
 static void failure(const char *stage,HRESULT hr) {
@@ -54,6 +55,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
         D3DCREATE_HARDWARE_VERTEXPROCESSING,&pp,&device);
     if(FAILED(hr)){failure("D3D9 HAL device/swapchain",hr);IDirect3D9_Release(api);DestroyWindow(window);return 4;}
     OutputDebugStringA("DRNAS_CUBE: D3D9 device and swapchain created\\n");
+    OutputDebugStringA("DRNAS_CUBE: BEFORE render-state setup\n");
     IDirect3DDevice9_SetRenderState(device,D3DRS_LIGHTING,FALSE);
     IDirect3DDevice9_SetRenderState(device,D3DRS_CULLMODE,D3DCULL_NONE);
     IDirect3DDevice9_SetRenderState(device,D3DRS_ZENABLE,TRUE);
@@ -64,6 +66,7 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
     projection._33=100.0f/99.9f;projection._34=1;projection._43=-0.1f*100.0f/99.9f;
     IDirect3DDevice9_SetTransform(device,D3DTS_VIEW,&view);
     IDirect3DDevice9_SetTransform(device,D3DTS_PROJECTION,&projection);
+    OutputDebugStringA("DRNAS_CUBE: render-state and transforms initialized\n");
     DWORD start=GetTickCount(),tick=start;unsigned frames=0;MSG message={0};int result=0;BOOL firstPresentLogged=FALSE;
     while(message.message!=WM_QUIT) {
         if(PeekMessageA(&message,NULL,0,0,PM_REMOVE)){TranslateMessage(&message);DispatchMessageA(&message);continue;}
@@ -72,14 +75,27 @@ int WINAPI WinMain(HINSTANCE instance,HINSTANCE previous,LPSTR command,int show)
         D3DMATRIX world={0};world._11=c;world._13=-s;world._21=s*s;
         world._22=c;world._23=s*c;world._31=c*s;world._32=-s;world._33=c*c;world._44=1;
         IDirect3DDevice9_SetTransform(device,D3DTS_WORLD,&world);
+        if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first Clear\n");
         hr=IDirect3DDevice9_Clear(device,0,NULL,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,0xff101b2c,1,0);
-        if(SUCCEEDED(hr))hr=IDirect3DDevice9_BeginScene(device);
+        if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first Clear\n");
         if(SUCCEEDED(hr)){
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first BeginScene\n");
+            hr=IDirect3DDevice9_BeginScene(device);
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first BeginScene\n");
+        }
+        if(SUCCEEDED(hr)){
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first DrawIndexedPrimitiveUP\n");
             hr=IDirect3DDevice9_DrawIndexedPrimitiveUP(device,D3DPT_TRIANGLELIST,0,8,12,
                 indices,D3DFMT_INDEX16,vertices,sizeof(Vertex));
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first DrawIndexedPrimitiveUP; BEFORE EndScene\n");
             HRESULT end=IDirect3DDevice9_EndScene(device);if(SUCCEEDED(hr))hr=end;
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first EndScene\n");
         }
-        if(SUCCEEDED(hr))hr=IDirect3DDevice9_Present(device,NULL,NULL,NULL,NULL);
+        if(SUCCEEDED(hr)){
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: BEFORE first IDirect3DDevice9_Present\n");
+            hr=IDirect3DDevice9_Present(device,NULL,NULL,NULL,NULL);
+            if(!firstPresentLogged)OutputDebugStringA("DRNAS_CUBE: AFTER first IDirect3DDevice9_Present call\n");
+        }
         if(FAILED(hr)){
             char trace[128];snprintf(trace,sizeof(trace),"DRNAS_CUBE: D3D9 Render/Present FAILED 0x%08lx\\n",(unsigned long)hr);
             OutputDebugStringA(trace);
