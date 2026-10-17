@@ -25,7 +25,7 @@ public final class RawWineTraceTest {
                 trace.setVerbose(false);
                 trace.write("GUI","routine disabled again");
             }
-            String result=Files.readString(dir.resolve(RawWineTrace.LATEST));
+            String result=new String(Files.readAllBytes(dir.resolve(RawWineTrace.LATEST)),StandardCharsets.UTF_8);
             assertTrue(result.contains("manual enabled"));
             assertFalse(result.contains("routine disabled again"));
         } finally {
