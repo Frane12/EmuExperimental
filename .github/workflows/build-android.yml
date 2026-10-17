@@ -1,4 +1,4 @@
-name: EmuExperimental - Android APK v0.5.50 glass HUD / XInput camera / collapsed toolbar
+name: EmuDrnas preAlpha 0.1 - Android glass dashboard and 5s render profiling
 on:
   push:
     branches:
@@ -21,7 +21,7 @@ on:
       - experiment/dxvk-fifo-wsi-v0.5.38
       - experiment/first-present-teardown-v0.5.39
       - experiment/wsi-mode-diagnostics-v0.5.44
-      - fix/floating-camera-toolbar-game-tail-v0.5.50
+      - feat/emudrnas-prealpha-glass-ui-v0.5.51
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -165,33 +165,53 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
-      - name: Stage APK and signature warning for ZIP distribution
+      - name: Stage EmuDrnas preAlpha APK and explicit signing status
         run: |
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           if [[ "$DRNAS_SIGNING_MODE" == "stable" ]]; then
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.50-STABLE-SIGNED.apk"
-            printf 'DRNAS Console v0.5.50\nSigning: persistent project certificate (verify fingerprint against your installed v0.5.10).\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-STABLE-SIGNED.apk"
+            cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
+          EmuDrnas preAlpha 0.1
+          Certificate: persistent project signing key supplied through GitHub Actions secrets.
+          Package: com.drnas.console
+          versionCode: 66
+
+          Future updates can install over this app if the same certificate, applicationId
+          and an increased versionCode are retained. To upgrade an older stable app,
+          verify its signing certificate matches and its versionCode is lower.
+          EOF
           else
-            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/DRNAS-Console-v0.5.50-TRANSIENT-DO-NOT-UPGRADE.apk"
-            printf 'DRNAS Console v0.5.50 LAB\nMenu experiments 1-3: X11 only; Vulkan create/destroy transport checkpoints; Present plus XSync checkpoints. Each child has a 15s timeout. Run in order then send log. Preserves v0.5.45 XCB guard. Direct bitmap PutImage for safe X11 GXcopy, optional virtual touch joystick (WASD), diagnostics OFF by default and selectable from menu; Wine/DXVK native trace level changes require Wine restart. Compare performance and stability against v0.5.46. On-device validation required: HUD counts DISPLAY composites, not DXVK engine FPS; X11 edge scrub mode ON by default and manually togglable; relative camera mode optional; startup DXVK frame cap 0 means unbounded by DXVK.\nSigning: TEMPORARY CI DEBUG KEY.\nApplication ID: com.drnas.console.labv0550 (separate from stable and earlier LAB versions).\nInstall alongside existing DRNAS and v0.5.12–v0.5.17 LAB; do not uninstall them to test this build.\nEvery ephemeral CI build uses a new signing key: it cannot update a previous LAB APK.\nFor stable upgrades configure persistent DRNAS GitHub Actions signing secrets.\n' > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cp android-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-TRANSIENT-LAB-DO-NOT-UPGRADE.apk"
+            cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
+          EmuDrnas preAlpha 0.1 — private test build
+          Certificate: TRANSIENT runner debug signing key. NOT persistent.
+          Package: com.drnas.console.prealpha01lab
+
+          This APK intentionally installs alongside existing builds and DOES NOT
+          support in-place upgrades. Never delete your installed working version
+          to test it. Future upgradeable releases require securely configured
+          DRNAS_KEYSTORE_BASE64, DRNAS_KEYSTORE_PASSWORD, DRNAS_KEY_ALIAS
+          and DRNAS_KEY_PASSWORD secrets in repository Settings -> Actions.
+          Source-only CI validation is not on-device Crysis acceptance.
+          EOF
           fi
           echo "Build signing mode: $DRNAS_SIGNING_MODE"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk | tee "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/fix/floating-camera-toolbar-game-tail-v0.5.50' }}
+        continue-on-error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-glass-ui-v0.5.51' }}
         with:
-          name: Drnas-Console-v0.5.50-APK-ZIP
+          name: EmuDrnas-preAlpha-0.1-APK-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/fix/floating-camera-toolbar-game-tail-v0.5.50'
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/feat/emudrnas-prealpha-glass-ui-v0.5.51'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="drnas-emu-v0.5.50-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "DRNAS v0.5.50 LAB (private build)" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 - private build" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
