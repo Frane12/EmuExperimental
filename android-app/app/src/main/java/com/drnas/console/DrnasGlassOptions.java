@@ -29,7 +29,7 @@ import java.util.function.IntPredicate;
 final class DrnasGlassOptions {
     interface OnChoose { void onChoose(DialogInterface menu,int index); }
     private static final int[] ORDER={
-            21,20,19,17,18,22,1,23,24,
+            21,20,19,17,18,22,1,23,24,25,26,
             0,2,6,7,8,4,5,9,3,
             10,11,12,13,14,15,16
     };
@@ -147,11 +147,11 @@ final class DrnasGlassOptions {
         panel.addView(subtitle,subParams);
 
         title(panel,"LIVE CONTROLS");
-        for(int i=0;i<9;i++)option(panel,ORDER[i]);
+        for(int i=0;i<11;i++)option(panel,ORDER[i]);
         title(panel,"WINDOWS / GENERAL");
-        for(int i=9;i<18;i++)option(panel,ORDER[i]);
+        for(int i=11;i<20;i++)option(panel,ORDER[i]);
         title(panel,"RENDER EXPERIMENTS");
-        for(int i=18;i<ORDER.length;i++)option(panel,ORDER[i]);
+        for(int i=20;i<ORDER.length;i++)option(panel,ORDER[i]);
 
         AlertDialog.Builder builder=new AlertDialog.Builder(activity);
         dialog=builder.setView(scroll).create();
