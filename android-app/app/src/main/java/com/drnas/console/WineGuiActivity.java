@@ -433,7 +433,8 @@ public final class WineGuiActivity extends Activity {
 
     private static final String[] GLASS_MENU_ITEMS={"Keyboard","Toggle CPU/GPU desktop Canvas","Reset Wine","Exit desktop","Pošalji log","Spremi log","Task Manager","Promijeni prozor (Alt+Tab)","Fullscreen / prozor (Alt+Enter)","Tekst → Wine (IME fallback)","Vulkan FIFO (izoliran)","Vulkan IMMEDIATE (izoliran)","WSI A: Create/Destroy bez Present","WSI B: FIFO + XSync","Eksperiment 1: X11 bez Vulkana","Eksperiment 2: Vulkan bez slike + provjera veze","Eksperiment 3: Prikaz slike + provjera veze","Virtual stick (WASD) ON/OFF","Dijagnostika / logovi: ON/OFF","Xbox XInput (virtual pad) ON/OFF","HUD FPS/RAM/BAT ON/OFF","Relativni miš / kamera ON/OFF","WSI prezentacijska maska ON/OFF","DXVK FPS limit (sljedeći start)","Snimanje rendera — 5 sekundi","Osjetljivost kamere","Uredi XInput raspored / XML",
             "Eksperiment: brzo dekodiranje (A/B) ON/OFF",
-            "Cijeli zaslon / Stretch ON/OFF"};
+            "Cijeli zaslon / Stretch ON/OFF",
+            "DXVK 1.10.3 Async / Standard (idući start)"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -445,6 +446,7 @@ public final class WineGuiActivity extends Activity {
             case 22:return getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
             case 27:return xserver!=null && xserver.isExperimentalBulkDecode();
             case 28:return stretchFullscreen;
+            case 29:return DxvkVariants.ASYNC.equals(DxvkVariants.selected(this));
             default:return false;
         }
     }
@@ -525,6 +527,13 @@ public final class WineGuiActivity extends Activity {
                         Toast.makeText(this,fast?
                                 "Brzi BGRX dekoder ON — usporedi 5s uzorke":
                                 "Brzi BGRX dekoder OFF — stabilni baseline",
+                                Toast.LENGTH_LONG).show();
+                    }
+                    else if(which==29) {
+                        String variant=DxvkVariants.toggle(this);
+                        log("DRNAS_DXVK_SELECTED_FOR_NEXT_START="+variant);
+                        Toast.makeText(this,"DXVK 1.10.3 "+variant+
+                                " — za promjenu u igri koristi Reset Wine",
                                 Toast.LENGTH_LONG).show();
                     }
                     else if(which==28) {
