@@ -118,6 +118,8 @@ public final class WineGuiActivity extends Activity {
             android.util.Log.e("DRNAS-XInput","State mapping unavailable",error);
         }
         xserver=new XServer(this,6012,null);
+        xserver.setGameTailGuardEnabled(getPreferences(MODE_PRIVATE)
+                .getBoolean("x11_edge_cleanup",true));
         xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.getScreen().setGuestResolution(
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
@@ -274,6 +276,7 @@ public final class WineGuiActivity extends Activity {
                         boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_edge_cleanup",true);
                         getPreferences(MODE_PRIVATE).edit().putBoolean("x11_edge_cleanup",enabled).apply();
                         Drawable.setSafeEdgeCleanup(enabled);
+                        if(xserver!=null)xserver.setGameTailGuardEnabled(enabled);
                         Toast.makeText(this,enabled?"C-cleanup ON":"C-cleanup OFF (A/B test)",
                                 Toast.LENGTH_SHORT).show();
                     }
