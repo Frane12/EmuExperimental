@@ -185,7 +185,21 @@ public class ScreenView extends View {
 
     // Laptop-style touchpad: one-finger movement is relative, not a warp to
     // the finger's absolute X11 coordinates. Tap clicks at the cursor.
+    // Optional camera touch delta mode; Wine remains responsible for pointer grab.
+    // This is X11 relative-pointer motion, NOT a raw-input HID device.
+    private volatile boolean _cameraTouchMode;
+    private volatile float _cameraSensitivity=1.65f;
+    public void setCameraTouchMode(boolean enabled) { _cameraTouchMode=enabled; }
+    public boolean isCameraTouchMode() { return _cameraTouchMode; }
+    public void setCameraSensitivity(float value) {
+        _cameraSensitivity=Math.max(0.4f,Math.min(4f,value));
+    }
     private boolean _relativeTouchMode;
+    private volatile float displayedFps;
+    private long lastDisplaySampleNs;
+    private int displayedFrames;
+    public float getDisplayedFps(){return displayedFps;}
+
     private float _touchLastX, _touchLastY, _touchRemainderX, _touchRemainderY;
     private float _touchTravel;
     private long _touchStartedAt;
@@ -224,14 +238,15 @@ public class ScreenView extends View {
             // Hold the finger for 400 ms and begin a slow drag to press mouse
             // button one; keep it held while moving, release on finger up.
             // Fast swipes only move the pointer. A quick tap clicks instead.
-            if(!_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
+            if(!_cameraTouchMode && !_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
                     _touchTravel<dpTouch(24)) {
                 updatePointerButtons(1,true);
                 _touchDragging=true;
             }
             float scale=Math.max(0.01f,guestScale());
-            _touchRemainderX+=dx/scale;
-            _touchRemainderY+=dy/scale;
+            float gain=_cameraTouchMode?_cameraSensitivity:1f;
+            _touchRemainderX+=dx/scale*gain;
+            _touchRemainderY+=dy/scale*gain;
             int stepX=(int)_touchRemainderX;
             int stepY=(int)_touchRemainderY;
             _touchRemainderX-=stepX;
@@ -247,10 +262,10 @@ public class ScreenView extends View {
         case MotionEvent.ACTION_UP:
             if(_touchDragging) {
                 updatePointerButtons(1,false);
-            } else if(_touchTwoFingers) {
+            } else if(_touchTwoFingers && !_cameraTouchMode) {
                 updatePointerButtons(3,true);
                 updatePointerButtons(3,false);
-            } else if(_touchTravel<dpTouch(15)) {
+            } else if(!_cameraTouchMode && _touchTravel<dpTouch(15)) {
                 int button=(event.getEventTime()-_touchStartedAt>=650)?3:1;
                 updatePointerButtons(button,true);
                 updatePointerButtons(button,false);
@@ -834,6 +849,16 @@ public class ScreenView extends View {
                 canvas.clipRect(0,0,_guestWidth,_guestHeight);
             }
             _rootWindow.draw(canvas, _paint);
+            // Count Android/X11 screen compositions, not DXVK game engine FPS.
+            long now=System.nanoTime();
+            displayedFrames++;
+            if(lastDisplaySampleNs==0)lastDisplaySampleNs=now;
+            long elapsed=now-lastDisplaySampleNs;
+            if(elapsed>=500000000L) {
+                displayedFps=(float)(displayedFrames*1000000000.0/elapsed);
+                displayedFrames=0;
+                lastDisplaySampleNs=now;
+            }
             _xServer.canvasDrawn();
             if (cursorOverlayListener==null && _currentCursor!=null)
                 canvas.drawBitmap(_currentCursor.getBitmap(), _currentCursorX - _currentCursor.getHotspotX(), _currentCursorY - _currentCursor.getHotspotY(), null);
