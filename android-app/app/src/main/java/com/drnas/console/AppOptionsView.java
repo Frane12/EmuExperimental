@@ -72,8 +72,31 @@ final class AppOptionsView extends LinearLayout {
     private Button button(String label,Runnable action){
         Button b=new Button(a);b.setText(AppLanguage.t(a,label));b.setAllCaps(false);
         b.setTextSize(12);b.setMinWidth(0);b.setMinimumWidth(0);
-        b.setTextColor(0xffd3f9ee);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff214354));
+        b.setTextColor(0xffd3f9ee);
+        android.graphics.drawable.StateListDrawable skin=new android.graphics.drawable.StateListDrawable();
+        skin.addState(new int[]{android.R.attr.state_pressed},optionSurface(true));
+        skin.addState(new int[]{},optionSurface(false));
+        b.setBackground(skin);b.setElevation(dp(3));b.setStateListAnimator(null);
+        b.setOnTouchListener((view,event)->{
+            if(!view.isEnabled())return false;
+            switch(event.getActionMasked()){
+                case android.view.MotionEvent.ACTION_DOWN:
+                    view.animate().cancel();view.animate().scaleX(.978f).scaleY(.966f).setDuration(85).start();break;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    view.animate().cancel();view.animate().scaleX(1f).scaleY(1f).setDuration(150).start();break;
+            }
+            return false;
+        });
         b.setOnClickListener(v->action.run());return b;
+    }
+    private android.graphics.drawable.GradientDrawable optionSurface(boolean down){
+        android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                down?new int[]{0xff17384c,0xff2b4b5e,0xff132d43}
+                    :new int[]{0xff426377,0xff254456,0xff152f45});
+        d.setCornerRadius(dp(13));d.setStroke(dp(1),down?0xff84ecda:0xff42bfc8);
+        return d;
     }
     private void title(String text){
         TextView t=new TextView(a);t.setText(AppLanguage.t(a,text));t.setTextSize(11);
