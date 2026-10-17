@@ -170,11 +170,13 @@ final class WineGuiSession implements AutoCloseable {
         if(dependencies!=null)for(File f:dependencies)log.accept("GUI runtime library: "+f.getName());
         WineNativeDependencyAudit.report(guiRuntime,lib,env,log);
         WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
-        if(!stopped) {
-            log.accept("DRNAS_WSI_AUDIT: isolated native Vulkan X11 surface/swapchain/present test before Wine GUI; no DRI3 assumption.");
-            TurnipRuntime.probeWine(context,guiRuntime,env,log,raw,true);
-            log.accept("DRNAS_WSI_AUDIT: native probe complete; Wine DXVK Present STILL requires separate confirmation.");
-        }
+        // v0.5.39: the sacrificial native WSI probe returned VK_SUCCESS on
+        // vkQueuePresentKHR, but hung inside vkDestroySwapchainKHR for 15s.
+        // Never run that suspect teardown automatically in front of Wine:
+        // keep GPU enumeration above; the manual Vulkan menu action runs the
+        // full present/teardown experiment in its own watchdog-bound process.
+        log.accept("DRNAS_WSI_ISOLATED: startup swapchain probe SKIPPED after confirmed vkDestroySwapchainKHR stall; manual Vulkan test remains available from the menu.");
+        log.accept("DRNAS_WSI_ISOLATED: Wine/DXVK will exercise its own swapchain; X11 and DXVK markers identify the first actual frame.");
         if(stopped)return;
         server=WineServerDiagnostics.prestart(linker,serverElf,proton,nativeDir,env,log,raw);
         if(server==null)throw new IOException("GUI wineserver failed to start");
