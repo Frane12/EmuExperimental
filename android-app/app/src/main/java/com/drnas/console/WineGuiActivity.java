@@ -508,7 +508,20 @@ public final class WineGuiActivity extends Activity {
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
     }
 
+    @Override protected void onPause() {
+        log("DRNAS_X11_LIFECYCLE onPause finishing="+isFinishing()+
+                " changingConfigurations="+isChangingConfigurations());
+        super.onPause();
+    }
+    @Override protected void onStop() {
+        log("DRNAS_X11_LIFECYCLE onStop finishing="+isFinishing()+
+                " changingConfigurations="+isChangingConfigurations());
+        super.onStop();
+    }
     @Override protected void onDestroy() {
+        log("DRNAS_X11_LIFECYCLE onDestroy finishing="+isFinishing()+
+                " changingConfigurations="+isChangingConfigurations()+
+                " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
         AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
