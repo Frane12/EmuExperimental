@@ -32,7 +32,7 @@ final class WineShortcuts {
         {"tasks","Task Manager","▥","taskmgr.exe"},
         {"calc","Calculator","▦","calc.exe"},
         {"control","Control Panel","⚙","control.exe"},
-        {"cmd","CMD","⌘","cmd.exe"},
+        {"cmd","CMD","⌘","C:\\windows\\system32\\cmd.exe"},
         {"winecfg","Wine Settings","⚒","winecfg.exe"},
         {"files","File Manager","▣","winefile.exe"}
     };
