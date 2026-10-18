@@ -486,7 +486,8 @@ public final class WineGuiActivity extends Activity {
             "Eksperiment: brzo dekodiranje (A/B) ON/OFF",
             "Cijeli zaslon / Stretch ON/OFF",
             "DXVK 1.10.3 Async / Standard (idući start)",
-            "Uredi 5 desktop tipki i položaj (spremi)"};
+            "Uredi 5 desktop tipki i položaj (spremi)",
+            "OpenGL ES 3 GPU TEST (Android EGL, izoliran)"};
     private boolean glassMenuActive(int which) {
         switch(which) {
             case 1:return cpuCanvasFallback;
@@ -598,6 +599,14 @@ public final class WineGuiActivity extends Activity {
                     }
                     else if(which==30) {
                         editDesktopKeys();
+                    }
+                    else if(which==31) {
+                        log("DRNAS_OPENGL_TEST_REQUEST: native Android EGL ES3 - NOT Wine WGL");
+                        new Thread(()->OpenGlAlternative.probe(
+                                getApplicationContext(),this::log),
+                                "drnas-native-gles3-probe").start();
+                        Toast.makeText(this,"OpenGL ES GPU test · rezultat u TXT logu",
+                                Toast.LENGTH_LONG).show();
                     }
                     else if(which==28) {
                         stretchFullscreen=!stretchFullscreen;
