@@ -14,10 +14,17 @@ final class BlenderKeyPanel extends LinearLayout {
     private final KeySink sink;
     private final SharedPreferences prefs;
     private final LinearLayout rows;
+    private final HorizontalScrollView keyStrip;
     private final Button toggle;
     private final Map<Integer,Button> held=new LinkedHashMap<>();
     private boolean expanded;
     private float dragX,dragY,startX,startY;
+    private boolean dragging;
+    private final View.OnLayoutChangeListener parentResize=(view,left,top,right,bottom,
+            oldLeft,oldTop,oldRight,oldBottom)->{
+        if(right-left!=oldRight-oldLeft || bottom-top!=oldBottom-oldTop)
+            post(this::restoreWhenMeasured);
+    };
     private final Runnable keyboard,options;
 
     BlenderKeyPanel(Context context,KeySink sink,Runnable keyboard,Runnable options) {
@@ -31,11 +38,13 @@ final class BlenderKeyPanel extends LinearLayout {
         grip.setOnTouchListener((v,e)->{
             switch(e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    dragging=true;
                     dragX=e.getRawX();dragY=e.getRawY();startX=getX();startY=getY();return true;
                 case MotionEvent.ACTION_MOVE:
                     place(startX+e.getRawX()-dragX,startY+e.getRawY()-dragY);return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    dragging=false;
                     savePosition();return true;
                 default:return true;
             }
@@ -55,7 +64,17 @@ final class BlenderKeyPanel extends LinearLayout {
         action(bottom,"Undo",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_Z));
         action(bottom,"Save",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_S));
         action(bottom,"⌨",keyboard);
-        addView(rows,new LayoutParams(LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
+        // The top row is intentionally wide on a phone. Limit the panel to
+        // the visible viewport and scroll the *keys*, not the grip/menu.
+        // This keeps every shortcut usable without pushing the panel offscreen.
+        keyStrip=new HorizontalScrollView(context);
+        keyStrip.setFillViewport(false);
+        keyStrip.setHorizontalScrollBarEnabled(false);
+        keyStrip.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        keyStrip.setClipToPadding(true);
+        keyStrip.addView(rows,new HorizontalScrollView.LayoutParams(
+                LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
+        addView(keyStrip,new LayoutParams(LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
         toggle=button("⌄","Sakrij ili prikaži Blender prečace");
         addView(toggle,new LayoutParams(dp(30),dp(34)));
         toggle.setOnClickListener(v->{releaseAll();setExpanded(!expanded);});
@@ -63,12 +82,50 @@ final class BlenderKeyPanel extends LinearLayout {
         addView(menu,new LayoutParams(dp(26),dp(34)));
         menu.setOnClickListener(v->{releaseAll();options.run();});
         setExpanded(prefs.getBoolean("expanded",true));
-        post(()->{
-            if(!(getParent() instanceof View))return;
-            View parent=(View)getParent();
-            place(prefs.getFloat("x",.01f)*parent.getWidth(),
-                    prefs.getFloat("y",1f)*parent.getHeight()-getHeight()-dp(8));
-        });
+        // Do not restore here: r30 hides the panel with GONE until the Blender
+        // primary window maps. At that point getHeight() may still be ZERO.
+        // Using height=0 placed the entire key panel below the bottom edge.
+        // Restore only after visibility/layout provides real dimensions.
+    }
+    @Override protected void onAttachedToWindow(){
+        super.onAttachedToWindow();
+        if(getParent() instanceof View)
+            ((View)getParent()).addOnLayoutChangeListener(parentResize);
+        post(this::restoreWhenMeasured);
+    }
+    @Override protected void onDetachedFromWindow(){
+        if(getParent() instanceof View)
+            ((View)getParent()).removeOnLayoutChangeListener(parentResize);
+        super.onDetachedFromWindow();
+    }
+    @Override protected void onSizeChanged(int w,int h,int oldW,int oldH){
+        super.onSizeChanged(w,h,oldW,oldH);
+        if(w>0&&h>0)post(this::restoreWhenMeasured);
+    }
+    @Override protected void onMeasure(int widthMeasureSpec,int heightMeasureSpec){
+        // FrameLayout measures its WRAP_CONTENT child with AT_MOST on-screen
+        // width; the two key rows can exceed that width in landscape phones.
+        // Reserve room for grip, toggle, menu and margins. Only the key
+        // strip scrolls horizontally; the rest always stays on screen.
+        int mode=MeasureSpec.getMode(widthMeasureSpec);
+        if(mode!=MeasureSpec.UNSPECIFIED) {
+            int available=MeasureSpec.getSize(widthMeasureSpec);
+            int scrollWidth=Math.max(dp(40),Math.min(dp(650),available-dp(94)));
+            ViewGroup.LayoutParams strip=keyStrip.getLayoutParams();
+            if(strip!=null)strip.width=scrollWidth;
+        }
+        super.onMeasure(widthMeasureSpec,heightMeasureSpec);
+    }
+    private void restoreWhenMeasured() {
+        if(dragging || getVisibility()!=VISIBLE || !(getParent() instanceof View))return;
+        View parent=(View)getParent();
+        if(parent.getWidth()<=0 || parent.getHeight()<=0 ||
+                getWidth()<=0 || getHeight()<=0)return;
+        // Preserve the saved proportional left/bottom anchors across screen
+        // sizes, rotation and expanded/collapsed key rows.
+        float x=prefs.getFloat("x",.01f)*parent.getWidth();
+        float y=prefs.getFloat("y",1f)*parent.getHeight()-getHeight()-dp(8);
+        place(x,y);
     }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
     private GradientDrawable glass(int color) {
@@ -114,13 +171,17 @@ final class BlenderKeyPanel extends LinearLayout {
     private void setExpanded(boolean value) {
         expanded=value;rows.setVisibility(value?VISIBLE:GONE);toggle.setText(value?"⌄":"⌨");
         prefs.edit().putBoolean("expanded",value).apply();
-        post(()->place(getX(),getY()));
+        post(this::restoreWhenMeasured);
     }
     private void place(float x,float y) {
         if(!(getParent() instanceof View))return;
         View parent=(View)getParent();
-        setX(Math.max(0,Math.min(x,Math.max(0,parent.getWidth()-getWidth()))));
-        setY(Math.max(0,Math.min(y,Math.max(0,parent.getHeight()-getHeight()))));
+        if(parent.getWidth()<=0 || parent.getHeight()<=0)return;
+        float inset=dp(4);
+        float maxX=Math.max(inset,parent.getWidth()-getWidth()-inset);
+        float maxY=Math.max(inset,parent.getHeight()-getHeight()-inset);
+        setX(Math.max(inset,Math.min(x,maxX)));
+        setY(Math.max(inset,Math.min(y,maxY)));
     }
     private void savePosition() {
         if(!(getParent() instanceof View))return;
