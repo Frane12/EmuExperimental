@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 81
-        versionName = "preAlpha-0.1-r16-winevulkan-merged"
+        versionCode = 82
+        versionName = "preAlpha-0.1-r17-blender-vulkan-shortcuts"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
