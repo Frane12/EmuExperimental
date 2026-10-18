@@ -25,7 +25,7 @@ final class AppSettingsDialog {
         Spinner graphics=spinner(a,form,new String[]{
                 "Automatski", "DirectX preko DXVK", "Native Vulkan (WineVulkan → Turnip)"},
                 "vulkan".equals(profile.graphicsApi)?2:"dxvk".equals(profile.graphicsApi)?1:0);
-        label(a,form,"ARGUMENTI PROGRAMA · Vulkan za Blender automatski");
+        label(a,form,"ARGUMENTI PREČACA (.exe / .lnk) · npr. --gpu-backend vulkan");
         EditText launchArgs=input(a,form,profile.launchArgs,
                 "npr. --gpu-backend vulkan",InputType.TYPE_CLASS_TEXT);
         label(a,form,"DXVK VERZIJA");
@@ -39,6 +39,7 @@ final class AppSettingsDialog {
                 "Globalno",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
         TextView hint=new TextView(a);hint.setText("Postavke vrijede od idućeg pokretanja. Native Vulkan koristi WineVulkan; "+
                 "Blender.exe automatski dobiva --gpu-backend vulkan. "+
+                "I za .lnk prečace argumenti se prosljeđuju kroz Windows ShellLink helper. "+
                 "GPU i X11 Present moramo potvrditi logom.");
         hint.setTextColor(0xff9fc4d1);hint.setTextSize(11);form.addView(hint);
         CheckBox remove=new CheckBox(a);
