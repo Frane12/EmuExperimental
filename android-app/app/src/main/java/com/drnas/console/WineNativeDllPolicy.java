@@ -68,5 +68,56 @@ final class WineNativeDllPolicy {
         }
         return false;
     }
+    /**
+     * Read-only forensic inventory for an ARM64 program that still reports
+     * c000007b after WINEDLLOVERRIDES=dxgi=b. Do not infer load order from
+     * file presence: verbose Wine +module/+loaddll is needed to identify
+     * which DLL Wine actually attempted to map.
+     */
+    static void auditModules(File wineLib,File prefix,File guestExe,
+                             int guestMachine,Map<String,String> env,
+                             Consumer<String> log) {
+        if(!shouldUseWineBuiltinDxgi(guestMachine,
+                "NATIVE_WINEVULKAN".equals(env.get("DRNAS_GRAPHICS_API"))))return;
+        log.accept("DRNAS_PE_IMPORT_AUDIT BEGIN (read-only): guestMachine=0x"+
+                Integer.toHexString(guestMachine)+
+                "; WINEDLLOVERRIDES="+env.getOrDefault("WINEDLLOVERRIDES","(unset)")+
+                "; WINEDLLPATH="+env.getOrDefault("WINEDLLPATH","(unset)"));
+        for(String architecture:new String[]{"aarch64-windows","arm64ec-windows","x86_64-windows"}) {
+            inspect("WINE:"+architecture+"/dxgi.dll",
+                    new File(wineLib,"wine/"+architecture+"/dxgi.dll"),guestMachine,log);
+        }
+        for(String arch:new String[]{"system32","syswow64"}) {
+            for(String dll:new String[]{"dxgi.dll","d3d11.dll"}) {
+                inspect("PREFIX:"+arch+"/"+dll,
+                        new File(prefix,"drive_c/windows/"+arch+"/"+dll),guestMachine,log);
+            }
+        }
+        if(guestExe!=null && guestExe.isFile()) {
+            inspect("EXE:"+guestExe.getName(),guestExe,guestMachine,log);
+            // Windows' DLL search can discover an application-local dxgi.dll
+            // before system32. Check only that known file, not the directory.
+            inspect("EXE_DIR:dxgi.dll",new File(guestExe.getParentFile(),"dxgi.dll"),
+                    guestMachine,log);
+        }else log.accept("DRNAS_PE_IMPORT_AUDIT GUEST_EXE_UNRESOLVED (possible .lnk)");
+        log.accept("DRNAS_PE_IMPORT_AUDIT END: PE machine is NOT proof of which DLL loaded.");
+    }
+    private static void inspect(String label,File binary,int guestMachine,
+                                Consumer<String> log) {
+        try {
+            if(!binary.isFile()){
+                log.accept("DRNAS_PE_IMPORT_AUDIT "+label+" ABSENT");
+                return;
+            }
+            int machine=guestMachine(binary);
+            String match=guestMachine==0?"GUEST_MACHINE_UNKNOWN":
+                    machine==guestMachine?"SAME_MACHINE":"DIFFERENT_MACHINE";
+            log.accept("DRNAS_PE_IMPORT_AUDIT "+label+" fileBytes="+binary.length()+
+                    " PE_MACHINE=0x"+Integer.toHexString(machine)+" "+match);
+        }catch(IOException|SecurityException error){
+            log.accept("DRNAS_PE_IMPORT_AUDIT "+label+" READ_ERROR "+
+                    error.getClass().getSimpleName());
+        }
+    }
     private WineNativeDllPolicy(){}
 }
