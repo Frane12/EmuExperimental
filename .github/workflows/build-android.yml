@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r17 - Blender/Windows .lnk GPU flags
+name: EmuDrnas preAlpha 0.1 r18 - Blender ARM64 DXGI recovery
 on:
   push:
     branches:
@@ -28,6 +28,7 @@ on:
       - fix/r15-desktop-launch-keys-taskbar
       - feat/winevulkan-merged-r16
       - feat/blender-vulkan-shortcuts-r17
+      - fix/r18-blender-arm64-dxgi-guard
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -264,36 +265,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r17-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r18-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r17 - per-shortcut GPU arguments for Blender and Wine .lnk
+          EmuDrnas preAlpha 0.1 r18 - ARM64 DXGI guard and Blender Vulkan arguments
           Package: com.drnas.console
-          versionCode: 82
+          versionCode: 83
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Preserves r16 Native WineVulkan and r15 Start/taskbar/stable shortcut input changes. Adds --gpu-backend vulkan and other custom argv input in the Add Shortcut dialog and long-press settings, persisted per .exe icon. For genuine .lnk icons with flags or Native Vulkan, builds and stages a source-owned Win32 IShellLinkW helper to resolve the true executable, preserve its saved arguments and working directory, and append requested tokens with Windows quoting. Blender.exe automatically uses Vulkan only in Native Vulkan mode unless manually selected otherwise. The default no-flag Wine .lnk execution remains unchanged. Same permanent signing key and package ID with higher versionCode 82 for in-place update. Actual Blender Vulkan GPU/WSI/Present on device remains unverified.
+          Changed: Extends r17 app shortcuts and r16 WineVulkan. Native ARM64/ARM64EC EXEs and opt-in Native Vulkan profiles request architecture-correct Wine built-in dxgi/d3d9/d3d11/d3d10core instead of incompatible x86/x64 DXVK PE DLLs (seen as c000007b from Windows ARM64 Blender). DXVK remains enabled for ordinary Windows x86/x64 DirectX games. Adds PE architecture check, detailed native DLL selection log, and regression tests. GLX libGL.so.1 is absent from the pinned Bionic source and is NOT fixed by this change; native Vulkan WSI/GPU display still requires a physical Blender test. Stable-signed private draft APK with same cert and applicationId, versionCode 83.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r17-blender-vulkan-shortcuts.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r17-blender-vulkan-shortcuts.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r18-blender-arm64-dxgi-guard.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r18-blender-arm64-dxgi-guard.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r17-blender-vulkan-shortcuts-ZIP
+          name: EmuDrnas-preAlpha-0.1-r18-blender-arm64-dxgi-guard-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r17-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r17-blender-vulkan-shortcuts.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r17 - Blender Vulkan shortcuts private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r18-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r18-blender-arm64-dxgi-guard.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r18 - ARM64 Blender DXGI guard private test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
