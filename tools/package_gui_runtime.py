@@ -112,14 +112,14 @@ def package(archive,output):
                 name=queue.pop()
                 if name in SYSTEM or name in libs or name in extra:continue
                 data=content(name)
-                if data[:5]!=b'\\x7fELF\\x02' or int.from_bytes(data[18:20],'little')!=183:
+                if data[:5]!=b'\x7fELF\x02' or int.from_bytes(data[18:20],'little')!=183:
                     raise RuntimeError('not Bionic AArch64 ELF: '+name)
                 if len(data)>64*1024*1024:
                     raise RuntimeError('oversized optional EGL dependency: '+name)
                 elf=Path(temp)/('egl-probe-'+name);elf.write_bytes(data)
                 dynamic=subprocess.check_output(['readelf','-d',str(elf)],text=True)
                 extra[name]=data
-                queue.extend(re.findall(r'\\(NEEDED\\).*?\\[(.*?)\\]',dynamic))
+                queue.extend(re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic))
             return extra
         try:
             egl_libs=extra_egl()
