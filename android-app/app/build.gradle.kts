@@ -24,7 +24,7 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 83
+        versionCode = 84
         versionName = "preAlpha-0.1-r18-blender-arm64-dxgi-guard"
     }
     packaging {
