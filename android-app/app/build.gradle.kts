@@ -24,8 +24,12 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 89
-        versionName = "preAlpha-0.1-r23-compositor-stability"
+        versionCode = 90
+        versionName = "preAlpha-0.1-r24-blender-performance"
+    }
+    androidResources {
+        // Already-compressed runtime/application archives: avoid APK recompression.
+        noCompress += listOf("zip", "wcp", "msi")
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +83,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

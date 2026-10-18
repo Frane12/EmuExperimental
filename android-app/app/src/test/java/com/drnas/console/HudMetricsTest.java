@@ -2,6 +2,9 @@ package com.drnas.console;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class HudMetricsTest {
+ @Test public void guestCpuIsNotCountedTwice() {
+   assertEquals(875,HudMetrics.parseCpuStat("cpu 100 10 40 700 20 5 0 0 80 5")[0]);
+ }
  @Test public void cpuDataAndDeltaMath() {
    long[] s=HudMetrics.parseCpuStat("cpu 100 10 40 700 20 5 0 0 0");
    assertNotNull(s);
@@ -11,3 +14,4 @@ public class HudMetricsTest {
    assertEquals("--",HudMetrics.number(150,100,100,100));
  }
 }
+

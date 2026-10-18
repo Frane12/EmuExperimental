@@ -22,10 +22,8 @@ public class Drawable {
     private Bitmap _backgroundBitmap;
     private int _backgroundColor;
     private boolean[] _shapeMask = null;
-    // Retain one buffer per drawable, not one 800x600 (~6 MiB) allocation
-    // per Mesa sw,noshm PutImage. A window owns this state until destruction.
-    private byte[] _zUploadBytes;
-    private java.nio.IntBuffer _bulkWords;
+    // Reuse ARGB pixels per drawable. Raw BGRX bytes live only in the client
+    // request buffer; no second per-window byte staging allocation.
     private int[] _zUploadColors;
     private Bitmap _zUploadBitmap;
     // One diagnostic per changed fast PutImage geometry, no per-frame strings.
@@ -801,6 +799,20 @@ public class Drawable {
 
         boolean isShapeMask = false;
 
+        // Validate with wide arithmetic before any width*height int calculation.
+        // Wrapped dimensions must never masquerade as a small valid payload.
+        long pixelCount=(long)width*height;
+        if(width==0 || height==0) {
+            io.readSkip(bytesRemaining);
+            return false;
+        }
+        if(pixelCount>Integer.MAX_VALUE ||
+                (format==Z_PIXMAP_FORMAT && depth==24 && pixelCount*4>bytesRemaining)) {
+            io.readSkip(bytesRemaining);
+            ErrorCode.write(client,ErrorCode.Length,RequestCode.PutImage,0);
+            return false;
+        }
+
         if (format == Z_PIXMAP_FORMAT) {
             rightPad = 0;
             if (depth == 24) {
@@ -873,10 +885,6 @@ public class Drawable {
         }else previousGeometryLogged=false;
         if (fastBgrx) {
             try {
-                if (_zUploadBytes == null || _zUploadBytes.length < n) {
-                    _zUploadBytes = new byte[n];
-                    _bulkWords = null; // rebuild view only on backing-array growth
-                }
                 if (_zUploadColors == null || _zUploadColors.length < pixels)
                     _zUploadColors = new int[pixels];
                 if (!directCopy && (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
@@ -891,17 +899,10 @@ public class Drawable {
             boolean sampled=xServer.isRenderCaptureEnabled();
             boolean measure=profile || sampled;
             long tRead=measure?System.nanoTime():0L;
-            io.readBytes(_zUploadBytes,0,n);
-            io.readSkip(pad);
+            // Read timing now excludes the eliminated request-to-staging copy.
             long tDecodedStart=measure?System.nanoTime():0L;
-            if(xServer.isExperimentalBulkDecode()) {
-                if(_bulkWords==null)
-                    _bulkWords=java.nio.ByteBuffer.wrap(_zUploadBytes)
-                            .order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer();
-                X11PixelCodec.decodeBgrxBulk(_bulkWords,_zUploadColors,pixels);
-            }else {
-                X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
-            }
+            io.readBgrxColors(_zUploadColors,pixels,xServer.isExperimentalBulkDecode());
+            io.readSkip(pad);
             long tUploadedStart=measure?System.nanoTime():0L;
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);

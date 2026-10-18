@@ -146,8 +146,10 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        if("builtin:blender".equals(app))BundledBlender.install(context,prefix,log);
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
-        final String guestTarget=app.startsWith("link:") ?
+        final String guestTarget="builtin:blender".equals(app)?
+                "execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
                         WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
                 UserShortcuts.isId(app)?"execwin:"+userWindowsPath(context,prefix,
@@ -169,6 +171,10 @@ final class WineGuiSession implements AutoCloseable {
                 guestTarget.startsWith("execwin:")?
                 LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,nativeVulkan):
                 Collections.emptyList();
+        if("builtin:blender".equals(app)) {
+            launchArgs.add("--python");
+            launchArgs.add(BundledBlenderArchive.WINDOWS_SETUP);
+        }
         if(linkViaHelper)log.accept("DRNAS_LINK_ARGUMENT_FORWARDER selected: "+
                 "Wine IShellLinkW reads .lnk target, original args and working directory; "+
                 "requested nativeVulkan="+nativeVulkan+" extraArgc="+(launchArgs.size()-2));
@@ -254,7 +260,9 @@ final class WineGuiSession implements AutoCloseable {
         // dxgi.dll produces STATUS_INVALID_IMAGE_FORMAT (c000007b).
         // Keep standard DXVK for x64 games, but choose Wine's ARM64 builtins
         // for an ARM64/ARM64EC EXE or an explicit Native Vulkan profile.
-        File directGuestExe=UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
+        File directGuestExe="builtin:blender".equals(app)?
+                new File(prefix,"drive_c/DRNAS/Apps/"+BundledBlenderArchive.DIRECTORY+"/blender.exe"):
+                UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
         int guestPeMachine=directGuestExe==null?0:WineNativeDllPolicy.guestMachine(directGuestExe);
         WineNativeDllPolicy.configure(env,guestPeMachine,nativeVulkan,
                 WineNativeDllPolicy.hasBuiltInDxgi(lib),log);
@@ -467,5 +475,6 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 
 

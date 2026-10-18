@@ -39,7 +39,7 @@ final class DxvkRuntime {
                 File from=new File(source,arch+"/"+dll),to=new File(folder,dll);
                 byte[] data=Files.readAllBytes(from.toPath());
                 if(Files.isRegularFile(to.toPath(),LinkOption.NOFOLLOW_LINKS)&&
-                        Arrays.equals(hash(data),hash(Files.readAllBytes(to.toPath())))){verified++;continue;}
+                        Arrays.equals(hash(data),hashFile(to.toPath()))){verified++;continue;}
                 // Move the symlink itself, never write through a Wine builtin link.
                 Path backup=new File(folder,dll+".drnas-before-dxvk").toPath();
                 if(Files.exists(to.toPath(),LinkOption.NOFOLLOW_LINKS)&&!Files.exists(backup,LinkOption.NOFOLLOW_LINKS))
@@ -54,6 +54,14 @@ final class DxvkRuntime {
         }
         log.accept("DXVK active Wine prefix: copied="+copied+", verified unchanged="+verified+" (system32 + syswow64).");
     }
+    private static byte[] hashFile(Path path) throws Exception {
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        try(InputStream in=new BufferedInputStream(Files.newInputStream(path),65536)) {
+            byte[] buffer=new byte[65536];int n;
+            while((n=in.read(buffer))!=-1)digest.update(buffer,0,n);
+        }
+        return digest.digest();
+    }
     private static byte[] hash(byte[] data) throws Exception {return MessageDigest.getInstance("SHA-256").digest(data);}
     static void validatePe(byte[] data,boolean x86) throws IOException {
         if(data.length<256||data[0]!='M'||data[1]!='Z')throw new IOException("DXVK DLL is not PE");
@@ -67,3 +75,4 @@ final class DxvkRuntime {
     }
     private DxvkRuntime(){}
 }
+

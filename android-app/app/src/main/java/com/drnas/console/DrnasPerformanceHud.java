@@ -43,7 +43,11 @@ final class DrnasPerformanceHud extends View {
     private final Typeface labelFont=Typeface.create("sans-serif-medium",Typeface.NORMAL);
     private final Typeface valueFont=Typeface.create("sans-serif-medium",Typeface.BOLD);
     private Shader glassGradient;
-    private boolean active;
+    private volatile boolean active;
+    private final java.util.concurrent.atomic.AtomicBoolean sampling=new java.util.concurrent.atomic.AtomicBoolean();
+    private static final java.util.concurrent.ThreadPoolExecutor METRICS=new java.util.concurrent.ThreadPoolExecutor(
+            0,1,10,java.util.concurrent.TimeUnit.SECONDS,new java.util.concurrent.LinkedBlockingQueue<Runnable>(),
+            task->{Thread thread=new Thread(task,"drnas-hud-metrics");thread.setDaemon(true);return thread;});
 
     DrnasPerformanceHud(Context context) {
         super(context);
@@ -71,7 +75,22 @@ final class DrnasPerformanceHud extends View {
     boolean isActive(){return active;}
 
     void sample(float displayedFps,float displayedFrameMs) {
-        if(!active)return;
+        if(!active || !sampling.compareAndSet(false,true))return;
+        // /proc, KGSL and battery Binder calls must not block the UI/render thread.
+        METRICS.execute(()->{
+            try {
+                String[] snapshot=collect(displayedFps,displayedFrameMs);
+                post(()->{
+                    if(!active || !isAttachedToWindow())return;
+                    System.arraycopy(snapshot,0,values,0,values.length);
+                    postInvalidateOnAnimation();
+                });
+            } finally {sampling.set(false);}
+        });
+    }
+
+    private String[] collect(float displayedFps,float displayedFrameMs) {
+        String[] values=new String[6];
         values[0]=displayedFps>0?String.format(Locale.ROOT,"%.0f",displayedFps):"--";
         values[1]=stats.cpu();
         values[2]=stats.gpu();
@@ -95,7 +114,7 @@ final class DrnasPerformanceHud extends View {
                     String.format(Locale.ROOT,"%.1f°C",temp/10.0);
         } else values[4]="--°C";
 
-        postInvalidateOnAnimation();
+        return values;
     }
 
     @Override protected void onSizeChanged(int w,int h,int oldW,int oldH) {
@@ -145,3 +164,4 @@ final class DrnasPerformanceHud extends View {
         }
     }
 }
+

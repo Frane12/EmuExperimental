@@ -21,7 +21,8 @@ final class HudMetrics {
         if(fields.length<5||!"cpu".equals(fields[0]))return null;
         long total=0,idle=0;
         try {
-            for(int i=1;i<fields.length;i++) {
+            // guest/guest_nice are already included in user/nice; do not double-count.
+            for(int i=1;i<Math.min(fields.length,9);i++) {
                 long value=Long.parseLong(fields[i]);
                 if(value<0)return null;
                 total+=value;
@@ -91,3 +92,4 @@ final class HudMetrics {
     String cpu(){return readCpu();}
     String gpu(){return readGpu();}
 }
+

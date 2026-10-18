@@ -811,11 +811,15 @@ public class ScreenView extends View {
      *
      * @param canvas The canvas on which the view will be drawn.
      */
+    private final java.util.concurrent.atomic.AtomicBoolean desktopRedrawPending =
+            new java.util.concurrent.atomic.AtomicBoolean();
     private boolean rendererErrorReported;
     private boolean rendererFallbackRequested;
 
     @Override
     protected void onDraw(Canvas canvas) {
+        // Clear before locking: damage received during this draw can schedule the next frame.
+        desktopRedrawPending.set(false);
         int checkpoint=canvas.save();
         try {
             drawDesktop(canvas);
@@ -835,6 +839,12 @@ public class ScreenView extends View {
         } finally {
             canvas.restoreToCount(checkpoint);
         }
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        desktopRedrawPending.set(false);
+        invalidate();
     }
 
     private void drawDesktop(Canvas canvas) {
@@ -999,6 +1009,12 @@ public class ScreenView extends View {
         int x0=Math.max(0,left), y0=Math.max(0,top);
         int x1=Math.min(_guestWidth,right), y1=Math.min(_guestHeight,bottom);
         if(x0>=x1 || y0>=y1) return;
+        if (isHardwareAccelerated()) {
+            // HWUI redraws the display list as a whole. Hundreds of PutImage tiles
+            // need only one UI invalidation per frame; guest requests are never dropped.
+            if (desktopRedrawPending.compareAndSet(false,true)) postInvalidateOnAnimation();
+            return;
+        }
         DrnasScreenTransform t=screenTransform();
         postInvalidateOnAnimation((int)Math.floor(t.physicalX(x0))-3,
                        (int)Math.floor(t.physicalY(y0))-3,
@@ -2143,3 +2159,4 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+

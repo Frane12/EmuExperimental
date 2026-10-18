@@ -4,7 +4,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.EOFException;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.Socket;
 
@@ -19,7 +18,8 @@ public class InputOutput {
     private final BufferedOutputStream _outStream;
     private final X11OutputQueue _outputQueue;
     private boolean _msb = true;
-    private ByteArrayInputStream _requestBody;
+    private X11RequestBuffer _requestBody;
+    private X11RequestBuffer _reusableBody = new X11RequestBuffer();
     static final int MAX_REQUEST_WORDS = 4 * 1024 * 1024; // 16 MiB, including header.
 
     /** Receive the complete body before the caller takes the global X server lock. */
@@ -27,20 +27,23 @@ public class InputOutput {
         if (length < 0 || length > MAX_REQUEST_WORDS * 4 - 4)
             throw new IOException("Invalid X11 request body length: " + length);
         if (_requestBody != null) throw new IOException("Nested X11 request");
-        byte[] body = new byte[length];
-        int offset = 0;
-        while (offset < length) {
-            int count = _inStream.read(body, offset, length - offset);
-            if (count < 0) throw new EOFException("Truncated X11 request body: " + offset + "/" + length);
-            if (count == 0) continue;
-            offset += count;
-        }
-        _requestBody = new ByteArrayInputStream(body);
+        X11RequestBuffer body = _reusableBody;
+        body.receive(_inStream, length);
+        _requestBody = body;
+    }
+
+    /** Decode in place: the complete request is already buffered outside the server lock. */
+    void readBgrxColors(int[] colors, int pixels, boolean bulk) throws IOException {
+        if (_requestBody == null) throw new IOException("BGRX requires a framed request");
+        _requestBody.readBgrxColors(colors, pixels, bulk);
     }
 
     int endRequest() {
         int unread = _requestBody == null ? 0 : _requestBody.available();
         _requestBody = null;
+        // Do not pin a rare 16 MiB request for the lifetime of an idle connection.
+        if (_reusableBody.capacity() > 8 * 1024 * 1024)
+            _reusableBody = new X11RequestBuffer();
         return unread;
     }
 
@@ -372,4 +375,5 @@ public class InputOutput {
         _inStream.close();
     }
 }
+
 

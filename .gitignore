@@ -9,3 +9,8 @@ DRNAS-private-backup*.tar
 **/local.properties
 **/.gradle/
 **/build/
+
+
+android-app/app/src/main/assets/blender/*.zip
+__pycache__/
+*.pyc

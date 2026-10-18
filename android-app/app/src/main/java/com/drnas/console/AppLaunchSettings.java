@@ -54,6 +54,8 @@ final class AppLaunchSettings {
     private static boolean valid(String id){return WineShortcuts.isLaunchRequest(id);}
     static Profile load(Context context,String id){
         if(!valid(id))return Profile.defaults();
+        if("builtin:blender".equals(id) && !context.getSharedPreferences("drnas_app_profiles",Context.MODE_PRIVATE).contains(id))
+            return Profile.defaults().withGraphicsApi("vulkan");
         return Profile.parse(context.getSharedPreferences("drnas_app_profiles",Context.MODE_PRIVATE)
                 .getString(id,""));
     }
@@ -69,3 +71,4 @@ final class AppLaunchSettings {
     }
     private AppLaunchSettings(){}
 }
+

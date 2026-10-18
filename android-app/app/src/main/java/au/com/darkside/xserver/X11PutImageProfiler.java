@@ -4,7 +4,8 @@ import java.util.Locale;
 
 /** Optional X11 PutImage profiling with fixed histogram buckets.
  * No threads, allocations, logging or clock reads when disabled.
- * Read includes X11 socket wait; upload timing excludes later Android HWUI.
+ * Read is framed payload access (transport received before the server lock);
+ * upload timing excludes later Android HWUI.
  */
 final class X11PutImageProfiler {
     private static final int[] LIMITS_US={
@@ -46,7 +47,7 @@ final class X11PutImageProfiler {
         String report=String.format(Locale.ROOT,
                 "X11_PUTIMAGE_PROFILE count=%d totalMiB=%.1f rateMiBps=%.1f"+
                 " read_ms(p50/p95)=%s/%s decode_ms(p50/p95)=%s/%s upload_ms(p50/p95)=%s/%s"+
-                " (read includes X11 transport wait; upload excludes Android HWUI draw)",
+                " (read is buffered payload access; upload excludes Android HWUI draw)",
                 frames,totalBytes/1048576.0,totalBytes/1048576.0/seconds,
                 approximatePercentile(read,frames,50),approximatePercentile(read,frames,95),
                 approximatePercentile(decode,frames,50),approximatePercentile(decode,frames,95),
@@ -58,3 +59,4 @@ final class X11PutImageProfiler {
         return report;
     }
 }
+
