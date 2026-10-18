@@ -455,6 +455,11 @@ public final class WineGuiActivity extends Activity {
                 KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,key);
                 if(pressed)xserver.getScreen().onKeyDown(key,event);
                 else xserver.getScreen().onKeyUp(key,event);
+            },(button,pressed)->{
+                if(destroyed||xserver==null)return;
+                // Send a regular X11 click at the current pointer coordinates;
+                // ScreenView's independent touchscreen left-click stays active.
+                xserver.getScreen().updatePointerButtons(button,pressed);
             },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},this::showBlenderMenu);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
             // No extra controls over the simple "Starting Blender" boot screen.
