@@ -19,7 +19,8 @@ final class AppLaunchSettings {
             this.stretch=stretch==0||stretch==1?stretch:-1;
             this.sensitivity=Float.isFinite(sensitivity)&&sensitivity>=.5f?
                     Math.min(10f,sensitivity):-1f;
-            this.graphicsApi="vulkan".equals(graphicsApi)?"vulkan":
+            this.graphicsApi="opengl".equals(graphicsApi)?"opengl":
+                    "vulkan".equals(graphicsApi)?"vulkan":
                     "dxvk".equals(graphicsApi)?"dxvk":"auto";
             this.launchArgs=launchArgs==null || launchArgs.length()>400?"":launchArgs.trim();
         }
@@ -44,6 +45,7 @@ final class AppLaunchSettings {
         float sensitivity(float global){return sensitivity<0?global:sensitivity;}
         String title(String original){return title.isEmpty()?original:title;}
         boolean nativeVulkan(){return "vulkan".equals(graphicsApi);}
+        boolean nativeOpenGl(){return "opengl".equals(graphicsApi);}
         Profile withFps(int value){return new Profile(title,value,dxvk,stretch,sensitivity,graphicsApi,launchArgs);}
         Profile withDxvk(String value){return new Profile(title,fps,value,stretch,sensitivity,graphicsApi,launchArgs);}
         Profile withStretch(boolean value){return new Profile(title,fps,dxvk,value?1:0,sensitivity,graphicsApi,launchArgs);}
