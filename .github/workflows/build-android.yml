@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r19 - ARM64 DXGI loader diagnostics
+name: EmuDrnas preAlpha 0.1 r20 - alternative EGL and real GLES3 test
 on:
   push:
     branches:
@@ -30,6 +30,7 @@ on:
       - feat/blender-vulkan-shortcuts-r17
       - fix/r18-blender-arm64-dxgi-guard
       - diagnostic/r19-native-dxgi-load-trace
+      - feat/opengl-egl-gles-independent-r20
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -93,6 +94,7 @@ jobs:
         run: |
           python3 tools/package_audio_runtime.py android-app/app/src/main
           "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/vulkan_device_probe.c -ldl -pthread -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_vulkan_probe.so
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -std=c11 -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/opengl_es_probe.c -lEGL -lGLESv3 -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_gles_probe.so
           readelf -d android-app/app/src/main/jniLibs/arm64-v8a/libpulse*.so | grep NEEDED
       - name: Build source-owned D3D9 cube diagnostic for Wine WOW64
         run: |
@@ -253,6 +255,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_gles_probe.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - name: Stage stable-signed EmuDrnas preAlpha APK (updates enabled)
         if: github.event_name != 'pull_request'
@@ -268,34 +271,34 @@ jobs:
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
           cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r19-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r19 - Wine ARM64 dxgi module and PE machine diagnostics
+          EmuDrnas preAlpha 0.1 r20 - Wine ARM64 dxgi module and PE machine diagnostics
           Package: com.drnas.console
-          versionCode: 84
+          versionCode: 86
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Extends r18 Native Vulkan DLL guard with a safe, read-only inventory of PE machines for Wine builtin aarch64/arm64ec dxgi.dll, prefix system32/syswow64 DXVK dxgi/d3d11 and application-local dxgi.dll. When verbose logging and Native Vulkan are selected, captures actual Wine +module/+loaddll traces, because the r18 dxgi=b policy remained insufficient for ARM64 Blender (c000007b). This is DIAGNOSTICS, not a claim that Blender rendering is fixed. GLX libGL.so.1 remains unavailable; native device enumeration is separate from Wine Vulkan frame presentation. Same permanent signing cert and applicationId, versionCode 85.
+          Changed: Adds real independent native Android EGL OpenGL ES 3.0 clear/readback test in Wine desktop Options, and attempts to stage complete, valid Bionic EGL plus desktop OpenGL libraries from the pinned source when present. If the source lacks full Bionic EGL/OpenGL, the known-good Vulkan path remains intact and the log explicitly says Wine EGL is blocked. GLX is still absent and Windows WGL/OpenGL is not yet functional. Preserves r19 DXGI diagnostics. Extends r18 Native Vulkan DLL guard with a safe, read-only inventory of PE machines for Wine builtin aarch64/arm64ec dxgi.dll, prefix system32/syswow64 DXVK dxgi/d3d11 and application-local dxgi.dll. When verbose logging and Native Vulkan are selected, captures actual Wine +module/+loaddll traces, because the r18 dxgi=b policy remained insufficient for ARM64 Blender (c000007b). This is DIAGNOSTICS, not a claim that Blender rendering is fixed. Wine native OpenGL rendering remains unverified; OpenGL ES proof is independent of Wine WGL and Vulkan first-frame/Present. Same permanent signing cert and applicationId, versionCode 85.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r19-blender-native-dxgi-diagnostics.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r19-blender-native-dxgi-diagnostics.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r20-egl-gles-experiment.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r20-egl-gles-experiment.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/feat/opengl-egl-gles-independent-r20') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r19-blender-native-dxgi-diagnostics-ZIP
+          name: EmuDrnas-preAlpha-0.1-r20-egl-gles-experiment-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/feat/opengl-egl-gles-independent-r20')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r19-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r19-blender-native-dxgi-diagnostics.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r19 - ARM64 Blender DXGI trace private test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r20-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r20-egl-gles-experiment.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r20 - ARM64 Blender DXGI trace private test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
