@@ -9,6 +9,14 @@ Per-library checksums: gui-runtime-v1.zip / manifest.json.
 Libraries are unmodified, independently dynamically loaded components. Only
 X.Org X11 clients, XCB/Xau, android-sysvshm, FreeType, Fontconfig, Expat,
 Brotli, bzip2, libpng, zlib and the Vulkan loader are included.
+If both are present with complete dependencies in the SHA-256-pinned
+imagefs root, the optional dynamic EGL / desktop OpenGL client libraries
+are additionally staged. Their provenance must be checked in that pinned
+upstream image before redistributing publicly; missing/dangling libraries
+are not replaced with Android GLES symlinks. Relevant Mesa license text is
+included in assets/licenses/vulkan-wrapper-Mesa-license.txt where applicable.
+The native OpenGL ES probe uses Android-provided system EGL/GLES libraries
+and does not bundle an additional GPU implementation.
 No GameNative proprietary redirect shim, Microsoft fonts, Wine binary or
 GPU ICD is included in this bundle. Font discovery uses Android /system/fonts.
 
