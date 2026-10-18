@@ -25,6 +25,15 @@ public class AppLaunchSettingsTest {
         assertEquals("async",restored.dxvk("standard"));assertFalse(restored.stretch(true));
         assertEquals(2.5f,restored.sensitivity(8f),0f);
     }
+    @Test public void openGlBackendIsPersistedWithoutChangingDefault() throws Exception {
+        AppLaunchSettings.Profile p=AppLaunchSettings.Profile.defaults().withGraphicsApi("opengl");
+        assertTrue(p.nativeOpenGl());assertFalse(p.nativeVulkan());
+        AppLaunchSettings.Profile roundTrip=AppLaunchSettings.Profile.parse(p.json());
+        assertEquals("opengl",roundTrip.graphicsApi);
+        assertTrue(roundTrip.nativeOpenGl());
+        assertFalse(AppLaunchSettings.Profile.defaults().nativeOpenGl());
+        assertEquals("auto",AppLaunchSettings.Profile.defaults().graphicsApi);
+    }
     @Test public void brokenOrOutOfRangeSettingsStayBounded() {
         AppLaunchSettings.Profile p=AppLaunchSettings.Profile.parse(
                 "{\"fps\":9999,\"dxvk\":\"bad\",\"stretch\":99,\"sensitivity\":100}");
