@@ -287,6 +287,16 @@ final class WineGuiSession implements AutoCloseable {
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
         OpenGlAlternative.reportWineEglCandidates(guiRuntime,log);
+        if(appProfile.nativeOpenGl()){
+            // Wine 11 prefers EGL/OpenGL instead of GLX by default.
+            // The context still requires compatible native Bionic OpenGL
+            // and a functional X11 EGL platform; absence is logged.
+            env.put("DRNAS_GRAPHICS_API","WINE_EGL_OPENGL_EXPERIMENT");
+            env.put("WINEDLLOVERRIDES",env.getOrDefault("WINEDLLOVERRIDES","")+
+                    ";opengl32=b");
+            log.accept("DRNAS_OPENGL_EXPERIMENT_REQUESTED: Wine 11 EGL backend; "+
+                    "does not enable GLX, GLES is not a replacement for desktop OpenGL");
+        }
         if(nativeVulkan){
             WineVulkanRuntime.requireBridge(lib,new File(guiRuntime,"lib"),log);
             log.accept("DRNAS_WINEVULKAN_REQUESTED: vulkan-1=b;winevulkan=b, "+
