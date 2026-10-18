@@ -25,6 +25,7 @@ final class WineShortcuts {
         }
     }
     private static final String[][] BUILTINS = {
+        {"blender","Blender ARM64","◉",BundledBlenderArchive.WINDOWS_EXE},
         {"notepad","Notepad","▤","notepad.exe"},
         {"wordpad","WordPad","▣","wordpad.exe"},
         {"paint","DRNAS Paint","✎","C:\\DRNAS\\Tools\\DRNASPaint.exe"},
@@ -117,3 +118,4 @@ final class WineShortcuts {
     }
     private WineShortcuts(){}
 }
+

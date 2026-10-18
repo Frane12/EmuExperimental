@@ -578,6 +578,12 @@ public class Window extends Resource {
         return owner;
     }
 
+    boolean isBlenderPrimary() {
+        Window root=_screen.getRootWindow();
+        return _isMapped && !_inputOnly && _overrideRedirect && BlenderPopupPolicy.primary(
+                titleForStackAudit(),_irect.width(),_irect.height(),root._irect.width(),root._irect.height());
+    }
+
     private String titleForStackAudit() {
         Atom a = _xServer.findAtom("_NET_WM_NAME");
         Property p = a == null ? null : _properties.get(a.getId());

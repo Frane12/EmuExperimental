@@ -135,6 +135,13 @@ public class XServer {
     public void setDiagnosticListener(java.util.function.Consumer<String> listener) { diagnosticListener=listener; }
     public void diagnostic(String message) { if(diagnosticListener!=null)diagnosticListener.accept(message); }
     public synchronized int mappedWindowCount() { return liveMappedWindows.size(); }
+    public synchronized boolean hasMappedBlenderPrimary() {
+        for(int id:liveMappedWindows) {
+            Resource r=getResource(id);
+            if(r instanceof Window && ((Window)r).isBlenderPrimary())return true;
+        }
+        return false;
+    }
     public synchronized void windowMapped(int id) {
         if(liveMappedWindows.add(id))diagnostic("X11 MAP window id="+id+", live="+liveMappedWindows.size());
     }
@@ -1070,4 +1077,5 @@ public class XServer {
         }
     }
 }
+
 

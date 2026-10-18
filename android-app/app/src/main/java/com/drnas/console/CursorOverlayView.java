@@ -24,7 +24,8 @@ final class CursorOverlayView extends View {
     }
     private volatile Frame frame;
     private final int guestWidth, guestHeight;
-    private final Paint paint=new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint paint=new Paint(Paint.FILTER_BITMAP_FLAG|Paint.ANTI_ALIAS_FLAG);
+    private final android.graphics.RectF destination=new android.graphics.RectF();
     private volatile boolean stretchFullscreen=true;
     private volatile DrnasScreenTransform cachedTransform;
     void setStretchFullscreen(boolean enabled){
@@ -60,11 +61,23 @@ final class CursorOverlayView extends View {
         if(current==null || current.bitmap==null || current.bitmap.isRecycled())return;
         DrnasScreenTransform t=cachedTransform;
         if(t==null){refreshTransform();t=cachedTransform;}
-        int saved=canvas.save();
-        canvas.translate(t.offsetX,t.offsetY);
-        canvas.scale(t.scaleX,t.scaleY);
-        canvas.drawBitmap(current.bitmap,current.x-current.hotX,
-                          current.y-current.hotY,paint);
-        canvas.restoreToCount(saved);
+        int w=current.bitmap.getWidth(),h=current.bitmap.getHeight();
+        // Small pointer/resize/text cursors have a constant physical size, even
+        // when the desktop is stretched. Keep large brush-radius cursors intact.
+        if(w<=64 && h<=64) {
+            float scale=CursorSizing.compactScale(w,h,getResources().getDisplayMetrics().density);
+            float px=t.physicalX(current.x),py=t.physicalY(current.y);
+            destination.set(CursorSizing.edge(px,0,current.hotX,scale),
+                    CursorSizing.edge(py,0,current.hotY,scale),
+                    CursorSizing.edge(px,w,current.hotX,scale),
+                    CursorSizing.edge(py,h,current.hotY,scale));
+            canvas.drawBitmap(current.bitmap,null,destination,paint);
+        } else {
+            int saved=canvas.save();
+            canvas.translate(t.offsetX,t.offsetY);canvas.scale(t.scaleX,t.scaleY);
+            canvas.drawBitmap(current.bitmap,current.x-current.hotX,current.y-current.hotY,paint);
+            canvas.restoreToCount(saved);
+        }
     }
 }
+

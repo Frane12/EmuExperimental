@@ -18,6 +18,9 @@ final class GuiLogExport {
     static String saveRenderSample(Context context,Writer writer) throws IOException {
         return create(context,writer,"EmuDrnas-Render-5s").name;
     }
+    static String saveBlenderSample(Context context,Writer writer) throws IOException {
+        return create(context,writer,"Blender-Performance-20s").name;
+    }
     static android.content.Intent share(Context context,Writer writer) throws IOException {
         Saved saved=create(context,writer);
         android.content.Intent intent=new android.content.Intent(android.content.Intent.ACTION_SEND);
@@ -63,4 +66,5 @@ final class GuiLogExport {
     }
     private GuiLogExport(){}
 }
+
 

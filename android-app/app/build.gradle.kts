@@ -23,9 +23,9 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 93
-        versionName = "preAlpha-0.1-r27-blender-popup-owner-guard"
+        manifestPlaceholders["appLabel"] = "Blender"
+        versionCode = 94
+        versionName = "preAlpha-0.1-r28-blender-shell"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -57,7 +57,7 @@ android {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
                 applicationIdSuffix = ".prealpha01r4lab"
-                manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha LAB"
+                manifestPlaceholders["appLabel"] = "Blender DRNAS LAB"
             }
         }
         release {

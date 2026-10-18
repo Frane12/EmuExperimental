@@ -146,8 +146,10 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        final boolean blenderShell=BlenderShellLaunch.ID.equals(app);
+        if(blenderShell)BundledBlender.install(context,prefix,log);
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
-        final String guestTarget=app.startsWith("link:") ?
+        final String guestTarget=blenderShell?"execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
                         WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
                 UserShortcuts.isId(app)?"execwin:"+userWindowsPath(context,prefix,
@@ -166,7 +168,8 @@ final class WineGuiSession implements AutoCloseable {
         final boolean linkViaHelper=!linkLaunchArgs.isEmpty();
         final String launchMode=linkViaHelper?
                 "execwin:C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe":guestTarget;
-        final List<String> launchArgs=linkViaHelper?linkLaunchArgs:
+        final List<String> launchArgs=blenderShell?
+                BlenderShellLaunch.arguments(appProfile.launchArgs,appProfile.graphicsApi):linkViaHelper?linkLaunchArgs:
                 guestTarget.startsWith("execwin:")?
                 LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,appProfile.graphicsApi):
                 Collections.emptyList();
@@ -396,7 +399,7 @@ final class WineGuiSession implements AutoCloseable {
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);
             try{
                 File helper=new File(prefix,"drive_c/DRNAS/Tools/DRNASDesktop.exe");
-                if(helper.isFile()){
+                if(helper.isFile() && !blenderShell){
                     android.content.SharedPreferences options=AppOptionsView.desktop(context);
                     List<String> desktopArgs=command(linker,wine,"exec:"+helper.getAbsolutePath());
                     desktopArgs.add(options.getBoolean("desktop_live",true)?"/live:1":"/live:0");
@@ -481,5 +484,6 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 
 

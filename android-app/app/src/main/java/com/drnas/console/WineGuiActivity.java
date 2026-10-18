@@ -84,6 +84,8 @@ public final class WineGuiActivity extends Activity {
     private int chosenFrameCap;
     private String launchProfileId;
     private boolean renderCaptureRunning;
+    private boolean blenderShell;
+    private BlenderKeyPanel blenderKeys;
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
@@ -145,6 +147,7 @@ public final class WineGuiActivity extends Activity {
         // Keep toggle through Reset Wine (which recreates this Activity).
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
+        blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
         launchProfileId=WineShortcuts.isLaunchRequest(profileRequest)?profileRequest:null;
         AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(this,launchProfileId);
         chosenFrameCap=appProfile.fps(savedFrameCap(this));
@@ -154,6 +157,7 @@ public final class WineGuiActivity extends Activity {
         virtualPadEnabled="xinput".equals(controlMode);
         cameraSensitivity=appProfile.sensitivity(getPreferences(MODE_PRIVATE).getFloat("relative_sensitivity",7.5f));
         stretchFullscreen=appProfile.stretch(getPreferences(MODE_PRIVATE).getBoolean("full_screen_stretch",true));
+        if(blenderShell){stretchFullscreen=true;relativeCameraEnabled=false;virtualPadEnabled=false;controlMode="off";}
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         immersive();
@@ -189,6 +193,8 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setLayerType(View.LAYER_TYPE_NONE,null);
         logEarlyRendererIntent();
         xserver.getScreen().setFocusableInTouchMode(true);
+        xserver.getScreen().setPointerIcon(android.view.PointerIcon.getSystemIcon(
+                this,android.view.PointerIcon.TYPE_NULL));
         layout.addView(xserver.getScreen(),new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -220,10 +226,10 @@ public final class WineGuiActivity extends Activity {
 
         // Quiet startup notice, not diagnostics. An offline Mono installation
         // may need time before the Wine desktop maps its first X11 window.
-        startupAnimation=new StartupAnimationView(this);
+        startupAnimation=new StartupAnimationView(this,blenderShell);
         layout.addView(startupAnimation,new FrameLayout.LayoutParams(-1,-1));
         startupStatus=new TextView(this);
-        startupStatus.setText("Priprema Windows desktopa…");
+        startupStatus.setText(blenderShell?"Pokrećem Blender…":"Priprema Windows desktopa…");
         startupStatus.setTextColor(0xFFE0EFF8);
         startupStatus.setTextSize(14);
         startupStatus.setPadding(dp(24),dp(8),dp(24),dp(8));
@@ -286,6 +292,7 @@ public final class WineGuiActivity extends Activity {
         ml.topMargin=dp(5);ml.rightMargin=dp(5);
         layout.addView(menu,ml);
         menu.setOnClickListener(v->setToolbarExpanded(!toolbarExpanded));
+        if(blenderShell)menu.setVisibility(View.GONE);
         // A dedicated Options button opens the existing experimental menu
         // when expanded. The top-right dot itself only folds/unfolds toolbar.
         toolbarOptions=new Button(this);
@@ -362,11 +369,20 @@ public final class WineGuiActivity extends Activity {
             }
             return true;
         });
-        layout.addView(gestureEdge,gp);
+        if(!blenderShell)layout.addView(gestureEdge,gp);
         setToolbarExpanded(false);
-        performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
+        performanceHud.setActive(!blenderShell && getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
-        if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
+        if(blenderShell) {
+            blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
+                if(destroyed||xserver==null)return;
+                xserver.getScreen().requestFocus();
+                KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,key);
+                if(pressed)xserver.getScreen().onKeyDown(key,event);
+                else xserver.getScreen().onKeyUp(key,event);
+            },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},this::showBlenderMenu);
+            layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
+        } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
         AppLanguage.tree(layout);
         setContentView(layout);
         if(performanceHud.isActive())performanceHud.postDelayed(hudTicker,650);
@@ -425,11 +441,12 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null || desktopFailed)return;
-                if(!desktopFailed && desktopLaunchRequested && xserver.mappedWindowCount()>0) {
+                if(!desktopFailed && desktopLaunchRequested &&
+                        (blenderShell?xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0)) {
                     startupStatus.setVisibility(View.GONE);
                     startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                     dependencyPanel.setVisibility(View.GONE);
-                    log("DRNAS_DESKTOP_CONFIRMED: mapped X11 window after Explorer launch");
+                    log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; fullscreen requested":"mapped X11 window after Explorer launch"));
                 }
                 else {
                     if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
@@ -711,23 +728,53 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void captureRenderForFiveSeconds() {
+        captureRenderSample(5000L,false);
+    }
+
+    private void showBlenderMenu() {
+        new AppDialogBuilder(this).setTitle("Blender")
+                .setItems(new String[]{"Puna tipkovnica","Test performansi · 20 sekundi",
+                        "Pošalji log","Postavke i dijagnostika","O ovom izdanju","Zatvori Blender"},(d,which)->{
+                    if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
+                    else if(which==1)captureRenderSample(20000L,true);
+                    else if(which==2)shareGuiLog();
+                    else if(which==3)showGlassControls();
+                    else if(which==4)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
+                            .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
+                            .setPositiveButton("OK",null).show();
+                    else exitConfirmation.confirm(this);
+                }).show();
+    }
+
+    private void captureRenderSample(long durationMs,boolean blenderBenchmark) {
         if(xserver==null || destroyed)return;
         if(renderCaptureRunning || !xserver.startRenderCapture()) {
             Toast.makeText(this,"Uzorak već traje",Toast.LENGTH_SHORT).show();
             return;
         }
         renderCaptureRunning=true;
-        Toast.makeText(this,"Snimam 5 sekundi — bez kontinuiranog loga",
+        final long javaHeapStart=Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory();
+        final String metadata="Device: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
+                "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
+                "\nBlender shell: "+blenderShell+"; guest 1280x720; stretch="+stretchFullscreen+
+                "; viewport="+xserver.getScreen().getWidth()+"x"+xserver.getScreen().getHeight()+
+                "\nCursor: compact 16–28 physical pixels (large brush cursors preserved)\n";
+        Toast.makeText(this,blenderBenchmark?"Snimam 20 s — okreći i pomiči isti model":"Snimam 5 sekundi — bez kontinuiranog loga",
                 Toast.LENGTH_SHORT).show();
         // X11 worker accumulates bounded in-RAM frame timings. No disk IO
         // or giant Strings in PutImage/Canvas hot paths.
         xserver.getScreen().postDelayed(()->{
-            final String result=xserver.finishRenderCapture();
+            final String result=(blenderBenchmark?"Blender · DRNAS performance test\n"+metadata:"")+
+                    xserver.finishRenderCapture()+
+                    (blenderBenchmark?"Java heap at start: "+javaHeapStart+
+                            " bytes\nJava heap at end: "+(Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory())+" bytes\n":"");
             renderCaptureRunning=false;
+            if(blenderBenchmark)log("DRNAS_BLENDER_PERF_RESULT\n"+result);
             new Thread(()->{
                 try {
-                    final String path=GuiLogExport.saveRenderSample(this,out->
-                            out.write(result.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                    GuiLogExport.Writer writer=out->out.write(result.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    final String path=blenderBenchmark?GuiLogExport.saveBlenderSample(this,writer):
+                            GuiLogExport.saveRenderSample(this,writer);
                     runOnUiThread(()->{
                         if(!destroyed)Toast.makeText(this,
                                 "Spremljeno: Downloads/DRNAS/"+path,
@@ -741,7 +788,7 @@ public final class WineGuiActivity extends Activity {
                     });
                 }
             },"emudrnas-render-capture-export").start();
-        },5000L);
+        },durationMs);
     }
 
     private void logEarlyRendererIntent() {
@@ -752,7 +799,8 @@ public final class WineGuiActivity extends Activity {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
         boolean critical=line.startsWith("DRNAS_X11_CRITICAL_") ||
-                line.contains("DRNAS_X11_CRITICAL_") ||
+                line.contains("DRNAS_X11_CRITICAL_") || line.startsWith("DRNAS_BLENDER_PERF_") ||
+                line.startsWith("DRNAS_X11_BLENDER_OWNER_") ||
                 AutomaticLogTrigger.matches(line) ||
                 line.contains(":err:") || line.contains("dlerror") ||
                 line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
@@ -770,7 +818,9 @@ public final class WineGuiActivity extends Activity {
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
         }
         if(line.startsWith("[Startup] "))runOnUiThread(()->{
-            if(!destroyed){startupStatus.setText(AppLanguage.t(this,line.substring(10)));dependencyPanel.setVisibility(View.GONE);}
+            if(!destroyed){startupStatus.setText(blenderShell?
+                    (line.contains("Blender")?line.substring(10):"Pripremam Blender…"):
+                    AppLanguage.t(this,line.substring(10)));dependencyPanel.setVisibility(View.GONE);}
         });
         if(line.startsWith("[Dependencies] ")) {
             int separator=line.indexOf('|',15);
@@ -1140,6 +1190,7 @@ public final class WineGuiActivity extends Activity {
                 getResources().getDisplayMetrics().heightPixels));
     }
     @Override protected void onPause() {
+        if(blenderKeys!=null)blenderKeys.releaseAll();
         if(virtualStick!=null)virtualStick.releaseAll();
         if(gamepadLayer!=null)gamepadLayer.release();
         if(xinputState!=null){xinputState.releaseTouch();xinputState.disconnectPhysical();}
@@ -1167,5 +1218,6 @@ public final class WineGuiActivity extends Activity {
         super.onDestroy();
     }
 }
+
 
 

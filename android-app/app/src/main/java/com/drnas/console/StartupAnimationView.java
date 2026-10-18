@@ -8,11 +8,14 @@ import android.view.View;
 /** Native startup animation; no images, I/O or background work. */
 final class StartupAnimationView extends View {
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final RetroWindowsDrawable flag;
+    private final android.graphics.drawable.Drawable flag;
     private final long origin=SystemClock.uptimeMillis();
     private boolean running=true;
     StartupAnimationView(Context context){
-        super(context);flag=new RetroWindowsDrawable(96);
+        this(context,false);
+    }
+    StartupAnimationView(Context context,boolean blender){
+        super(context);flag=blender?context.getDrawable(R.drawable.ic_blender):new RetroWindowsDrawable(96);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
     void stop(){running=false;invalidate();}
@@ -47,3 +50,4 @@ final class StartupAnimationView extends View {
     }
     private final Paint detail=new Paint(Paint.ANTI_ALIAS_FLAG);
 }
+
