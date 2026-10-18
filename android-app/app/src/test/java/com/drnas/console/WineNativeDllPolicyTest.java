@@ -76,6 +76,86 @@ public class WineNativeDllPolicyTest {
             }
         }
     }
+    private static byte[] testPe(int machine) {
+        byte[] pe=new byte[2048];
+        pe[0]='M';pe[1]='Z';pe[0x3c]=(byte)0x80;
+        pe[0x80]='P';pe[0x81]='E';
+        pe[0x84]=(byte)(machine&255);pe[0x85]=(byte)((machine>>>8)&255);
+        return pe;
+    }
+    private static void cleanTempTree(java.nio.file.Path root) throws Exception {
+        try(java.util.stream.Stream<java.nio.file.Path> all=Files.walk(root)) {
+            all.sorted(java.util.Comparator.reverseOrder()).forEach(p->{
+                try{Files.deleteIfExists(p);}catch(Exception e){throw new RuntimeException(e);}
+            });
+        }
+    }
+    @Test public void nativeArm64ReplacesOnlySystem32DxgiAndIsIdempotent() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-arm64-dxgi");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path system32=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/system32"));
+            java.nio.file.Path syswow64=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/syswow64"));
+            byte[] builtin=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64);
+            byte[] dxvk=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64);
+            byte[] wow=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_I386);
+            Files.write(wine.resolve("dxgi.dll"),builtin);
+            Files.write(system32.resolve("dxgi.dll"),dxvk);
+            Files.write(syswow64.resolve("dxgi.dll"),wow);
+            List<String> logs=new ArrayList<>();
+            assertTrue(WineNativeDllPolicy.stageArm64Dxgi(root.resolve("wine").toFile(),
+                    root.resolve("prefix").toFile(),
+                    WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64,logs::add));
+            assertArrayEquals(builtin,Files.readAllBytes(system32.resolve("dxgi.dll")));
+            assertArrayEquals(wow,Files.readAllBytes(syswow64.resolve("dxgi.dll")));
+            assertTrue(WineNativeDllPolicy.stageArm64Dxgi(root.resolve("wine").toFile(),
+                    root.resolve("prefix").toFile(),
+                    WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64,logs::add));
+            assertTrue(logs.stream().anyMatch(s->s.contains("DRNAS_ARM64_DXGI_STAGE_OK")));
+            assertTrue(logs.stream().anyMatch(s->s.contains("DRNAS_ARM64_DXGI_STAGE_VERIFIED")));
+        }finally{cleanTempTree(root);}
+    }
+    @Test public void nonArm64GuestDoesNotAlterDxvkFile() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-dxgi-x64");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path folder=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/system32"));
+            byte[] dxvk=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64);
+            Files.write(wine.resolve("dxgi.dll"),
+                    testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64));
+            Files.write(folder.resolve("dxgi.dll"),dxvk);
+            assertFalse(WineNativeDllPolicy.stageArm64Dxgi(root.resolve("wine").toFile(),
+                    root.resolve("prefix").toFile(),
+                    WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64,s->{}));
+            assertArrayEquals(dxvk,Files.readAllBytes(folder.resolve("dxgi.dll")));
+        }finally{cleanTempTree(root);}
+    }
+    @Test public void invalidWineArm64DllRefusesToOverwriteExistingDxvk() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-dxgi-invalid");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path folder=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/system32"));
+            byte[] dxvk=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64);
+            Files.write(wine.resolve("dxgi.dll"),testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_I386));
+            Files.write(folder.resolve("dxgi.dll"),dxvk);
+            try {
+                WineNativeDllPolicy.stageArm64Dxgi(root.resolve("wine").toFile(),
+                        root.resolve("prefix").toFile(),
+                        WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64,s->{});
+                fail("Must reject wrong Wine builtin architecture");
+            } catch(java.io.IOException expected) {
+                assertTrue(expected.getMessage().contains("BLOCKED"));
+            }
+            assertArrayEquals(dxvk,Files.readAllBytes(folder.resolve("dxgi.dll")));
+        }finally{cleanTempTree(root);}
+    }
     @Test public void peMachineValidationRejectsMalformedAndDetectsArm64() throws Exception {
         java.nio.file.Path path=Files.createTempFile("drnas-pe-machine",".exe");
         try {
