@@ -292,6 +292,10 @@ final class WineGuiSession implements AutoCloseable {
             // The context still requires compatible native Bionic OpenGL
             // and a functional X11 EGL platform; absence is logged.
             env.put("DRNAS_GRAPHICS_API","WINE_EGL_OPENGL_EXPERIMENT");
+            // Proton/Wine 11 EGL road can be explicitly requested without
+            // spoofing X11 GLX. Ignored harmlessly by builds without the
+            // corresponding Wine EGL environment preference.
+            env.put("WINE_USE_EGL","1");
             env.put("WINEDLLOVERRIDES",env.getOrDefault("WINEDLLOVERRIDES","")+
                     ";opengl32=b");
             log.accept("DRNAS_OPENGL_EXPERIMENT_REQUESTED: Wine 11 EGL backend; "+
