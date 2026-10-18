@@ -250,6 +250,15 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        // A Windows ARM64 blender.exe importing the bundled x86_64 DXVK
+        // dxgi.dll produces STATUS_INVALID_IMAGE_FORMAT (c000007b).
+        // Keep standard DXVK for x64 games, but choose Wine's ARM64 builtins
+        // for an ARM64/ARM64EC EXE or an explicit Native Vulkan profile.
+        int guestPeMachine=0;
+        if(UserShortcuts.isId(app))
+            guestPeMachine=WineNativeDllPolicy.guestMachine(UserShortcuts.resolve(context,app));
+        WineNativeDllPolicy.configure(env,guestPeMachine,nativeVulkan,
+                WineNativeDllPolicy.hasBuiltInDxgi(lib),log);
         WineVulkanRuntime.configure(env,nativeVulkan);
         DxvkFrameCap.configure(env,frameCap);
         log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
@@ -277,7 +286,10 @@ final class WineGuiSession implements AutoCloseable {
         File gl=new File(guiRuntime,"lib/libGL.so.1");
         log.accept(gl.isFile()
                 ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
-                : "Wine X11 OpenGL libGL.so.1 unavailable; Vulkan DXVK path remains preferred.");
+                : "DRNAS_GLX_UNAVAILABLE: pinned GameNative Bionic runtime lacks libGL.so.1; " +
+                  "Wine OpenGL/WGL fallback is disabled. Native Vulkan may still work " +
+                  "through WineVulkan/Turnip if Vulkan device and X11 WSI succeed. " +
+                  "This build does NOT claim to repair missing GLX.");
         log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
