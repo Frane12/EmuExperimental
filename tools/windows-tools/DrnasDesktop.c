@@ -20,6 +20,7 @@ static RECT previous_work;
 static BOOL changed_work;
 static BOOL taskbar_sized;
 static unsigned taskbar_attempts;
+static int last_pollen_x[20], last_pollen_y[20];
 static DWORD started;
 static const wchar_t *art = L"C:\\users\\xuser\\Pictures\\Drnas-Desktop-Meadow.bmp";
 
@@ -86,10 +87,20 @@ static void animate(void)
     HDC dc;
     int w = GetSystemMetrics(SM_CXSCREEN), h = GetSystemMetrics(SM_CYSCREEN);
     double t = (GetTickCount() - started) / 1000.0;
-    /* A timeout affects this low-priority helper only, never waits on Android UI. */
-    if (!InvalidateRect(desktop, NULL, TRUE) ||
-        !SendMessageTimeoutW(desktop, WM_PAINT, 0, 0,
-            SMTO_ABORTIFHUNG | SMTO_BLOCK, 80, &result)) return;
+    /* Repaint only the previous motes, NEVER invalidate the whole Windows
+     * desktop: full-screen WM_PAINT every 125ms also repaints/flickers the
+     * Explorer taskbar and Start button on Wine.
+     */
+    BOOL erased = FALSE;
+    for (int i = 0; i < 20; i++) {
+        if (last_pollen_x[i] > 0 && last_pollen_y[i] > 0) {
+            RECT spot = {last_pollen_x[i]-2,last_pollen_y[i]-2,
+                         last_pollen_x[i]+4,last_pollen_y[i]+4};
+            if (InvalidateRect(desktop,&spot,FALSE))erased=TRUE;
+        }
+    }
+    if (erased && !SendMessageTimeoutW(desktop,WM_PAINT,0,0,
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,80,&result))return;
     dc = GetDCEx(desktop, NULL, DCX_CACHE | DCX_CLIPCHILDREN | DCX_CLIPSIBLINGS);
     if (!dc) return;
     for (int i = 0; i < 20; i++) {
@@ -99,6 +110,8 @@ static void animate(void)
         COLORREF color = i % 3 ? RGB(244, 244, 192) : RGB(176, 240, 207);
         SetPixelV(dc, x, y, color);
         if (i % 4 == 0) SetPixelV(dc, x + 1, y, RGB(216, 236, 187));
+        last_pollen_x[i]=x;
+        last_pollen_y[i]=y;
     }
     ReleaseDC(desktop, dc);
 }
