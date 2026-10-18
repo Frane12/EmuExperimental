@@ -22,6 +22,7 @@ static BOOL taskbar_sized;
 static unsigned taskbar_attempts;
 static int last_pollen_x[20], last_pollen_y[20];
 static DWORD started;
+static HWND observed_foreground;
 static const wchar_t *art = L"C:\\users\\xuser\\Pictures\\Drnas-Desktop-Meadow.bmp";
 
 static void evidence(const char *line)
@@ -115,10 +116,31 @@ static void animate(void)
     }
     ReleaseDC(desktop, dc);
 }
+/* Read-only Win32 foreground audit, 500ms. Never activates any window.
+ * Complements the X server's client-sequence stacking trace. No I/O unless
+ * the active Win32 HWND actually changes. */
+static void audit_foreground(void)
+{
+    HWND now = GetForegroundWindow();
+    if (now == observed_foreground) return;
+    observed_foreground = now;
+    DWORD pid = 0;
+    wchar_t title[96] = {0};
+    char utf8[256] = {0};
+    if (now) {
+        GetWindowThreadProcessId(now, &pid);
+        GetWindowTextW(now, title, 95);
+        WideCharToMultiByte(CP_UTF8, 0, title, -1, utf8, sizeof(utf8), NULL, NULL);
+    }
+    fprintf(stderr, "DRNAS_X11_CRITICAL_WINE_FOREGROUND tickMs=%lu hwnd=%p pid=%lu title=%.140s\\n",
+            (unsigned long)GetTickCount(), (void *)now, (unsigned long)pid, utf8);
+    fflush(stderr);
+}
 static LRESULT CALLBACK helper_proc(HWND window, UINT message, WPARAM wp, LPARAM lp)
 {
     if (message == WM_TIMER) {
-        if (wp == 2) size_taskbar_once(window);
+        if (wp == 3) audit_foreground();
+        else if (wp == 2) size_taskbar_once(window);
         else if (wp == 1 && live) {
             BOOL paused = covered();
             SetTimer(window, 1, paused ? 500 : 125, NULL);
@@ -164,6 +186,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
      * touching the taskbar after the first successful request. */
     if (large) SetTimer(window, 2, 250, NULL);
     if (live) SetTimer(window, 1, 125, NULL);
+    SetTimer(window, 3, 500, NULL); /* foreground observer only */
     while (GetMessageW(&message, NULL, 0, 0) > 0) {
         TranslateMessage(&message); DispatchMessageW(&message);
     }
