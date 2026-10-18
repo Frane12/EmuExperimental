@@ -4,7 +4,6 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.EOFException;
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.net.Socket;
 
@@ -19,29 +18,38 @@ public class InputOutput {
     private final BufferedOutputStream _outStream;
     private final X11OutputQueue _outputQueue;
     private boolean _msb = true;
-    private ByteArrayInputStream _requestBody;
+    private X11RequestBuffer _requestBody;
+    private final X11RequestBuffer requestBuffer=new X11RequestBuffer();
+    private long requestReadNanos;
     static final int MAX_REQUEST_WORDS = 4 * 1024 * 1024; // 16 MiB, including header.
 
     /** Receive the complete body before the caller takes the global X server lock. */
     void beginRequest(int length) throws IOException {
+        beginRequest(length,false);
+    }
+    void beginRequest(int length,boolean measure) throws IOException {
         if (length < 0 || length > MAX_REQUEST_WORDS * 4 - 4)
             throw new IOException("Invalid X11 request body length: " + length);
         if (_requestBody != null) throw new IOException("Nested X11 request");
-        byte[] body = new byte[length];
-        int offset = 0;
-        while (offset < length) {
-            int count = _inStream.read(body, offset, length - offset);
-            if (count < 0) throw new EOFException("Truncated X11 request body: " + offset + "/" + length);
-            if (count == 0) continue;
-            offset += count;
-        }
-        _requestBody = new ByteArrayInputStream(body);
+        requestReadNanos=0L;
+        long started=measure?System.nanoTime():0L;
+        try {requestBuffer.receive(_inStream,length,MAX_REQUEST_WORDS*4-4);}
+        catch(OutOfMemoryError error){throw new IOException("Cannot allocate X11 request storage",error);}
+        if(measure)requestReadNanos=System.nanoTime()-started;
+        _requestBody=requestBuffer;
     }
 
     int endRequest() {
-        int unread = _requestBody == null ? 0 : _requestBody.available();
+        int unread = _requestBody == null ? 0 : _requestBody.finish();
         _requestBody = null;
+        requestReadNanos=0L;
         return unread;
+    }
+
+    long requestReadNanos(){return requestReadNanos;}
+    void readBgrx(int[] destination,int pixels,boolean bulk) throws IOException {
+        if(_requestBody==null)throw new IOException("X11 pixels require a framed request");
+        _requestBody.decodeBgrx(destination,pixels,bulk);
     }
 
     private InputStream input() { return _requestBody == null ? _inStream : _requestBody; }
@@ -372,4 +380,5 @@ public class InputOutput {
         _inStream.close();
     }
 }
+
 

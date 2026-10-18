@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 102
-        versionName = "preAlpha-0.1-r36-d-only-volumes"
+        versionCode = 104
+        versionName = "preAlpha-0.1-r38-render-transfer-fps"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

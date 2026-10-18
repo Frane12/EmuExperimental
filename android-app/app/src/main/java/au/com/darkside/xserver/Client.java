@@ -273,7 +273,8 @@ public class Client extends Thread {
                 throw new IOException("Invalid X11 request length in words: " + words);
             bytesRemaining = (int) (words * 4 - headerWords * 4);
             _lastRequestBytes = bytesRemaining;
-            _inputOutput.beginRequest(bytesRemaining);
+            _inputOutput.beginRequest(bytesRemaining,
+                    _xServer.isFrameDiagnosticsEnabled() || _xServer.isRenderCaptureEnabled());
 
             // Deal with server grabs.
             while (!_xServer.processingAllowed(this)) {
@@ -836,5 +837,6 @@ public class Client extends Thread {
             _xServer.destroyClientResources(client);
     }
 }
+
 
 

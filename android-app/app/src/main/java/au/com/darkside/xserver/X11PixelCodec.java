@@ -15,18 +15,25 @@ public final class X11PixelCodec {
      * Expected output matches decodeBgrxToArgb() byte-for-byte.
      */
     public static void decodeBgrxBulk(IntBuffer words,int[] destination,int pixels){
-        if(pixels<0||pixels>destination.length||words.capacity()<pixels)
+        decodeBgrxBulk(words,0,destination,pixels);
+    }
+    public static void decodeBgrxBulk(IntBuffer words,int wordOffset,int[] destination,int pixels){
+        if(wordOffset<0 || pixels<0 || pixels>destination.length ||
+                (long)wordOffset+pixels>words.limit())
             throw new IllegalArgumentException("Invalid X11 bulk pixel buffer");
-        words.position(0);
+        words.position(wordOffset);
         words.get(destination,0,pixels);
         for(int i=0;i<pixels;i++)destination[i]|=0xff000000;
     }
 
     /** Input is B,G,R,unused byte per pixel; output is Android ARGB_8888 int. */
     public static void decodeBgrxToArgb(byte[] source, int[] destination, int pixels) {
-        if (pixels < 0 || (long)pixels * 4 > source.length || pixels > destination.length)
+        decodeBgrxToArgb(source,0,destination,pixels);
+    }
+    public static void decodeBgrxToArgb(byte[] source,int sourceOffset,int[] destination,int pixels) {
+        if (sourceOffset<0 || pixels < 0 || (long)sourceOffset+(long)pixels * 4 > source.length || pixels > destination.length)
             throw new IllegalArgumentException("Invalid X11 pixel buffer");
-        for (int i = 0, offset = 0; i < pixels; i++, offset += 4) {
+        for (int i = 0, offset = sourceOffset; i < pixels; i++, offset += 4) {
             destination[i] = 0xff000000
                     | ((source[offset + 2] & 0xff) << 16)
                     | ((source[offset + 1] & 0xff) << 8)
@@ -34,3 +41,4 @@ public final class X11PixelCodec {
         }
     }
 }
+

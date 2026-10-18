@@ -421,10 +421,12 @@ public final class WineGuiActivity extends Activity {
         layout.addView(virtualStick,stickParams);
         syncVirtualPadConnection();
         performanceHud=new DrnasPerformanceHud(this);
+        performanceHud.setCompactFps(blenderShell);
         FrameLayout.LayoutParams hp=new FrameLayout.LayoutParams(
-                Math.min(dp(620),getResources().getDisplayMetrics().widthPixels-dp(100)),
-                dp(32),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
-        hp.topMargin=dp(5);
+                blenderShell?dp(150):Math.min(dp(620),getResources().getDisplayMetrics().widthPixels-dp(100)),
+                dp(blenderShell?26:32),Gravity.TOP|(blenderShell?Gravity.END:Gravity.CENTER_HORIZONTAL));
+        hp.topMargin=dp(blenderShell?38:5);
+        if(blenderShell)hp.rightMargin=dp(10);
         layout.addView(performanceHud,hp);
         // A very thin, transparent gesture zone at the screen's top edge:
         // pull down to reveal toolbar, pull upward to collapse it. No gesture
@@ -448,8 +450,10 @@ public final class WineGuiActivity extends Activity {
         });
         if(!blenderShell)layout.addView(gestureEdge,gp);
         setToolbarExpanded(false);
-        performanceHud.setActive(!blenderShell && getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
-        xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
+        performanceHud.setActive(getPreferences(MODE_PRIVATE).getBoolean(
+                blenderShell?"blender_perf_hud":"perf_hud",blenderShell));
+        xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive()&&!blenderShell);
+        if(blenderShell)performanceHud.setVisibility(View.GONE);
         if(blenderShell) {
             blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
                 if(destroyed||xserver==null)return;
@@ -471,7 +475,7 @@ public final class WineGuiActivity extends Activity {
         } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
         AppLanguage.tree(layout);
         setContentView(layout);
-        if(performanceHud.isActive())performanceHud.postDelayed(hudTicker,650);
+        if(performanceHud.isActive()&&!blenderShell)performanceHud.postDelayed(hudTicker,650);
         try {
             AutomaticCrashLog.begin(this);
             raw=new RawWineTrace(new File(getFilesDir(),"logs"),"latest-wine-gui-raw.txt");
@@ -541,6 +545,11 @@ public final class WineGuiActivity extends Activity {
                             if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
                             startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                             if(blenderKeys!=null)blenderKeys.setVisibility(View.VISIBLE);
+                            if(performanceHud.isActive()) {
+                                performanceHud.setVisibility(View.VISIBLE);
+                                xserver.getScreen().setFpsCounterEnabled(true);
+                                performanceHud.post(hudTicker);
+                            }
                         },250);
                     } else {
                         startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
@@ -656,7 +665,8 @@ public final class WineGuiActivity extends Activity {
                     else if(which==9)openTextFallback();
                     else if(which==20) {
                         boolean enable=!performanceHud.isActive();
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
+                        getPreferences(MODE_PRIVATE).edit().putBoolean(
+                                blenderShell?"blender_perf_hud":"perf_hud",enable).apply();
                         performanceHud.setActive(enable);
                         xserver.getScreen().setFpsCounterEnabled(enable);
                         performanceHud.removeCallbacks(hudTicker);
@@ -836,7 +846,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -846,6 +856,14 @@ public final class WineGuiActivity extends Activity {
                             .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
                             .setPositiveButton("OK",null).show();
                     else if(which==7)showBlenderProjectFolder();
+                    else if(which==8) {
+                        boolean enable=!performanceHud.isActive();
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("blender_perf_hud",enable).apply();
+                        performanceHud.setActive(enable);
+                        xserver.getScreen().setFpsCounterEnabled(enable);
+                        performanceHud.removeCallbacks(hudTicker);
+                        if(enable)performanceHud.post(hudTicker);
+                    }
                     else exitConfirmation.confirm(this);
                 }).show();
     }

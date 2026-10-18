@@ -203,19 +203,13 @@ public class ScreenView extends View {
         _cameraSensitivity=Math.max(0.4f,Math.min(4f,value));
     }
     private boolean _relativeTouchMode;
-    private volatile float displayedFps;
-    private long lastDisplaySampleNs;
-    private int displayedFrames;
-    public float getDisplayedFps(){return displayedFps;}
-    public float getDisplayedFrameMs(){return displayedFps>0?1000f/displayedFps:0f;}
+    private final X11DisplayRate displayRate=new X11DisplayRate();
+    public float getDisplayedFps(){return fpsCounterEnabled?displayRate.sample(System.nanoTime()):0f;}
+    public float getDisplayedFrameMs(){float fps=displayRate.current();return fpsCounterEnabled&&fps>0?1000f/fps:0f;}
     private boolean fpsCounterEnabled;
     public void setFpsCounterEnabled(boolean enabled) {
         fpsCounterEnabled=enabled;
-        if(!enabled) {
-            displayedFrames=0;
-            lastDisplaySampleNs=0L;
-            displayedFps=0f;
-        }
+        displayRate.reset(enabled?System.nanoTime():0L);
     }
 
     private float _touchLastX, _touchLastY, _touchRemainderX, _touchRemainderY;
@@ -883,17 +877,7 @@ public class ScreenView extends View {
                 _paint.reset();
             }
             // No timing/counters in HWUI's drawing path when HUD is disabled.
-            if(fpsCounterEnabled) {
-                long now=System.nanoTime();
-                displayedFrames++;
-                if(lastDisplaySampleNs==0)lastDisplaySampleNs=now;
-                long elapsed=now-lastDisplaySampleNs;
-                if(elapsed>=500000000L) {
-                    displayedFps=(float)(displayedFrames*1000000000.0/elapsed);
-                    displayedFrames=0;
-                    lastDisplaySampleNs=now;
-                }
-            }
+            if(fpsCounterEnabled)displayRate.draw();
             _xServer.captureCanvasDraw();
             _xServer.canvasDrawn();
             if (cursorOverlayListener==null && _currentCursor!=null)
@@ -2143,3 +2127,4 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+

@@ -55,17 +55,17 @@ public final class RenderSampleRecorder {
         r.append("Source: X11 PutImage -> Android Bitmap -> HWUI\n");
         r.append("Engine FPS / DXVK Present timestamps: NOT OBSERVED by this sampler\n");
         r.append("PutImage updates: ").append(uploads).append(" (max retained ").append(CAP).append(")\n");
-        r.append("Displayed frame intervals sampled: ").append(displays).append("\n");
-        r.append("Android display FPS: ").append(String.format(Locale.ROOT,"%.1f",displays/duration)).append("\n");
+        r.append("Desktop onDraw intervals sampled: ").append(displays).append("\n");
+        r.append("Android UI draw rate (not GPU Present FPS): ").append(String.format(Locale.ROOT,"%.1f",displays/duration)).append(" /s\n");
         r.append("PutImage transport volume: ").append(String.format(Locale.ROOT,"%.1f MiB",totalBytes/1048576.0)).append("\n");
         r.append("PutImage throughput: ").append(String.format(Locale.ROOT,"%.1f MiB/s",totalBytes/1048576.0/duration)).append("\n");
         r.append("Last drawable: ").append(drawableId).append(" source ").append(srcW).append('x').append(srcH);
         r.append(" target ").append(targetW).append('x').append(targetH).append("\n");
         r.append("Distinct geometry transitions: ").append(geometryChanges).append("\n");
-        appendStats(r,"X11 bytes read + wait",read,uploads,true);
+        appendStats(r,"X11 request body read + wait",read,uploads,true);
         appendStats(r,"BGRX decode",decode,uploads,true);
         appendStats(r,"Bitmap/Canvas upload",upload,uploads,true);
-        appendStats(r,"Android display interval",displayIntervals,displays,true);
+        appendStats(r,"Android UI draw interval",displayIntervals,displays,true);
         r.append("All statistics exclude GPU Present timing and guest frame-generation latency.\n");
         return r.toString();
     }
@@ -89,3 +89,4 @@ public final class RenderSampleRecorder {
     }
     private static String ms(double nanos){return String.format(Locale.ROOT,"%.3f",nanos/1.0e6);}
 }
+

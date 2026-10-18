@@ -44,6 +44,8 @@ final class DrnasPerformanceHud extends View {
     private final Typeface valueFont=Typeface.create("sans-serif-medium",Typeface.BOLD);
     private Shader glassGradient;
     private boolean active;
+    private boolean compactFps;
+    void setCompactFps(boolean compact){compactFps=compact;}
 
     DrnasPerformanceHud(Context context) {
         super(context);
@@ -72,7 +74,10 @@ final class DrnasPerformanceHud extends View {
 
     void sample(float displayedFps,float displayedFrameMs) {
         if(!active)return;
-        values[0]=displayedFps>0?String.format(Locale.ROOT,"%.0f",displayedFps):"--";
+        values[0]=String.format(Locale.ROOT,"%.0f",Math.max(0f,displayedFps));
+        values[5]=displayedFrameMs>0?
+                String.format(Locale.ROOT,"%.1f ms",displayedFrameMs):"idle";
+        if(compactFps){postInvalidateOnAnimation();return;}
         values[1]=stats.cpu();
         values[2]=stats.gpu();
         values[5]=displayedFrameMs>0?
@@ -124,11 +129,17 @@ final class DrnasPerformanceHud extends View {
         border.setStrokeWidth(Math.max(1f,density));
         border.setColor(0x668ac6de);
         canvas.drawRoundRect(box,radius,radius,border);
+        if(compactFps) {
+            text.setTypeface(valueFont);text.setTextSize(10.5f*scaledDensity);
+            text.setColor(0xff8ff0cf);
+            canvas.drawText("UI FPS "+values[0]+"  ·  "+values[5],w*.5f,h*.65f,text);
+            return;
+        }
         // Six honest metrics: host display FPS / total device (or labeled APP)
         // CPU / KGSL GPU busy when readable / host RAM / battery / display FT.
         // Five thin dividers; no nested oval or giant typography.
         float segment=w/6f;
-        final String[] titles={"FPS","CPU","GPU","RAM","BAT","FT"};
+        final String[] titles={"UI FPS","CPU","GPU","RAM","BAT","UI ms"};
         for(int i=0;i<6;i++) {
             float x=(i+.5f)*segment;
             if(i>0){
@@ -145,3 +156,4 @@ final class DrnasPerformanceHud extends View {
         }
     }
 }
+

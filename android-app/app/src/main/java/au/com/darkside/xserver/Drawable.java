@@ -22,12 +22,11 @@ public class Drawable {
     private Bitmap _backgroundBitmap;
     private int _backgroundColor;
     private boolean[] _shapeMask = null;
-    // Retain one buffer per drawable, not one 800x600 (~6 MiB) allocation
-    // per Mesa sw,noshm PutImage. A window owns this state until destruction.
-    private byte[] _zUploadBytes;
-    private java.nio.IntBuffer _bulkWords;
+    // Reuse ARGB conversion storage per drawable. The encoded payload lives
+    // only in the client's bounded request buffer, not a second drawable copy.
     private int[] _zUploadColors;
     private Bitmap _zUploadBitmap;
+    private final Rect copySource=new Rect(),copyDestination=new Rect();
     // One diagnostic per changed fast PutImage geometry, no per-frame strings.
     // Re-arm on toggling logs OFF -> ON.
     private boolean previousGeometryLogged;
@@ -439,9 +438,18 @@ public class Drawable {
 
         if (width <= 0 || height <= 0) return;
 
-        Bitmap bm = Bitmap.createBitmap(_bitmap, sx, sy, width, height);
-
-        dst._canvas.drawBitmap(bm, dx, dy, gc.getPaint());
+        if(dst!=this && gc.isUnclippedOpaqueCopy()) {
+            // Pixmap -> window copies do not alias: draw the existing source
+            // directly instead of allocating/copying a cropped Bitmap.
+            copySource.set(sx,sy,sx+width,sy+height);
+            copyDestination.set(dx,dy,dx+width,dy+height);
+            dst._canvas.drawBitmap(_bitmap,copySource,copyDestination,gc.getPaint());
+        }else {
+            // In-place copies may overlap. Preserve the source snapshot and
+            // the generic GC behavior for these operations.
+            Bitmap bm = Bitmap.createBitmap(_bitmap, sx, sy, width, height);
+            dst._canvas.drawBitmap(bm, dx, dy, gc.getPaint());
+        }
 
         if (dr.getType() == Resource.WINDOW) ((Window) dr).invalidate(dx, dy, width, height);
 
@@ -801,21 +809,28 @@ public class Drawable {
 
         boolean isShapeMask = false;
 
+        long payloadLength;
         if (format == Z_PIXMAP_FORMAT) {
             rightPad = 0;
             if (depth == 24) {
-                n = 4 * width * height;
+                payloadLength = 4L * width * height;
             } else {
-                n = (width * height + 7) / 8;
-                if (bytesRemaining != n + (-n & 3)) {
+                payloadLength = ((long)width * height + 7) / 8;
+                if (bytesRemaining != payloadLength + (-payloadLength & 3)) {
                     isShapeMask = true;
-                    n = (width + 1) / 2 * height;
+                    payloadLength = (long)((width + 1) / 2) * height;
                 }
             }
         } else {    // XYPixmap or Bitmap.
             rightPad = -(width + leftPad) & 7;
-            n = ((width + leftPad + rightPad) * height * depth + 7) / 8;
+            payloadLength = ((long)(width + leftPad + rightPad) * height * depth + 7) / 8;
         }
+        if(payloadLength>Integer.MAX_VALUE || (long)width*height>Integer.MAX_VALUE) {
+            io.readSkip(bytesRemaining);
+            ErrorCode.write(client,ErrorCode.Alloc,RequestCode.PutImage,0);
+            return false;
+        }
+        n=(int)payloadLength;
         pad = -n & 3;
 
         if (bytesRemaining != n + pad) {
@@ -823,12 +838,15 @@ public class Drawable {
             ErrorCode.write(client, ErrorCode.Length, RequestCode.PutImage, 0);
             return false;
         }
+        // A zero-area PutImage is a no-op, not a zero-size Bitmap or an
+        // unbounded generic bit loop reading beyond this request.
+        if(width==0 || height==0) {io.readSkip(bytesRemaining);return false;}
 
 
         // Mesa software WSI streams a full BGRX frame via X11 PutImage.
         // The generic per-byte loop incurs ~1.9 million Java readByte() calls
         // AND three full-frame allocations at 800x600 on every repaint.
-        // Use bulk reads, a linear decoder and reusable staging resources.
+        // Decode the already received request directly, reusing staging resources.
         // Preserve the generic renderer when a shape mask needs compositing.
         final int pixels = width * height;
         // GXcopy without clipping can write the destination bitmap itself.
@@ -880,10 +898,6 @@ public class Drawable {
         }else previousGeometryLogged=false;
         if (fastBgrx) {
             try {
-                if (_zUploadBytes == null || _zUploadBytes.length < n) {
-                    _zUploadBytes = new byte[n];
-                    _bulkWords = null; // rebuild view only on backing-array growth
-                }
                 if (_zUploadColors == null || _zUploadColors.length < pixels)
                     _zUploadColors = new int[pixels];
                 if (!directCopy && (_zUploadBitmap == null || _zUploadBitmap.getWidth() != width
@@ -897,18 +911,9 @@ public class Drawable {
             boolean profile=xServer.isFrameDiagnosticsEnabled();
             boolean sampled=xServer.isRenderCaptureEnabled();
             boolean measure=profile || sampled;
-            long tRead=measure?System.nanoTime():0L;
-            io.readBytes(_zUploadBytes,0,n);
-            io.readSkip(pad);
             long tDecodedStart=measure?System.nanoTime():0L;
-            if(xServer.isExperimentalBulkDecode()) {
-                if(_bulkWords==null)
-                    _bulkWords=java.nio.ByteBuffer.wrap(_zUploadBytes)
-                            .order(java.nio.ByteOrder.LITTLE_ENDIAN).asIntBuffer();
-                X11PixelCodec.decodeBgrxBulk(_bulkWords,_zUploadColors,pixels);
-            }else {
-                X11PixelCodec.decodeBgrxToArgb(_zUploadBytes,_zUploadColors,pixels);
-            }
+            io.readBgrx(_zUploadColors,pixels,xServer.isExperimentalBulkDecode());
+            io.readSkip(pad);
             long tUploadedStart=measure?System.nanoTime():0L;
             if (directCopy) {
                 _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,
@@ -923,13 +928,13 @@ public class Drawable {
             if(measure) {
                 long end=System.nanoTime();
                 if(sampled)xServer.capturePutImage(
-                        tDecodedStart-tRead,tUploadedStart-tDecodedStart,
+                        io.requestReadNanos(),tUploadedStart-tDecodedStart,
                         end-tUploadedStart,n,drawableId,width,height,
                         _bitmap.getWidth(),_bitmap.getHeight());
                 if(profile) {
                     if(profiler==null)profiler=new X11PutImageProfiler();
                     String summary=profiler.record(
-                            tDecodedStart-tRead,tUploadedStart-tDecodedStart,
+                            io.requestReadNanos(),tUploadedStart-tDecodedStart,
                             end-tUploadedStart,n,end);
                     if(summary!=null)
                         xServer.diagnostic("drawable="+drawableId+" "+summary);
