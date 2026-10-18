@@ -27,12 +27,13 @@ final class BlenderKeyPanel extends LinearLayout {
         if(right-left!=oldRight-oldLeft || bottom-top!=oldBottom-oldTop)
             post(this::restoreWhenMeasured);
     };
-    private final Runnable keyboard,options;
+    private final Runnable keyboard,options,exportToAndroid;
 
     BlenderKeyPanel(Context context,KeySink sink,MouseSink mouse,
-                    Runnable keyboard,Runnable options) {
+                    Runnable keyboard,Runnable options,Runnable exportToAndroid) {
         super(context);this.sink=sink;this.mouse=mouse;
         this.keyboard=keyboard;this.options=options;
+        this.exportToAndroid=exportToAndroid;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(3),dp(3),dp(3),dp(3));
@@ -67,6 +68,9 @@ final class BlenderKeyPanel extends LinearLayout {
         key(bottom,"Enter",KeyEvent.KEYCODE_ENTER);key(bottom,"Del",KeyEvent.KEYCODE_FORWARD_DEL);
         action(bottom,"Undo",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_Z));
         action(bottom,"Save",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_S));
+        // Export is explicitly separate from Blender Ctrl+S: it opens the
+        // Android system document picker only AFTER a project exists in Wine.
+        action(bottom,"⇩ Android",exportToAndroid);
         action(bottom,"⌨",keyboard);
         // The top row is intentionally wide on a phone. Limit the panel to
         // the visible viewport and scroll the *keys*, not the grip/menu.
@@ -169,7 +173,8 @@ final class BlenderKeyPanel extends LinearLayout {
     }
     private void gap(LinearLayout r){r.addView(new View(getContext()),new LayoutParams(dp(5),1));}
     private Button action(LinearLayout r,String label,Runnable run) {
-        Button b=button(label,label);LayoutParams p=new LayoutParams(dp(label.length()>3?44:32),dp(27));
+        Button b=button(label,label);LayoutParams p=new LayoutParams(dp(label.contains("Android")?74:
+                label.length()>3?44:32),dp(27));
         p.setMargins(dp(1),dp(1),dp(1),dp(1));r.addView(b,p);b.setOnClickListener(v->run.run());return b;
     }
     private void key(LinearLayout r,String label,int code){action(r,label,()->{
