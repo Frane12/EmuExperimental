@@ -16,6 +16,7 @@ final class DrnasPaintRuntime {
         stage(context,dir,"windows-tools/DRNASPaint.exe","DRNASPaint.exe",log);
         stage(context,dir,"windows-tools/DRNASPad.exe","DRNASPad.exe",log);
         stage(context,dir,"windows-tools/DRNASDesktop.exe","DRNASDesktop.exe",log);
+        stage(context,dir,"windows-tools/DRNASLinkLaunch.exe","DRNASLinkLaunch.exe",log);
     }
     private static void stage(Context context,File dir,String source,String name,
                               Consumer<String> log) throws IOException {
