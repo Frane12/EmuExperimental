@@ -23,8 +23,8 @@ final class AppSettingsDialog {
                 "Globalno (0–240 FPS)",InputType.TYPE_CLASS_NUMBER);
         label(a,form,"GRAFIČKI API · Vulkan bez DXVK pretvorbe");
         Spinner graphics=spinner(a,form,new String[]{
-                "Automatski", "DirectX preko DXVK", "Native Vulkan (WineVulkan → Turnip)"},
-                "vulkan".equals(profile.graphicsApi)?2:"dxvk".equals(profile.graphicsApi)?1:0);
+                "Automatski", "DirectX preko DXVK", "Native Vulkan (WineVulkan → Turnip)", "OpenGL (Wine11 EGL → Zink → Turnip)"},
+                "opengl".equals(profile.graphicsApi)?3:"vulkan".equals(profile.graphicsApi)?2:"dxvk".equals(profile.graphicsApi)?1:0);
         label(a,form,"ARGUMENTI PREČACA (.exe / .lnk) · npr. --gpu-backend vulkan");
         EditText launchArgs=input(a,form,profile.launchArgs,
                 "npr. --gpu-backend vulkan",InputType.TYPE_CLASS_TEXT);
@@ -76,7 +76,8 @@ final class AppSettingsDialog {
                     AppLaunchSettings.save(a,entry.id,new AppLaunchSettings.Profile(
                             title.equals(entry.title)?"":title,cap,mode==1?"standard":mode==2?"async":"default",
                             stretch.getSelectedItemPosition()-1,gain,
-                            graphics.getSelectedItemPosition()==2?"vulkan":
+                            graphics.getSelectedItemPosition()==3?"opengl":
+                             graphics.getSelectedItemPosition()==2?"vulkan":
                             graphics.getSelectedItemPosition()==1?"dxvk":"auto",commandArgs));
                 }
                 dialog.dismiss();changed.run();

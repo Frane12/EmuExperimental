@@ -42,16 +42,20 @@ final class LaunchArguments {
      */
     static List<String> forApp(String executable,String custom,boolean nativeVulkan)
             throws IOException {
+        return forApp(executable,custom,nativeVulkan?"vulkan":"auto");
+    }
+    static List<String> forApp(String executable,String custom,String graphicsApi)
+            throws IOException {
         List<String> args=new ArrayList<>(parse(custom));
-        if(nativeVulkan && executable!=null &&
-                executable.toLowerCase(Locale.ROOT).replace('\\','/')
-                    .endsWith("/blender.exe")) {
+        if(("vulkan".equals(graphicsApi)||"opengl".equals(graphicsApi)) &&
+                executable!=null && executable.toLowerCase(Locale.ROOT)
+                    .replace('\\','/').endsWith("/blender.exe")) {
             boolean explicitlySelected=false;
-            for(int i=0;i<args.size();i++)
-                if("--gpu-backend".equalsIgnoreCase(args.get(i)) ||
-                        args.get(i).toLowerCase(Locale.ROOT).startsWith("--gpu-backend="))
+            for(String arg:args)
+                if("--gpu-backend".equalsIgnoreCase(arg) ||
+                        arg.toLowerCase(Locale.ROOT).startsWith("--gpu-backend="))
                     explicitlySelected=true;
-            if(!explicitlySelected){args.add("--gpu-backend");args.add("vulkan");}
+            if(!explicitlySelected){args.add("--gpu-backend");args.add(graphicsApi);}
         }
         if(args.size()>18)throw new IOException("Too many launch arguments");
         return args;
@@ -67,15 +71,20 @@ final class LaunchArguments {
      */
     static List<String> forLink(String guestLink,String custom,boolean nativeVulkan)
             throws IOException {
+        return forLink(guestLink,custom,nativeVulkan?"vulkan":"auto");
+    }
+    static List<String> forLink(String guestLink,String custom,String graphicsApi)
+            throws IOException {
         List<String> extra=parse(custom);
-        if(!nativeVulkan && extra.isEmpty())return Collections.emptyList();
+        boolean backend="vulkan".equals(graphicsApi)||"opengl".equals(graphicsApi);
+        if(!backend && extra.isEmpty())return Collections.emptyList();
         if(guestLink==null ||
                 !guestLink.toLowerCase(Locale.ROOT).endsWith(".lnk") ||
                 !(guestLink.startsWith("C:\\")||guestLink.startsWith("R:\\")))
             throw new IOException("Link must be a verified C:/R: guest .lnk");
         List<String> args=new ArrayList<>();
         args.add(guestLink);
-        args.add(nativeVulkan?"vulkan":"auto");
+        args.add(backend?graphicsApi:"auto");
         args.addAll(extra);
         return args;
     }

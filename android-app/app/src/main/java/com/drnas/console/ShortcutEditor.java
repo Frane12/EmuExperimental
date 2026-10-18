@@ -47,7 +47,7 @@ final class ShortcutEditor {
         graphicsApi=new Spinner(activity);
         graphicsApi.setAdapter(new ArrayAdapter<>(activity,
                 android.R.layout.simple_spinner_dropdown_item,new String[]{
-                "Automatski", "DirectX preko DXVK", "Native Vulkan · WineVulkan/Turnip"}));
+                "Automatski", "DirectX preko DXVK", "Native Vulkan · WineVulkan/Turnip", "OpenGL · Wine 11 EGL / Zink (eksperiment)"}));
         root.addView(graphicsApi);
         TextView argsLabel=new TextView(activity);
         argsLabel.setText("ARGUMENTI (.exe) · npr. --gpu-backend vulkan");
@@ -58,8 +58,9 @@ final class ShortcutEditor {
         launchArgs.setHintTextColor(0xff9db8c5);
         root.addView(launchArgs);
         TextView hint=new TextView(activity);
-        hint.setText("Blender: odaberi Native Vulkan. --gpu-backend vulkan dodaje se automatski " +
-                "ako ga sam ne upišeš. Postavke kasnije mijenjaš dugim dodirom na ikonu.");
+        hint.setText("Blender: odaberi OpenGL za EGL/Zink test ili Native Vulkan za usporedbu. " +
+                "Odabrani --gpu-backend dodaje se automatski, osim ako si ga ručno upisao. " +
+                "OpenGL zahtijeva stvarni EGL i X11 Present; rezultat potvrdi logom.");
         hint.setTextSize(11);hint.setTextColor(0xffa9cbd8);root.addView(hint);
         preview=new LinearLayout(activity);preview.setGravity(android.view.Gravity.CENTER);
         root.addView(preview,new LinearLayout.LayoutParams(-1,dp(70)));
@@ -115,7 +116,8 @@ final class ShortcutEditor {
         final String args=launchArgs.getText().toString().trim();
         try {LaunchArguments.parse(args);}
         catch(java.io.IOException invalid){launchArgs.setError(invalid.getMessage());return;}
-        final String api=graphicsApi.getSelectedItemPosition()==2?"vulkan":
+        final String api=graphicsApi.getSelectedItemPosition()==3?"opengl":
+                 graphicsApi.getSelectedItemPosition()==2?"vulkan":
                 graphicsApi.getSelectedItemPosition()==1?"dxvk":"auto";
         setBusy(true);dialog.getButton(-2).setEnabled(false);dialog.setCancelable(false);
         status.setText("Spremam prečac…");final Bitmap selected=icon;
