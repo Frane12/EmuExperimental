@@ -709,7 +709,7 @@ public final class WineGuiActivity extends Activity {
                         boolean enable=!performanceHud.isActive();
                         getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
                         performanceHud.setActive(enable);
-                        xserver.getScreen().setFpsCounterEnabled(enable);
+                        xserver.getScreen().setFpsCounterEnabled(enable || blenderShell);
                         performanceHud.removeCallbacks(hudTicker);
                         if(enable)performanceHud.post(hudTicker);
                         Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
