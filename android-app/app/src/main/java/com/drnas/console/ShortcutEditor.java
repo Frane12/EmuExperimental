@@ -47,7 +47,8 @@ final class ShortcutEditor {
         graphicsApi=new Spinner(activity);
         graphicsApi.setAdapter(new ArrayAdapter<>(activity,
                 android.R.layout.simple_spinner_dropdown_item,new String[]{
-                "Automatski", "DirectX preko DXVK", "Native Vulkan · WineVulkan/Turnip"}));
+                "Automatski", "DirectX preko DXVK", "Native Vulkan · WineVulkan/Turnip",
+                "OpenGL (Wine EGL · eksperimentalno)"}));
         root.addView(graphicsApi);
         TextView argsLabel=new TextView(activity);
         argsLabel.setText("ARGUMENTI (.exe) · npr. --gpu-backend vulkan");
@@ -115,7 +116,8 @@ final class ShortcutEditor {
         final String args=launchArgs.getText().toString().trim();
         try {LaunchArguments.parse(args);}
         catch(java.io.IOException invalid){launchArgs.setError(invalid.getMessage());return;}
-        final String api=graphicsApi.getSelectedItemPosition()==2?"vulkan":
+        final String api=graphicsApi.getSelectedItemPosition()==3?"opengl":
+                graphicsApi.getSelectedItemPosition()==2?"vulkan":
                 graphicsApi.getSelectedItemPosition()==1?"dxvk":"auto";
         setBusy(true);dialog.getButton(-2).setEnabled(false);dialog.setCancelable(false);
         status.setText("Spremam prečac…");final Bitmap selected=icon;
