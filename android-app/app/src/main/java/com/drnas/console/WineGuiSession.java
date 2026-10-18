@@ -296,6 +296,13 @@ final class WineGuiSession implements AutoCloseable {
             // spoofing X11 GLX. Ignored harmlessly by builds without the
             // corresponding Wine EGL environment preference.
             env.put("WINE_USE_EGL","1");
+            // Zink will translate *desktop OpenGL* into the selected Vulkan
+            // ICD once a real Mesa Bionic OpenGL runtime has been provided.
+            // Never apply these Mesa-only hints to Vulkan/DXVK profiles.
+            env.put("MESA_LOADER_DRIVER_OVERRIDE","zink");
+            env.put("GALLIUM_DRIVER","zink");
+            log.accept("DRNAS_OPENGL_ZINK_REQUESTED: Mesa desktop GL -> Zink -> Turnip "+
+                    "(requires real Mesa libraries and X11 EGL WSI)");
             env.put("WINEDLLOVERRIDES",env.getOrDefault("WINEDLLOVERRIDES","")+
                     ";opengl32=b");
             log.accept("DRNAS_OPENGL_EXPERIMENT_REQUESTED: Wine 11 EGL backend; "+
