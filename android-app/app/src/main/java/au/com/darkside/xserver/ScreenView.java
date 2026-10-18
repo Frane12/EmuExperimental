@@ -988,18 +988,22 @@ public class ScreenView extends View {
      * @param cursor The cursor to draw.
      */
     public void invalidateGuestRect(int left,int top,int right,int bottom) {
+        // Ignore empty and fully off-screen X11 damage instead of waking HWUI
+        // for popups at negative coordinates or windows outside the viewport.
+        // Keep the existing vsync-coalesced postInvalidateOnAnimation path.
+        if(right<=left || bottom<=top) return;
         if(_guestWidth<=0 || _guestHeight<=0) {
             postInvalidateOnAnimation(left,top,right,bottom);
             return;
         }
-        // Dirty only the area covered by the old/new pointer in Android
-        // physical pixels. Repainting the entire Wine desktop on EVERY cursor
-        // event makes software X11 noticeably sluggish.
+        int x0=Math.max(0,left), y0=Math.max(0,top);
+        int x1=Math.min(_guestWidth,right), y1=Math.min(_guestHeight,bottom);
+        if(x0>=x1 || y0>=y1) return;
         DrnasScreenTransform t=screenTransform();
-        postInvalidateOnAnimation((int)Math.floor(t.physicalX(left))-3,
-                       (int)Math.floor(t.physicalY(top))-3,
-                       (int)Math.ceil(t.physicalX(right))+3,
-                       (int)Math.ceil(t.physicalY(bottom))+3);
+        postInvalidateOnAnimation((int)Math.floor(t.physicalX(x0))-3,
+                       (int)Math.floor(t.physicalY(y0))-3,
+                       (int)Math.ceil(t.physicalX(x1))+3,
+                       (int)Math.ceil(t.physicalY(y1))+3);
     }
 
     private void movePointer(int x, int y, Cursor cursor) {
