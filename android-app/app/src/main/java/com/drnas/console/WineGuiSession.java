@@ -286,6 +286,7 @@ final class WineGuiSession implements AutoCloseable {
                 " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
+        OpenGlAlternative.reportWineEglCandidates(guiRuntime,log);
         if(nativeVulkan){
             WineVulkanRuntime.requireBridge(lib,new File(guiRuntime,"lib"),log);
             log.accept("DRNAS_WINEVULKAN_REQUESTED: vulkan-1=b;winevulkan=b, "+
