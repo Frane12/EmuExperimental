@@ -17,6 +17,19 @@ final class BundledBlenderArchive {
     static final String WINDOWS_SETUP="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\drnas-startup.py";
     static final long MAX_EXPANDED=1024L*1024*1024;
     static final String SETUP="import bpy, os\n"+
+            "# Filter Blender's Volumes panel only; Wine still needs its internal C: disk.\n"+
+            "from bl_ui import space_filebrowser as drnas_file_ui\n"+
+            "class DRNAS_UL_project_volumes(bpy.types.UIList):\n"+
+            "    draw_item = drnas_file_ui.FILEBROWSER_UL_dir.draw_item\n"+
+            "    def filter_items(self, context, data, propname):\n"+
+            "        return ([self.bitflag_filter_item if item.path.replace('/', '\\\\').upper().rstrip('\\\\') == 'D:' else 0 for item in getattr(data, propname)], [])\n"+
+            "if not hasattr(bpy.types, 'DRNAS_UL_project_volumes'):\n"+
+            "    bpy.utils.register_class(DRNAS_UL_project_volumes)\n"+
+            "def drnas_draw_project_volumes(self, context):\n"+
+            "    space = context.space_data\n"+
+            "    if space.system_folders:\n"+
+            "        self.layout.template_list('DRNAS_UL_project_volumes', 'system_folders', space, 'system_folders', space, 'system_folders_active', item_dyntip_propname='path', rows=1, maxrows=1)\n"+
+            "drnas_file_ui.FILEBROWSER_PT_bookmarks_volumes.draw = drnas_draw_project_volumes\n"+
             "# D: is a real selected Android folder, validated before Wine starts.\n"+
             "if os.path.isdir('D:\\\\'):\n"+
             "    os.chdir('D:\\\\')\n"+
