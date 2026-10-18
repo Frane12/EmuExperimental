@@ -21,6 +21,13 @@ final class AppSettingsDialog {
         label(a,form,"DXVK FPS  ·  prazno = globalno, 0 = bez limita");
         EditText fps=input(a,form,profile.fps<0?"":Integer.toString(profile.fps),
                 "Globalno (0–240 FPS)",InputType.TYPE_CLASS_NUMBER);
+        label(a,form,"GRAFIČKI API · Vulkan bez DXVK pretvorbe");
+        Spinner graphics=spinner(a,form,new String[]{
+                "Automatski", "DirectX preko DXVK", "Native Vulkan (WineVulkan → Turnip)"},
+                "vulkan".equals(profile.graphicsApi)?2:"dxvk".equals(profile.graphicsApi)?1:0);
+        label(a,form,"ARGUMENTI PROGRAMA · Vulkan za Blender automatski");
+        EditText launchArgs=input(a,form,profile.launchArgs,
+                "npr. --gpu-backend vulkan",InputType.TYPE_CLASS_TEXT);
         label(a,form,"DXVK VERZIJA");
         Spinner dxvk=spinner(a,form,new String[]{"Globalno","DXVK 1.10.3 Standard","DXVK 1.10.3 Async"},
                 "async".equals(profile.dxvk)?2:"standard".equals(profile.dxvk)?1:0);
@@ -30,7 +37,9 @@ final class AppSettingsDialog {
         label(a,form,"OSJETLJIVOST KAMERE  ·  0.5×–10×");
         EditText sensitivity=input(a,form,profile.sensitivity<0?"":Float.toString(profile.sensitivity),
                 "Globalno",InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
-        TextView hint=new TextView(a);hint.setText("Postavke vrijede samo za ovu ikonu, od idućeg pokretanja.");
+        TextView hint=new TextView(a);hint.setText("Postavke vrijede od idućeg pokretanja. Native Vulkan koristi WineVulkan; "+
+                "Blender.exe automatski dobiva --gpu-backend vulkan. "+
+                "GPU i X11 Present moramo potvrditi logom.");
         hint.setTextColor(0xff9fc4d1);hint.setTextSize(11);form.addView(hint);
         CheckBox remove=new CheckBox(a);
         if(UserShortcuts.isId(entry.id)){
@@ -39,7 +48,7 @@ final class AppSettingsDialog {
         ScrollView scroll=new ScrollView(a);scroll.addView(form);
         int available=a.getResources().getDisplayMetrics().heightPixels-dp(a,180);
         LinearLayout wrapper=new LinearLayout(a);wrapper.setOrientation(LinearLayout.VERTICAL);
-        wrapper.addView(scroll,new LinearLayout.LayoutParams(-1,Math.max(dp(a,150),Math.min(dp(a,340),available))));
+        wrapper.addView(scroll,new LinearLayout.LayoutParams(-1,Math.max(dp(a,150),Math.min(dp(a,470),available))));
         AlertDialog dialog=new AppDialogBuilder(a).setTitle(profile.title(entry.title))
                 .setView(wrapper).setPositiveButton("Prihvati",null).setNegativeButton("Odbaci",null).create();
         dialog.setOnShowListener(v->dialog.getButton(-1).setOnClickListener(button->{
@@ -55,6 +64,9 @@ final class AppSettingsDialog {
                 if(!text.isEmpty()){gain=Float.parseFloat(text);
                     if(!Float.isFinite(gain)||gain<.5f||gain>10)throw new NumberFormatException();}
             }catch(NumberFormatException bad){sensitivity.setError("Upiši 0.5–10 ili ostavi prazno");return;}
+            String commandArgs=launchArgs.getText().toString().trim();
+            try{LaunchArguments.parse(commandArgs);}
+            catch(java.io.IOException invalid){launchArgs.setError(invalid.getMessage());return;}
             try{
                 if(remove.isChecked()){
                     UserShortcuts.remove(a,entry.id);AppLaunchSettings.remove(a,entry.id);
@@ -62,7 +74,9 @@ final class AppSettingsDialog {
                     int mode=dxvk.getSelectedItemPosition();
                     AppLaunchSettings.save(a,entry.id,new AppLaunchSettings.Profile(
                             title.equals(entry.title)?"":title,cap,mode==1?"standard":mode==2?"async":"default",
-                            stretch.getSelectedItemPosition()-1,gain));
+                            stretch.getSelectedItemPosition()-1,gain,
+                            graphics.getSelectedItemPosition()==2?"vulkan":
+                            graphics.getSelectedItemPosition()==1?"dxvk":"auto",commandArgs));
                 }
                 dialog.dismiss();changed.run();
             }catch(Exception error){AppLanguage.toast(a,"Nije spremljeno: "+error.getMessage(),Toast.LENGTH_LONG).show();}
