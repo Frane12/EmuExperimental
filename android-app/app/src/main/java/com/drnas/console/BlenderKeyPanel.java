@@ -11,7 +11,9 @@ import java.util.Map;
 /** Movable, collapsible Blender shortcuts. Modifiers send real X11 key events. */
 final class BlenderKeyPanel extends LinearLayout {
     interface KeySink {void send(int key,boolean pressed);}
+    interface MouseSink {void send(int button,boolean pressed);}
     private final KeySink sink;
+    private final MouseSink mouse;
     private final SharedPreferences prefs;
     private final LinearLayout rows;
     private final HorizontalScrollView keyStrip;
@@ -27,8 +29,10 @@ final class BlenderKeyPanel extends LinearLayout {
     };
     private final Runnable keyboard,options;
 
-    BlenderKeyPanel(Context context,KeySink sink,Runnable keyboard,Runnable options) {
-        super(context);this.sink=sink;this.keyboard=keyboard;this.options=options;
+    BlenderKeyPanel(Context context,KeySink sink,MouseSink mouse,
+                    Runnable keyboard,Runnable options) {
+        super(context);this.sink=sink;this.mouse=mouse;
+        this.keyboard=keyboard;this.options=options;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(3),dp(3),dp(3),dp(3));
@@ -75,6 +79,11 @@ final class BlenderKeyPanel extends LinearLayout {
         keyStrip.addView(rows,new HorizontalScrollView.LayoutParams(
                 LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
         addView(keyStrip,new LayoutParams(LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
+        // X11 button numbers 1=left, 3=right. Keep these buttons visible
+        // even when the shortcut strip is collapsed and leave ordinary
+        // touchscreen taps on ScreenView untouched.
+        mouseButton("LMB","Lijevi klik miša",1);
+        mouseButton("RMB","Desni klik miša",3);
         toggle=button("⌄","Sakrij ili prikaži Blender prečace");
         addView(toggle,new LayoutParams(dp(30),dp(34)));
         toggle.setOnClickListener(v->{releaseAll();setExpanded(!expanded);});
@@ -110,7 +119,9 @@ final class BlenderKeyPanel extends LinearLayout {
         int mode=MeasureSpec.getMode(widthMeasureSpec);
         if(mode!=MeasureSpec.UNSPECIFIED) {
             int available=MeasureSpec.getSize(widthMeasureSpec);
-            int scrollWidth=Math.max(dp(40),Math.min(dp(650),available-dp(94)));
+            // grip 24 + 2 mouse buttons 2*42 + collapse 30 + menu 26 +
+            // panel padding/margins ~= 184dp. Scroll only keyboard keys.
+            int scrollWidth=Math.max(dp(36),Math.min(dp(650),available-dp(184)));
             ViewGroup.LayoutParams strip=keyStrip.getLayoutParams();
             if(strip!=null)strip.width=scrollWidth;
         }
@@ -138,6 +149,19 @@ final class BlenderKeyPanel extends LinearLayout {
         b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
         b.setPadding(dp(4),0,dp(4),0);b.setBackground(glass(0x60303740));
         b.setFocusable(false);return b;
+    }
+    private void mouseButton(String title,String description,int x11Button) {
+        Button b=button(title,description);
+        b.setTextSize(10);
+        LayoutParams params=new LayoutParams(dp(42),dp(34));
+        params.leftMargin=dp(1);
+        addView(b,params);
+        // A deliberate one-tap click, without faking a MotionEvent in the
+        // Blender framebuffer. The normal touch-left-click path still runs.
+        b.setOnClickListener(v->{
+            mouse.send(x11Button,true);
+            mouse.send(x11Button,false);
+        });
     }
     private LinearLayout row() {
         LinearLayout r=new LinearLayout(getContext());r.setOrientation(HORIZONTAL);
