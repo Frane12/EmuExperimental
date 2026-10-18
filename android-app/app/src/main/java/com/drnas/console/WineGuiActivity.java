@@ -148,6 +148,9 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
         blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
+        // A saved debugging session must not add verbose Wine/X11 I/O to the
+        // app preview or the performance baseline. Essential crash logs stay on.
+        if(blenderShell)verboseLogs=false;
         launchProfileId=WineShortcuts.isLaunchRequest(profileRequest)?profileRequest:null;
         AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(this,launchProfileId);
         chosenFrameCap=appProfile.fps(savedFrameCap(this));
