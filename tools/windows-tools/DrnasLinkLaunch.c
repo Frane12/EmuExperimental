@@ -90,7 +90,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
     SHELLEXECUTEINFOW launch = {0};
     (void)instance; (void)previous; (void)command; (void)show;
     if (!argv || argc < 3 || argc > 21 ||
-        (wcscmp(argv[2], L"vulkan") && wcscmp(argv[2], L"auto"))) {
+        (wcscmp(argv[2], L"vulkan") && wcscmp(argv[2], L"opengl") && wcscmp(argv[2], L"auto"))) {
         evidence("LINK_BAD_ARGUMENTS");
         goto done;
     }
@@ -135,13 +135,14 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
             goto done;
         }
     }
-    if (!wcscmp(argv[2], L"vulkan") && blender_exe(target) && !backend_chosen) {
+    if ((!wcscmp(argv[2], L"vulkan") || !wcscmp(argv[2], L"opengl")) &&
+        blender_exe(target) && !backend_chosen) {
         if (!append_arg(params, sizeof(params)/sizeof(params[0]), &used, L"--gpu-backend") ||
-            !append_arg(params, sizeof(params)/sizeof(params[0]), &used, L"vulkan")) {
+            !append_arg(params, sizeof(params)/sizeof(params[0]), &used, argv[2])) {
             evidence("LINK_BACKEND_ARGUMENTS_TOO_LONG");
             goto done;
         }
-        evidence("LINK_BLENDER_VULKAN_AUTO");
+        evidence(!wcscmp(argv[2], L"opengl") ? "LINK_BLENDER_OPENGL_AUTO" : "LINK_BLENDER_VULKAN_AUTO");
     }
     launch.cbSize = sizeof(launch);
     launch.fMask = SEE_MASK_FLAG_NO_UI;
