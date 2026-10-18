@@ -16,7 +16,8 @@ final class ShortcutEditor {
     private final String drive,path;
     private final Runnable pickIcon,done;
     private AlertDialog dialog;
-    private EditText title;
+    private EditText title, launchArgs;
+    private Spinner graphicsApi;
     private TextView status;
     private LinearLayout preview;
     private Button choose,reset;
@@ -40,6 +41,26 @@ final class ShortcutEditor {
         title=new EditText(activity);title.setSingleLine(true);title.setTextColor(0xffeffff8);
         title.setHint("Naziv prečaca");String filename=new File(path).getName();
         title.setText(filename.substring(0,filename.length()-4));root.addView(title);
+        TextView apiLabel=new TextView(activity);
+        apiLabel.setText("GRAFIČKI API · posebno za ovaj prečac");
+        apiLabel.setTextSize(11);apiLabel.setTextColor(0xff80ebc9);root.addView(apiLabel);
+        graphicsApi=new Spinner(activity);
+        graphicsApi.setAdapter(new ArrayAdapter<>(activity,
+                android.R.layout.simple_spinner_dropdown_item,new String[]{
+                "Automatski", "DirectX preko DXVK", "Native Vulkan · WineVulkan/Turnip"}));
+        root.addView(graphicsApi);
+        TextView argsLabel=new TextView(activity);
+        argsLabel.setText("ARGUMENTI (.exe) · npr. --gpu-backend vulkan");
+        argsLabel.setTextSize(11);argsLabel.setTextColor(0xff80ebc9);root.addView(argsLabel);
+        launchArgs=new EditText(activity);launchArgs.setSingleLine(true);
+        launchArgs.setTextSize(13);launchArgs.setTextColor(0xffeffff8);
+        launchArgs.setHint("--gpu-backend vulkan  --factory-startup");
+        launchArgs.setHintTextColor(0xff9db8c5);
+        root.addView(launchArgs);
+        TextView hint=new TextView(activity);
+        hint.setText("Blender: odaberi Native Vulkan. --gpu-backend vulkan dodaje se automatski " +
+                "ako ga sam ne upišeš. Postavke kasnije mijenjaš dugim dodirom na ikonu.");
+        hint.setTextSize(11);hint.setTextColor(0xffa9cbd8);root.addView(hint);
         preview=new LinearLayout(activity);preview.setGravity(android.view.Gravity.CENTER);
         root.addView(preview,new LinearLayout.LayoutParams(-1,dp(70)));
         updatePreview();
@@ -91,11 +112,16 @@ final class ShortcutEditor {
         if(busy)return;
         final String name=title.getText().toString().trim();
         if(name.isEmpty()||name.length()>80){title.setError("Naziv treba imati 1–80 znakova");return;}
+        final String args=launchArgs.getText().toString().trim();
+        try {LaunchArguments.parse(args);}
+        catch(java.io.IOException invalid){launchArgs.setError(invalid.getMessage());return;}
+        final String api=graphicsApi.getSelectedItemPosition()==2?"vulkan":
+                graphicsApi.getSelectedItemPosition()==1?"dxvk":"auto";
         setBusy(true);dialog.getButton(-2).setEnabled(false);dialog.setCancelable(false);
         status.setText("Spremam prečac…");final Bitmap selected=icon;
         new Thread(()->{
             String failure=null;
-            try{UserShortcuts.add(activity.getApplicationContext(),name,drive,path,selected);}
+            try{UserShortcuts.add(activity.getApplicationContext(),name,drive,path,selected,api,args);}
             catch(Exception e){failure=e.getMessage();}
             final String error=failure;
             activity.runOnUiThread(()->{
