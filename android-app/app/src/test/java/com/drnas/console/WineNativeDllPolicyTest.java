@@ -42,6 +42,40 @@ public class WineNativeDllPolicyTest {
         assertTrue(env.get("WINEDLLOVERRIDES").contains("dxgi=b"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("vulkan-1=b"));
     }
+    @Test public void dxgiInventoryIsReadOnlyAndReportsWrongMachine() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-dxgi-audit");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path prefix=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/system32"));
+            byte[] pe=new byte[192];
+            pe[0]='M'; pe[1]='Z'; pe[0x3c]=(byte)0x80;
+            pe[0x80]='P'; pe[0x81]='E';
+            pe[0x84]=0x64; pe[0x85]=(byte)0xaa; // ARM64 Wine builtin
+            Files.write(wine.resolve("dxgi.dll"),pe);
+            pe[0x84]=0x64; pe[0x85]=(byte)0x86; // AMD64 prefix DXVK
+            Files.write(prefix.resolve("dxgi.dll"),pe);
+            Map<String,String> env=baseline();
+            WineVulkanRuntime.configure(env,true);
+            String original=env.get("WINEDLLOVERRIDES");
+            List<String> messages=new ArrayList<>();
+            WineNativeDllPolicy.auditModules(root.resolve("wine").toFile(),
+                    root.resolve("prefix").toFile(),null,
+                    WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64,env,messages::add);
+            assertEquals(original,env.get("WINEDLLOVERRIDES"));
+            assertTrue(messages.stream().anyMatch(s->s.contains("WINE:aarch64-windows/dxgi.dll") &&
+                    s.contains("SAME_MACHINE")));
+            assertTrue(messages.stream().anyMatch(s->s.contains("PREFIX:system32/dxgi.dll") &&
+                    s.contains("DIFFERENT_MACHINE")));
+        } finally {
+            try(java.util.stream.Stream<java.nio.file.Path> children=Files.walk(root)) {
+                children.sorted(java.util.Comparator.reverseOrder()).forEach(path->{
+                    try{Files.deleteIfExists(path);}catch(Exception error){throw new RuntimeException(error);}
+                });
+            }
+        }
+    }
     @Test public void peMachineValidationRejectsMalformedAndDetectsArm64() throws Exception {
         java.nio.file.Path path=Files.createTempFile("drnas-pe-machine",".exe");
         try {
