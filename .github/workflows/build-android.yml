@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r30 - Blender cursor and minimal startup progress
+name: EmuDrnas preAlpha 0.1 r31 - Mali G52 PanVK Blender experimental APK
 on:
   push:
     branches:
@@ -38,6 +38,7 @@ on:
       - feat/r28-blender-shell
       - fix/r29-blender-arm64-dxgi-launch
       - fix/r30-blender-cursor-startup
+      - experiment/r31-blender-mali-g52-panvk
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -107,6 +108,17 @@ jobs:
           python3 -m py_compile tools/package_opengl_runtime.py
           python3 tools/package_opengl_runtime.py android-app/app/src/main/assets/opengl-runtime-v1.zip
           unzip -t android-app/app/src/main/assets/opengl-runtime-v1.zip
+      - name: Bundle independently SHA-pinned Mali-G52 PanVK Kbase r4 driver
+        run: |
+          set -euo pipefail
+          mkdir -p android-app/app/src/main/assets/mali
+          curl -fL --retry 3 --retry-delay 3 --max-time 180 \
+            "https://github.com/JimVulkan/mali-panvk/releases/download/v1.3.0/mali-panvk-26.3.0-devel-r4.zip" \
+            -o android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
+          echo "1bf5fdbc6fa7134100f747692436eeee5e112e640a8b5064345facbfac918787  android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip" | sha256sum -c -
+          unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
+          unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F libvulkan_panfrost.so
+          unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F NOTICE.txt
       - name: Bundle pinned Android PulseAudio and AAudio output
         run: |
           python3 tools/package_audio_runtime.py android-app/app/src/main
@@ -268,6 +280,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Dxvk-1.10.3-async.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A740-R8.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/mali-panvk-26.3.0-devel-r4.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
@@ -285,36 +298,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r30-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r31-MaliG52-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r30 - Blender cursor and minimal startup progress
+          EmuDrnas preAlpha 0.1 r31 - Mali-G52 PanVK Kbase experimental driver
           Package: com.drnas.console
-          versionCode: 96
+          versionCode: 97
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Blender-only compact high-contrast fallback arrow when Wine X11 supplies a null or fully transparent cursor inside Blender viewport (does not modify Wine mouse events, pointer grabs or X11/window framebuffer). Logs bounded DRNAS_BLENDER_CURSOR state changes. Minimal Blender launch screen shows only 'Starting Blender' plus a monotonic 0%-100% progress bar based on actual boot milestones, not wall-clock estimation. First-run install and Wine diagnostics stay in TXT; 100% only after Blender primary window maps. Keyboard and draggable Blender shortcuts remain available after startup. Preserves r29 architecture-correct DXGI fix and r27 popup guard. Stable signing identity and versionCode 96 for in-place app update. Experimental pending actual device test.
+          Changed: Preserves r30 Blender ARM64, popup guard, key panel and startup screen. Adds experimental JimVulkan PanVK r4 (Mesa Bifrost Kbase) for Mali-G52 MC2 Android 12+, SHA256 verified before APK signing and again on install. On Redmi 13 model 24040RN64Y (or Vulkan GPU named Mali-G52), requests PanVK via bundled Khronos/X11 wrapper and sets Wine ARM64 Vulkan DLL overrides for Blender. Does not replace the system driver and never selects the Mali binary for Adreno. Driver activation, Vulkan instance/device, X11 WSI, Blender compatibility and FPS are UNVERIFIED until tested on the handset; failures remain in log for investigation. Includes upstream license/NOTICE inside pinned driver ZIP. Keeps the same permanent signing identity and increments versionCode to 97 for in-place updates.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r30-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r30-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r31-MaliG52-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r31-MaliG52-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r28-blender-shell-ZIP
+          name: Blender-DRNAS-r31-MaliG52-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r30-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r30-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r30 - cursor and startup UI test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r31-mali-g52-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r31-MaliG52-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r31 - Mali G52 PanVK experiment" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
