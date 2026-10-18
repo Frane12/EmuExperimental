@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r14 - glass controls and bora pollen boot fix
+name: EmuDrnas preAlpha 0.1 r15 - Native WineVulkan and Blender shortcut launch
 on:
   push:
     branches:
@@ -25,6 +25,7 @@ on:
       - feat/emudrnas-retro-shortcuts-tools-r5
       - feat/emudrnas-compact-breeze-r7
       - fix/r13-bundled-wcp-boot
+      - feat/winevulkan-native-launch-r15
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -256,36 +257,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r14-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r15-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r14 - centered vector icons, tactile raised glass buttons, full-screen background bora pollen and boot manifest fix
+          EmuDrnas preAlpha 0.1 r15 - per-app WineVulkan, Blender launch arguments and Vulkan bridge diagnostics
           Package: com.drnas.console
-          versionCode: 79
+          versionCode: 80
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Keeps r13 desktop, Options, icons and Wine functions. Accepts all eight pinned WCP/Turnip assets including A740, avoiding the early BOOT BLOCKED manifest-count failure. Adds centered native vector icons above each dashboard control label; raised three-stop translucent glass gradients and soft press/release response; adds low-priority 18 FPS bora-blown pollen across the Android GUI behind text/buttons, individually configurable in Options. No APK runtime network. Device verification pending.
+          Changed: Retains r14 UI/desktop and WCP boot fixes. Adds per-shortcut Native Vulkan (WineVulkan -> Khronos -> X11 wrapper -> Turnip) selection, bounded launch arguments, and automatic Blender --gpu-backend vulkan when this mode is selected. Checks winevulkan.dll and Vulkan loader presence before launch; absence fails with an explicit log instead of silent success. DXVK path remains for Direct3D and native Vulkan remains opt-in. CI/JVM checks verify wiring only. Windows ARM64 Blender execution, GPU initialization and X11 swapchain presentation require testing on a real A840 device. No runtime network.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r14-glass-bora.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r14-glass-bora.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r15-winevulkan.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r15-winevulkan.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/feat/winevulkan-native-launch-r15') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r14-glass-bora-ZIP
+          name: EmuDrnas-preAlpha-0.1-r15-winevulkan-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/feat/winevulkan-native-launch-r15')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r14-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r14-glass-bora.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r14 - glass bora boot-fix private draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r15-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r15-winevulkan.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r15 - Native WineVulkan private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
