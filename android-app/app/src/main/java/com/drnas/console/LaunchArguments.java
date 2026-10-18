@@ -56,5 +56,28 @@ final class LaunchArguments {
         if(args.size()>18)throw new IOException("Too many launch arguments");
         return args;
     }
+    /**
+     * Wine explorer.exe can follow a .lnk but is not guaranteed to forward
+     * appended command-line arguments to the linked executable. For .lnk
+     * profiles with custom flags or Native Vulkan, launch our isolated Win32
+     * ShellLink helper instead. That helper uses IShellLinkW to preserve the
+     * shortcut's own arguments and working directory.
+     *
+     * Empty list means use Wine's unmodified/default .lnk handling.
+     */
+    static List<String> forLink(String guestLink,String custom,boolean nativeVulkan)
+            throws IOException {
+        List<String> extra=parse(custom);
+        if(!nativeVulkan && extra.isEmpty())return Collections.emptyList();
+        if(guestLink==null ||
+                !guestLink.toLowerCase(Locale.ROOT).endsWith(".lnk") ||
+                !(guestLink.startsWith("C:\\")||guestLink.startsWith("R:\\")))
+            throw new IOException("Link must be a verified C:/R: guest .lnk");
+        List<String> args=new ArrayList<>();
+        args.add(guestLink);
+        args.add(nativeVulkan?"vulkan":"auto");
+        args.addAll(extra);
+        return args;
+    }
     private LaunchArguments(){}
 }
