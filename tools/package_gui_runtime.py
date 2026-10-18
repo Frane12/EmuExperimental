@@ -127,15 +127,15 @@ def package(archive,output):
                 raise RuntimeError('EGL entrypoint unavailable')
             if 'libOpenGL.so.0' not in libs and 'libOpenGL.so.0' not in egl_libs:
                 raise RuntimeError('desktop OpenGL entrypoint unavailable')
+            if len(libs)+len(egl_libs)>60 or (
+                    sum(len(v) for v in libs.values())+
+                    sum(len(v) for v in egl_libs.values())>55*1024*1024):
+                raise RuntimeError('Optional EGL dependencies exceed GUI runtime safety limits')
         except (KeyError,RuntimeError,subprocess.CalledProcessError) as error:
             print('WARNING: pinned Bionic EGL desktop GL unavailable: '+str(error)+
                   '; native Android GLES test remains separate from Wine WGL.')
             egl_libs={}
         else:
-            if len(libs)+len(egl_libs)>60 or (
-                    sum(len(v) for v in libs.values())+
-                    sum(len(v) for v in egl_libs.values())>55*1024*1024):
-                raise RuntimeError('Optional EGL dependencies exceed GUI runtime safety limits')
             libs.update(egl_libs)
             print('Wine EGL candidate: '+str(len(egl_libs))+
                   ' dependency libraries staged (real EGL context unverified)')
