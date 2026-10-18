@@ -22,6 +22,19 @@ public class LaunchArgumentsTest {
         assertEquals(Arrays.asList("--path","C:\\Users\\user\\test.blend"),
                 LaunchArguments.parse("--path C:\\Users\\user\\test.blend"));
     }
+    @Test public void experimentalOpenGlOnlySelectsBlenderAndKeepsExplicitOverride() throws Exception {
+        assertEquals(Arrays.asList("--gpu-backend","opengl"),
+                LaunchArguments.forApp("C:\\Program Files\\Blender\\blender.exe","","opengl"));
+        assertEquals(Collections.emptyList(),
+                LaunchArguments.forApp("C:\\Program Files\\Other\\other.exe","","opengl"));
+        assertEquals(Arrays.asList("--gpu-backend","vulkan"),
+                LaunchArguments.forApp("C:\\blender.exe","--gpu-backend vulkan","opengl"));
+        String link="C:\\users\\xuser\\Desktop\\Blender 4.5.lnk";
+        assertEquals(Arrays.asList(link,"opengl"),
+                LaunchArguments.forLink(link,"","opengl"));
+        assertEquals(Arrays.asList(link,"opengl","--gpu-backend","vulkan"),
+                LaunchArguments.forLink(link,"--gpu-backend vulkan","opengl"));
+    }
     @Test public void malformedInputsFailInsteadOfEnteringWindowsShell() throws Exception {
         assertThrows(IOException.class,()->LaunchArguments.parse("--path \"unclosed"));
         assertThrows(IOException.class,()->LaunchArguments.parse("a\nb"));
