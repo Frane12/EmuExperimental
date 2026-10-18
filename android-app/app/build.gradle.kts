@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 96
-        versionName = "preAlpha-0.1-r30-blender-cursor-startup"
+        versionCode = 97
+        versionName = "preAlpha-0.1-r31-blender-keys-onscreen"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
