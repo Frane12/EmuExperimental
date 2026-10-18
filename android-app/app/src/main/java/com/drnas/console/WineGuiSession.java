@@ -58,13 +58,38 @@ final class WineGuiSession implements AutoCloseable {
             String exe=WineShortcuts.builtinExecutable(app.substring(8));
             if(exe==null)throw new IllegalArgumentException("Unknown built-in tool");
             args.add(exe);
+        } else if(app.startsWith("linkwin:") || app.startsWith("execwin:")) {
+            // explorer.exe expects a Wine DOS path, not an Android Unix file.
+            // The root and path are validated/translated in runOwned first.
+            args.add(app.substring(8));
         } else if(app.startsWith("link:") || app.startsWith("exec:")) {
-            // Canonical .lnk path was validated by resolveLink before command().
+            // Legacy path retained only for old unit-test/tool launch callers.
             args.add("start.exe");
             args.add("/unix");
             args.add(app.substring(5));
         } else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
+    }
+    /** Validate a real source file and return its C:/R: DOS path to the Wine
+     * shell. Passing /data/user/0/... to Explorer caused 'path not found'
+     * for apps copied from Android R:. Preserve spaces as one argv element. */
+    static String windowsPath(File root,File target,char drive) throws IOException {
+        if(drive!='C' && drive!='R')throw new IOException("Unsupported drive");
+        File base=root.getCanonicalFile(), file=target.getCanonicalFile();
+        if(!file.isFile() || !file.toPath().startsWith(base.toPath()))
+            throw new IOException("Program path is no longer inside Wine "+drive+": drive");
+        String relative=base.toPath().relativize(file.toPath()).toString()
+                .replace(File.separatorChar,'\\');
+        if(relative.isEmpty() || relative.indexOf((char)0)>=0)
+            throw new IOException("Invalid guest program path");
+        return drive+":\\"+relative;
+    }
+    private static String userWindowsPath(Context context,File prefix,File executable) throws IOException {
+        File c=new File(prefix,"drive_c").getCanonicalFile();
+        if(executable.getCanonicalFile().toPath().startsWith(c.toPath()))
+            return windowsPath(c,executable,'C');
+        File r=SharedFolderDrive.mirror(context).getCanonicalFile();
+        return windowsPath(r,executable,'R');
     }
     static void displayEnvironment(Map<String,String> env) {
         env.put("DISPLAY","127.0.0.1:12.0");
@@ -117,13 +142,24 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final String launchMode=app.startsWith("link:") ?
-                "link:"+WineShortcuts.resolveLink(prefix,app.substring(5)).getAbsolutePath():
-                UserShortcuts.isId(app)?"exec:"+UserShortcuts.resolve(context,app).getAbsolutePath():app;
+                "linkwin:"+windowsPath(new File(prefix,"drive_c"),
+                        WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
+                UserShortcuts.isId(app)?"execwin:"+userWindowsPath(context,prefix,
+                        UserShortcuts.resolve(context,app)):app;
+        if(launchMode.startsWith("linkwin:") || launchMode.startsWith("execwin:"))
+            log.accept("DRNAS_GUEST_PATH_OK: "+launchMode.substring(8)+
+                    " (Wine DOS path; not Android /data/... path)");
+        if("builtin:cmd".equals(launchMode)) {
+            File systemCmd=new File(prefix,"drive_c/windows/system32/cmd.exe");
+            log.accept("DRNAS_CMD_PREFIX_FILE="+(systemCmd.isFile()?"PRESENT":"NOT_STAGED")+
+                    "; system cmd may be provided by Wine builtin modules");
+        }
         // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
         // An invalid/locked game.cfg must not prevent the whole Wine desktop.
         try {
-            boolean directCrysis=launchMode.startsWith("exec:")&&
-                    new File(launchMode.substring(5)).getName().equalsIgnoreCase("Crysis.exe");
+            boolean directCrysis=launchMode.startsWith("execwin:")&&
+                    launchMode.substring(8).replace('/','\\').toLowerCase(Locale.ROOT)
+                            .endsWith("\\crysis.exe");
             if(SharedFolderDrive.knownCrysisPresent(context)||directCrysis)
                 CrysisWindowedGuard.prepareKnownInstall(prefix,log);
         } catch(IOException error) {
@@ -263,6 +299,8 @@ final class WineGuiSession implements AutoCloseable {
             FexPerformanceProfile.apply(env);
             log.accept("FEX Performance requested: TSO/vector/memcpy/halfbarrier=0; x87 reduced precision=1; multiblock=1. Effective bridge settings and speed require device verification.");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
+            log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
+                    "user-shortcut":app)+" target="+launchMode);
             log.accept("Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
