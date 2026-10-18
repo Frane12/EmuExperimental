@@ -36,6 +36,18 @@ final class LaunchArguments {
         return items;
     }
 
+    /** Explicit user arguments can select Vulkan while graphics profile is Auto.
+     * Detect the exact token pair or equals form; no shell evaluation. */
+    static boolean explicitlyRequestsVulkan(String arguments) throws IOException {
+        java.util.List<String> tokens=parse(arguments);
+        for(int i=0;i<tokens.size();i++){
+            String arg=tokens.get(i);
+            if("--gpu-backend=vulkan".equalsIgnoreCase(arg))return true;
+            if("--gpu-backend".equalsIgnoreCase(arg) && i+1<tokens.size() &&
+                    "vulkan".equalsIgnoreCase(tokens.get(i+1)))return true;
+        }
+        return false;
+    }
     /**
      * Blender has to choose its own Vulkan renderer; WineVulkan does not
      * silently change a program's renderer. Do not mutate other apps.
