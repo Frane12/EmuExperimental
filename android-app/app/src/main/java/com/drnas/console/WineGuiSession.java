@@ -258,6 +258,13 @@ final class WineGuiSession implements AutoCloseable {
         int guestPeMachine=directGuestExe==null?0:WineNativeDllPolicy.guestMachine(directGuestExe);
         WineNativeDllPolicy.configure(env,guestPeMachine,nativeVulkan,
                 WineNativeDllPolicy.hasBuiltInDxgi(lib),log);
+        // The loader's +module trace proves Wine still opens the x64 DXVK
+        // system32/dxgi.dll (PE 0x8664) even with override dxgi=b, then
+        // fails ARM64 Blender with c000007b. Stage the actual Wine ARM64
+        // builtin PE for this ARM64 session only; DxvkVariants.install()
+        // restores the original pinned x64 DLL on the next session.
+        if(WineNativeDllPolicy.isNativeArm64(guestPeMachine))
+            WineNativeDllPolicy.stageArm64Dxgi(lib,prefix,guestPeMachine,log);
         WineVulkanRuntime.configure(env,nativeVulkan);
         DxvkFrameCap.configure(env,frameCap);
         log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
