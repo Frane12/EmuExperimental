@@ -463,7 +463,7 @@ public final class WineGuiActivity extends Activity {
                 // ScreenView's independent touchscreen left-click stays active.
                 xserver.getScreen().updatePointerButtons(button,pressed);
             },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},
-              this::showBlenderMenu,this::startBlenderAndroidExport);
+              this::showBlenderMenu,this::showBlenderProjectFolder);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
             // No extra controls over the simple "Starting Blender" boot screen.
             // Full keyboard + hotkey panel become available once Blender maps.
@@ -834,7 +834,7 @@ public final class WineGuiActivity extends Activity {
 
     private void showBlenderMenu() {
         new AppDialogBuilder(this).setTitle("Blender")
-                .setItems(new String[]{"Puna tipkovnica","Spremi .blend na Android",
+                .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
                         "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}

@@ -47,7 +47,9 @@ public final class BlenderLauncherActivity extends Activity {
     private boolean waitingExternal;
     private void checkFolder() {
         if(destroyed||opened||preparing||checking)return;
-        if(BlenderProjectDrive.selected(this)==null) {chooseFolder();return;}
+        if(!BlenderProjectDrive.hasGrant(this,BlenderProjectDrive.selected(this))) {
+            chooseFolder();return;
+        }
         checking=true;
         status.setText("Provjeravam disk D:…");
         new Thread(()->{
