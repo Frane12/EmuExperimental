@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r22 - Blender X11 popup map-state and events
+name: EmuDrnas preAlpha 0.1 r23 - X11 compositor window stability
 on:
   push:
     branches:
@@ -32,6 +32,7 @@ on:
       - diagnostic/r19-native-dxgi-load-trace
       - fix/r21-blender-arm64-dxgi-stage
       - fix/r22-blender-popup-map-state
+      - fix/r23-compositor-window-stability
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -268,36 +269,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r22-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r23-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r22 - Blender transient windows X11 semantics
+          EmuDrnas preAlpha 0.1 r23 - X11 compositor window stability experiment
           Package: com.drnas.console
-          versionCode: 84
+          versionCode: 89
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Fixes two X11 core window-manager protocol bugs discovered while Blender ARM64 GUI was running. GetWindowAttributes previously reported IsUnmapped for mapped windows and IsViewable for unmapped windows; r22 now reports correct 0/1/2 values including a mapped child under an unmapped parent. CreateNotify.override_redirect now reports the NEW CHILD's flag, not its parent's, so popup and transient windows are correctly identified by Wine/WM. Add bounded per-popup CREATE, MAP, and UNMAP diagnostics (not per-frame). Includes JVM regression tests for map_state, preserving r21 ARM64 DXGI loader recovery and WineVulkan. Fix is experimental; popup behavior and renderer FPS require on-device tests. Same permanent signing cert and applicationId, versionCode 88.
+          Changed: X11 compositor now clips every window subtree to its outer and content bounds on Android HWUI; preserves per-window bitmap contents; translates absolute XShape bounding, clip and input regions when windows move or are reparented; corrects ancestor visibility tracking; invalidates mapped/unmapped popup regions, and ignores offscreen/empty damage. No changes to Wine, Turnip, DXVK, or user app data. Experimental: verify move/resize/popups and Android display frame timings on actual A840 device. This build is not a verified OpenGL or D3D fix.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r23-compositor-stability.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r23-compositor-stability.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate-ZIP
+          name: EmuDrnas-preAlpha-0.1-r23-compositor-stability-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r22-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r22 - Blender X11 popup fix private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r23-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r23-compositor-stability.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r23 - X11 compositor stability private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 

@@ -470,58 +470,46 @@ public class Window extends Resource {
      * @param paint  A paint to draw with.
      */
     public void draw(Canvas canvas, Paint paint) {
-        if (!_isMapped) return;
+        if (!_isMapped || _isServerWindow) return;
 
-        if (_boundingShapeRegion != null) {
-            canvas.save();
+        // Each mapped X11 window owns persistent pixels. Clip the full subtree
+        // before drawing, even for hardware-accelerated Android Canvases.
+        // Relying on the previous window's clip or Paint state caused stale
+        // popups and uncovered portions to leak across transient windows.
+        final int saved = canvas.save();
+        try {
+            if (!canvas.clipRect(_orect)) return;
+            if (_boundingShapeRegion != null &&
+                    !canvas.clipRect(_boundingShapeRegion.getBounds())) return;
 
-            if (!_hardwareAccelerated) {
-                try {
-                    canvas.clipRect(_boundingShapeRegion.getBounds());
-                } catch (UnsupportedOperationException e) {
-                    _hardwareAccelerated = true;
-                }
+            if (_borderWidth != 0) {
+                float hbw = 0.5f * _borderWidth;
+                paint.setColor(_attributes[AttrBorderPixel] | 0xff000000);
+                paint.setStrokeWidth(_borderWidth);
+                paint.setStyle(Paint.Style.STROKE);
+                canvas.drawRect(_orect.left + hbw, _orect.top + hbw,
+                        _orect.right - hbw, _orect.bottom - hbw, paint);
             }
 
-            paint.setColor(_attributes[AttrBorderPixel] | 0xff000000);
-            paint.setStyle(Paint.Style.FILL);
-            canvas.drawRect(_orect, paint);
-        } else if (_borderWidth != 0) {
-            if (!Rect.intersects(_orect, canvas.getClipBounds())) return;
+            // The parent content bounds constrain children. A child whose X11
+            // PutImage source is wider than its drawable must never overwrite
+            // a sibling or the desktop background.
+            if (!canvas.clipRect(_irect)) return;
+            if (_clipShapeRegion != null &&
+                    !canvas.clipRect(_clipShapeRegion.getBounds())) return;
 
-            float hbw = 0.5f * _borderWidth;
-
-            paint.setColor(_attributes[AttrBorderPixel] | 0xff000000);
-            paint.setStrokeWidth(_borderWidth);
-            paint.setStyle(Paint.Style.STROKE);
-
-            canvas.drawRect(_orect.left + hbw, _orect.top + hbw, _orect.right - hbw, _orect.bottom - hbw, paint);
-        }
-
-        canvas.save();
-
-        boolean clipIntersect;
-
-        if (_clipShapeRegion != null && !_hardwareAccelerated) {
-            try {
-                clipIntersect = canvas.clipRect(_clipShapeRegion.getBounds());
-            } catch (UnsupportedOperationException e) {
-                _hardwareAccelerated = true;
-                clipIntersect = canvas.clipRect(_irect);
-            }
-        } else {
-            clipIntersect = canvas.clipRect(_irect);
-        }
-
-        if (clipIntersect) {
-            if (!_inputOnly)
+            if (!_inputOnly) {
+                // The shared Paint may have been changed by the border of
+                // another window; always restore full bitmap opacity.
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(0xffffffff);
                 canvas.drawBitmap(_drawable.getBitmap(), _irect.left, _irect.top, paint);
-            for (Window w : _children)
-                w.draw(canvas, paint);
+            }
+            // Children are kept in bottom-to-top X11 stacking order.
+            for (Window child : _children) child.draw(canvas, paint);
+        } finally {
+            canvas.restoreToCount(saved);
         }
-
-        canvas.restore();
-        if (_boundingShapeRegion != null) canvas.restore();
     }
 
     /**
@@ -1683,6 +1671,9 @@ public class Window extends Resource {
         }
 
         updateAffectedVisibility();
+        // Mapping can expose cached pixels without any new PutImage request.
+        // Schedule damage on both explicit and internal map transitions.
+        if (!_inputOnly) invalidate();
 
         if (!_exposed) {
             sc = getSelectingClients(EventCode.MaskExposure);
@@ -1756,6 +1747,8 @@ public class Window extends Resource {
 
         updateAffectedVisibility();
         _screen.revertFocus(this);
+        // Also covers gravity/reparent unmaps, which bypass RequestCode.UnmapWindow.
+        if (!_inputOnly) invalidate();
     }
 
     /**
@@ -1850,6 +1843,7 @@ public class Window extends Resource {
         _irect.top += dy;
         _irect.right += dx;
         _irect.bottom += dy;
+        offsetShapeRegions(dx, dy);
 
         _parent._children.remove(this);
         parent._children.add(this);
@@ -2041,6 +2035,16 @@ public class Window extends Resource {
      * @param dh The change in the parent's height.
      * @throws IOException
      */
+    // SHAPE regions are kept in root-window coordinates by XShape.regionOperate.
+    // Moving the geometry without moving its regions makes a mapped popup
+    // appear to vanish or become unclickable after dragging/reparenting.
+    private void offsetShapeRegions(int dx, int dy) {
+        if (dx == 0 && dy == 0) return;
+        if (_boundingShapeRegion != null) _boundingShapeRegion.translate(dx, dy);
+        if (_clipShapeRegion != null) _clipShapeRegion.translate(dx, dy);
+        if (_inputShapeRegion != null) _inputShapeRegion.translate(dx, dy);
+    }
+
     private void move(int dx, int dy, int dw, int dh) throws IOException {
         if (dw != 0 || dh != 0) {
             switch (_attributes[AttrWinGravity]) {
@@ -2120,6 +2124,7 @@ public class Window extends Resource {
         _orect.right += dx;
         _orect.top += dy;
         _orect.bottom += dy;
+        offsetShapeRegions(dx, dy);
 
         for (Window w : _children)
             w.move(dx, dy, 0, 0);
@@ -2269,6 +2274,7 @@ public class Window extends Resource {
             _irect.top = _orect.top + borderWidth;
             _irect.right = _orect.right - borderWidth;
             _irect.bottom = _orect.bottom - borderWidth;
+            offsetShapeRegions(_irect.left - oldLeft, _irect.top - oldTop);
             changed = true;
         }
 
@@ -2831,7 +2837,7 @@ public class Window extends Resource {
         int result = Unobscured;
 
         for (Window aw = this; aw._parent != null; aw = aw._parent) {
-            if (!_isMapped) return NotViewable;    // All ancestors must be mapped.
+            if (!aw._isMapped) return NotViewable;    // All ancestors must be mapped.
 
             if (result == FullyObscured) continue;    // Keep checking in case ancestor is unmapped.
 
