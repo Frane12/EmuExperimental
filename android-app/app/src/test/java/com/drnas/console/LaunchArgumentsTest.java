@@ -42,4 +42,10 @@ public class LaunchArgumentsTest {
         assertThrows(IOException.class,()->LaunchArguments.forLink(
                 link,"--gpu-backend \"unfinished",true));
     }
+    @Test public void manuallySelectedVulkanBackendConfiguresNativeBridge() throws Exception {
+        assertTrue(LaunchArguments.explicitlyRequestsVulkan("--gpu-backend vulkan"));
+        assertTrue(LaunchArguments.explicitlyRequestsVulkan("--gpu-backend=vulkan"));
+        assertFalse(LaunchArguments.explicitlyRequestsVulkan("--gpu-backend opengl"));
+        assertFalse(LaunchArguments.explicitlyRequestsVulkan("--factory-startup"));
+    }
 }
