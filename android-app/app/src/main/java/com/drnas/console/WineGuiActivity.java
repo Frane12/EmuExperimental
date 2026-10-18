@@ -39,6 +39,10 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean destroyed;
     private TextView startupStatus;
     private StartupAnimationView startupAnimation;
+    private LinearLayout blenderStartupPanel;
+    private ProgressBar blenderStartupBar;
+    private TextView blenderStartupPercent;
+    private int blenderBootMilestone;
     private final ExitConfirmation exitConfirmation=new ExitConfirmation();
     private LinearLayout dependencyPanel;
     private TextView dependencyProgressText;
@@ -95,6 +99,43 @@ public final class WineGuiActivity extends Activity {
             performanceHud.postDelayed(this,650);
         }
     };
+
+    // The percentage is a conservative, monotonic *boot milestone*, not a
+    // guessed countdown or timed animation. 100% means Blender itself mapped.
+    private void updateBlenderBootProgress(int milestone) {
+        if(!blenderShell || blenderStartupBar==null || desktopFailed)return;
+        int p=Math.max(blenderBootMilestone,Math.min(100,Math.max(0,milestone)));
+        if(p==blenderBootMilestone && blenderStartupPercent!=null)return;
+        blenderBootMilestone=p;
+        blenderStartupBar.setProgress(p);
+        if(blenderStartupPercent!=null)blenderStartupPercent.setText(p+"%");
+    }
+    private int blenderBootStage(String message) {
+        if(message.startsWith("[Startup] Blender unpacking ")) {
+            try {
+                String part=message.substring("[Startup] Blender unpacking ".length());
+                int end=part.indexOf('%');
+                return 5+Math.max(0,Math.min(100,Integer.parseInt(part.substring(0,end))))*35/100;
+            }catch(RuntimeException ignore){return 6;}
+        }
+        if(message.startsWith("[Startup] Priprema Windows okruženja"))return 3;
+        if(message.startsWith("Pripremam disk R:"))return 45;
+        if(message.startsWith("[Startup] Pokretanje Wine servisa"))return 55;
+        if(message.startsWith("[Startup] Provjera Wine dodataka"))return 62;
+        if(message.startsWith("[Startup] Provjera offline DirectX / VC++ paketa"))return 69;
+        if(message.startsWith("[Startup] Priprema Windows pozadine"))return 85;
+        if(message.startsWith("[Startup] Pokretanje Explorera") ||
+                message.startsWith("Launching Wine explorer"))return 92;
+        if(message.startsWith("[Dependencies] ")) {
+            int separator=message.indexOf('|',15);
+            if(separator>0) {
+                try {return 69+Math.max(0,Math.min(100,
+                        Integer.parseInt(message.substring(15,separator).trim())))*15/100;}
+                catch(NumberFormatException ignore) {return 69;}
+            }
+        }
+        return -1;
+    }
 
     private android.graphics.drawable.GradientDrawable toolbarGlass(boolean primary) {
         android.graphics.drawable.GradientDrawable d=
@@ -207,6 +248,8 @@ public final class WineGuiActivity extends Activity {
         desktopCursorOverlay=new CursorOverlayView(this,
                 WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
         desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
+        desktopCursorOverlay.setBlenderVisibleCursor(blenderShell);
+        desktopCursorOverlay.setDiagnosticSink(this::log);
         xserver.getScreen().setCursorOverlayListener(desktopCursorOverlay::setCursor);
         desktopCursorOverlay.setClickable(false);
         desktopCursorOverlay.setFocusable(false);
@@ -232,14 +275,43 @@ public final class WineGuiActivity extends Activity {
         startupAnimation=new StartupAnimationView(this,blenderShell);
         layout.addView(startupAnimation,new FrameLayout.LayoutParams(-1,-1));
         startupStatus=new TextView(this);
-        startupStatus.setText(blenderShell?"Pokrećem Blender…":"Priprema Windows desktopa…");
+        startupStatus.setText(blenderShell?"Starting Blender":"Priprema Windows desktopa…");
         startupStatus.setTextColor(0xFFE0EFF8);
-        startupStatus.setTextSize(14);
+        startupStatus.setTextSize(blenderShell?19:14);
         startupStatus.setPadding(dp(24),dp(8),dp(24),dp(8));
         startupStatus.setGravity(Gravity.CENTER);
         startupStatus.setBackgroundColor(0x00000000);
-        layout.addView(startupStatus,new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+        if(blenderShell) {
+            blenderStartupPanel=new LinearLayout(this);
+            blenderStartupPanel.setOrientation(LinearLayout.VERTICAL);
+            blenderStartupPanel.setGravity(Gravity.CENTER);
+            blenderStartupPanel.setPadding(dp(18),dp(12),dp(18),dp(12));
+            blenderStartupPanel.addView(startupStatus);
+            blenderStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+            blenderStartupBar.setIndeterminate(false);
+            blenderStartupBar.setMax(100);
+            blenderStartupBar.setProgress(0);
+            blenderStartupBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff8cf5d0));
+            LinearLayout.LayoutParams barParams=new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,dp(8));
+            barParams.topMargin=dp(10);
+            blenderStartupPanel.addView(blenderStartupBar,barParams);
+            blenderStartupPercent=new TextView(this);
+            blenderStartupPercent.setText("0%");
+            blenderStartupPercent.setTextColor(0xffc7dedf);
+            blenderStartupPercent.setTextSize(13);
+            blenderStartupPercent.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams percentParams=new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+            percentParams.topMargin=dp(9);
+            blenderStartupPanel.addView(blenderStartupPercent,percentParams);
+            layout.addView(blenderStartupPanel,new FrameLayout.LayoutParams(
+                    Math.min(dp(420),getResources().getDisplayMetrics().widthPixels-dp(36)),
+                    ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+        } else {
+            layout.addView(startupStatus,new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+        }
 
         // Separate factual progress bar for first-time offline redistributable installs.
         // Shown only when a Dependencies.zip has been imported; percentage means
@@ -385,6 +457,9 @@ public final class WineGuiActivity extends Activity {
                 else xserver.getScreen().onKeyUp(key,event);
             },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},this::showBlenderMenu);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
+            // No extra controls over the simple "Starting Blender" boot screen.
+            // Full keyboard + hotkey panel become available once Blender maps.
+            blenderKeys.setVisibility(View.GONE);
         } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
         AppLanguage.tree(layout);
         setContentView(layout);
@@ -428,9 +503,12 @@ public final class WineGuiActivity extends Activity {
                         log("Desktop stopped: "+e.getClass().getSimpleName()+": "+e.getMessage());
                         runOnUiThread(()->{
                             if(!destroyed) {
-                                startupStatus.setText("Windows se nije pokrenuo. Pritisni Pošalji log.\n"+e.getClass().getSimpleName()+": "+e.getMessage());
+                                startupStatus.setText((blenderShell?"Blender startup failed. ":"Windows se nije pokrenuo. ")+
+                                        e.getClass().getSimpleName()+": "+e.getMessage());
                                 startupAnimation.stop();
                                 startupStatus.setVisibility(View.VISIBLE);
+                                // On failure the diagnostic export must be accessible.
+                                if(blenderShell && shareLog!=null)shareLog.setVisibility(View.VISIBLE);
                             }
                         });
                     } finally {
@@ -446,17 +524,29 @@ public final class WineGuiActivity extends Activity {
                 if(destroyed || startupStatus==null || desktopFailed)return;
                 if(!desktopFailed && desktopLaunchRequested &&
                         (blenderShell?xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0)) {
-                    startupStatus.setVisibility(View.GONE);
-                    startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
+                    if(blenderShell)updateBlenderBootProgress(100);
+                    else startupStatus.setVisibility(View.GONE);
                     dependencyPanel.setVisibility(View.GONE);
+                    if(blenderShell) {
+                        xserver.getScreen().postDelayed(()->{
+                            if(destroyed)return;
+                            if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
+                            startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
+                            if(blenderKeys!=null)blenderKeys.setVisibility(View.VISIBLE);
+                        },250);
+                    } else {
+                        startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
+                    }
                     log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; fullscreen requested":"mapped X11 window after Explorer launch"));
                 }
                 else {
                     if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
                             android.os.SystemClock.uptimeMillis()-desktopLaunchStarted>=90000){
                         desktopWindowWarning=true;startupAnimation.stop();
-                        startupStatus.setText("Windows prozor nije potvrđen nakon 90 s.\n"+
+                        startupStatus.setText(blenderShell?"Blender startup timed out. Open log to inspect.":
+                                "Windows prozor nije potvrđen nakon 90 s.\n"+
                                 "⋮ → Pošalji log ili Reset Wine. Provjera dodataka nije potvrda desktopa.");
+                        if(blenderShell && shareLog!=null)shareLog.setVisibility(View.VISIBLE);
                         log("DRNAS_DESKTOP_NOT_CONFIRMED: 90s since Explorer request; X11 mapped window absent. Session kept for log/reset or late window mapping.");
                     }
                     xserver.getScreen().postDelayed(this,700);
@@ -801,7 +891,8 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
+        boolean critical=line.startsWith("DRNAS_BLENDER_CURSOR") ||
+                line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
                 line.startsWith("DRNAS_X11_CRITICAL_") ||
                 line.contains("DRNAS_X11_CRITICAL_") || line.startsWith("DRNAS_BLENDER_PERF_") ||
@@ -822,10 +913,17 @@ public final class WineGuiActivity extends Activity {
         if(line.startsWith("Launching Wine explorer")){
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
         }
+        if(blenderShell) {
+            final int stage=blenderBootStage(line);
+            if(stage>=0)runOnUiThread(()->{
+                if(!destroyed)updateBlenderBootProgress(stage);
+            });
+        }
         if(line.startsWith("[Startup] "))runOnUiThread(()->{
-            if(!destroyed){startupStatus.setText(blenderShell?
-                    (line.contains("Blender")?line.substring(10):"Pripremam Blender…"):
-                    AppLanguage.t(this,line.substring(10)));dependencyPanel.setVisibility(View.GONE);}
+            if(!destroyed && !blenderShell){
+                startupStatus.setText(AppLanguage.t(this,line.substring(10)));
+                dependencyPanel.setVisibility(View.GONE);
+            }
         });
         if(line.startsWith("[Dependencies] ")) {
             int separator=line.indexOf('|',15);
@@ -837,8 +935,12 @@ public final class WineGuiActivity extends Activity {
                         if(destroyed || dependencyPanel==null)return;
                         dependencyProgressBar.setProgress(Math.max(0,Math.min(100,percent)));
                         dependencyProgressText.setText(label+"  •  "+percent+"%");
-                        startupStatus.setText(label);
-                        dependencyPanel.setVisibility(View.VISIBLE);
+                        // Blender preview intentionally shows only its unified
+                        // milestone bar; specific installer steps remain in TXT.
+                        if(!blenderShell) {
+                            startupStatus.setText(label);
+                            dependencyPanel.setVisibility(View.VISIBLE);
+                        }
                         if(percent>=100)dependencyPanel.postDelayed(()->{
                             if(!destroyed && dependencyPanel!=null)
                                 dependencyPanel.setVisibility(View.GONE);
@@ -853,7 +955,7 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("Installing Microsoft VC++") ||
                 line.startsWith("Launching Wine explorer")) {
             runOnUiThread(()->{
-                if(startupStatus!=null && !destroyed)
+                if(startupStatus!=null && !destroyed && !blenderShell)
                     startupStatus.setText(line.startsWith("Launching ")?
                             "Opening Windows desktop…":line);
             });
