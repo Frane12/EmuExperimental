@@ -155,7 +155,13 @@ final class WineGuiSession implements AutoCloseable {
         if(guestTarget.startsWith("linkwin:") || guestTarget.startsWith("execwin:"))
             log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
-        final boolean nativeVulkan=appProfile.nativeVulkan();
+        // Saved Blender --gpu-backend vulkan must also select WineVulkan
+        // when the per-app graphics preference has been left on Auto.
+        final boolean nativeVulkan=appProfile.nativeVulkan() ||
+                ("auto".equals(appProfile.graphicsApi) &&
+                 LaunchArguments.explicitlyRequestsVulkan(appProfile.launchArgs));
+        if(nativeVulkan && !appProfile.nativeVulkan())
+            log.accept("DRNAS_WINEVULKAN_AUTO: explicit --gpu-backend vulkan in shortcut arguments");
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
         // an explicit argument or Native Vulkan is requested.
@@ -274,10 +280,6 @@ final class WineGuiSession implements AutoCloseable {
                     "WineVulkan -> Khronos -> X11 wrapper -> Turnip. "+
                     "Actual GPU and Present remain unverified.");
         }
-        File gl=new File(guiRuntime,"lib/libGL.so.1");
-        log.accept(gl.isFile()
-                ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
-                : "Wine X11 OpenGL libGL.so.1 unavailable; Vulkan DXVK path remains preferred.");
         log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
@@ -293,6 +295,14 @@ final class WineGuiSession implements AutoCloseable {
         catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+"; desktop remains available.");}
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
+        try {
+            boolean glx=X11Probe.hasExtension(6012,"GLX");
+            WineGraphicsPreflight.report(
+                    new File(guiRuntime,"lib/libGL.so.1").isFile(),glx,nativeVulkan,log);
+        }catch(IOException e) {
+            log.accept("DRNAS_OPENGL_PREFLIGHT UNKNOWN: X11 GLX query failed: "+
+                    e.getMessage()+"; desktop startup continues");
+        }
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
                 "wine/aarch64-windows/winex11.drv","wine/aarch64-windows/winecfg.exe"}) {
             File f=new File(lib,relative);log.accept("GUI component "+relative+": "+(f.isFile()?f.length()+" bytes":"MISSING"));
