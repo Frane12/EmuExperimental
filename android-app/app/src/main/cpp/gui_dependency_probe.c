@@ -35,13 +35,20 @@ int main(int argc,char **argv) {
     }
     /* Optional for DXVK/Vulkan, but required by Wine's OpenGL/media backends.
      * Run loader checks in this isolated helper, never in the Android UI. */
-    const char *optional[]={"libGL.so.1","libavutil.so.60","libgstgl-1.0.so"};
-    const char *purpose[]={"Wine wgl OpenGL fallback","Wine winedmo media","Wine winegstreamer media"};
+    const char *optional[]={"libEGL.so.1","libGL.so.1","libavutil.so.60","libgstgl-1.0.so"};
+    const char *purpose[]={"Wine 11 EGL/Zink (no X11 context attempted)","Wine GLX fallback","Wine winedmo media","Wine winegstreamer media"};
     int missing=0;
     for(size_t i=0;i<sizeof(optional)/sizeof(optional[0]);i++){
         dlerror();void *h=dlopen(optional[i],RTLD_NOW|RTLD_LOCAL);
         if(h){
             printf("DRNAS_DEP_AUDIT OPTIONAL_LOAD_OK %s (%s)\n",optional[i],purpose[i]);
+            if(i==0) {
+                void *egl_get=(void *)dlsym(h,"eglGetDisplay");
+                void *egl_init=(void *)dlsym(h,"eglInitialize");
+                void *egl_proc=(void *)dlsym(h,"eglGetProcAddress");
+                printf("DRNAS_EGL_LOADER_PROBE eglGetDisplay=%s eglInitialize=%s eglGetProcAddress=%s (no display/context)\n",
+                        egl_get?"OK":"MISSING",egl_init?"OK":"MISSING",egl_proc?"OK":"MISSING");
+            }
             dlclose(h);
         } else {
             const char *e=dlerror();
