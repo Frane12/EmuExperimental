@@ -27,4 +27,19 @@ public class LaunchArgumentsTest {
         assertThrows(IOException.class,()->LaunchArguments.parse("a\nb"));
         assertThrows(IOException.class,()->LaunchArguments.parse("x".repeat(401)));
     }
+
+    @Test public void nativeAndCustomParametersAreForwardedForRealLinks() throws Exception {
+        String link="C:\\users\\xuser\\Desktop\\Blender 4.5.lnk";
+        assertEquals(Collections.emptyList(),LaunchArguments.forLink(link,"",false));
+        assertEquals(Arrays.asList(link,"vulkan"),
+                LaunchArguments.forLink(link,"",true));
+        assertEquals(Arrays.asList(link,"vulkan","--gpu-backend","opengl","--factory-startup"),
+                LaunchArguments.forLink(link,"--gpu-backend opengl --factory-startup",true));
+        assertEquals(Arrays.asList(link,"auto","--factory-startup","--python","A B.py"),
+                LaunchArguments.forLink(link,"--factory-startup --python \"A B.py\"",false));
+        assertThrows(IOException.class,()->LaunchArguments.forLink(
+                "/data/user/0/hijack.lnk","--gpu-backend vulkan",true));
+        assertThrows(IOException.class,()->LaunchArguments.forLink(
+                link,"--gpu-backend \"unfinished",true));
+    }
 }
