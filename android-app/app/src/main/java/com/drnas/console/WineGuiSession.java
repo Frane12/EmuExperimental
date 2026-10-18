@@ -147,22 +147,34 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
-        final String launchMode=app.startsWith("link:") ?
+        final String guestTarget=app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
                         WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
                 UserShortcuts.isId(app)?"execwin:"+userWindowsPath(context,prefix,
                         UserShortcuts.resolve(context,app)):app;
-        if(launchMode.startsWith("linkwin:") || launchMode.startsWith("execwin:"))
-            log.accept("DRNAS_GUEST_PATH_OK: "+launchMode.substring(8)+
+        if(guestTarget.startsWith("linkwin:") || guestTarget.startsWith("execwin:"))
+            log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
         final boolean nativeVulkan=appProfile.nativeVulkan();
-        final List<String> launchArgs=launchMode.startsWith("execwin:")?
-                LaunchArguments.forApp(launchMode.substring(8),appProfile.launchArgs,nativeVulkan):
-                launchMode.startsWith("linkwin:")?
-                LaunchArguments.forApp(null,appProfile.launchArgs,nativeVulkan):
+        // A shell .lnk is not an executable. explorer.exe may ignore trailing
+        // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
+        // an explicit argument or Native Vulkan is requested.
+        final List<String> linkLaunchArgs=guestTarget.startsWith("linkwin:")?
+                LaunchArguments.forLink(guestTarget.substring(8),appProfile.launchArgs,nativeVulkan):
                 Collections.emptyList();
+        final boolean linkViaHelper=!linkLaunchArgs.isEmpty();
+        final String launchMode=linkViaHelper?
+                "execwin:C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe":guestTarget;
+        final List<String> launchArgs=linkViaHelper?linkLaunchArgs:
+                guestTarget.startsWith("execwin:")?
+                LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,nativeVulkan):
+                Collections.emptyList();
+        if(linkViaHelper)log.accept("DRNAS_LINK_ARGUMENT_FORWARDER selected: "+
+                "Wine IShellLinkW reads .lnk target, original args and working directory; "+
+                "requested nativeVulkan="+nativeVulkan+" extraArgc="+(launchArgs.size()-2));
         log.accept("DRNAS_LAUNCH_PROFILE graphics="+appProfile.graphicsApi+
-                " program="+(launchMode.startsWith("execwin:")?launchMode.substring(8):app)+
+                " program="+(guestTarget.startsWith("execwin:")||guestTarget.startsWith("linkwin:")?
+                    guestTarget.substring(8):app)+
                 " argc="+launchArgs.size()+
                 (nativeVulkan?" (WineVulkan requested; device validation pending)":""));
         if("builtin:cmd".equals(launchMode)) {
@@ -189,6 +201,10 @@ final class WineGuiSession implements AutoCloseable {
         // Always available source-owned Paint, independent of Wine's optional mspaint.
         try { DrnasPaintRuntime.install(context,prefix,log); }
         catch(IOException problem) { log.accept("DRNAS Paint staging failed: "+problem.getMessage()); }
+        // Never silently fall back to explorer.exe's .lnk opening path when
+        // extra flags were requested: that path may drop them without an error.
+        if(linkViaHelper && !new File(prefix,"drive_c/DRNAS/Tools/DRNASLinkLaunch.exe").isFile())
+            throw new IOException("DRNAS .lnk launcher missing; cannot forward saved shortcut flags");
         // Local source-built XInput ABI shim: no Wine bus/uinput/root access.
         // If installation fails, retain the original Wine XInput built-ins.
         boolean xinputReady=false;
