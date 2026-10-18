@@ -33,10 +33,10 @@ public class WineGuiSessionTest {
                 WineGuiSession.command(LINKER,WINE,"tasks"));
     }
     @Test public void cmdUsesDosSystemPathNotHostWorkingDirectory() {
-        assertEquals("C:\\\\windows\\\\system32\\\\cmd.exe",WineShortcuts.builtinExecutable("cmd"));
+        assertEquals("C:\\windows\\system32\\cmd.exe",WineShortcuts.builtinExecutable("cmd"));
         assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
                 "explorer.exe","/desktop=shell,1280x720",
-                "C:\\\\windows\\\\system32\\\\cmd.exe"),
+                "C:\\windows\\system32\\cmd.exe"),
                 WineGuiSession.command(LINKER,WINE,"builtin:cmd"));
     }
     @Test public void launchesProgramsThroughGuestDrivePathsNotUnixAbsolutePaths() throws Exception {
@@ -46,7 +46,7 @@ public class WineGuiSessionTest {
             File blender=folder.resolve("blender.exe").toFile();
             assertTrue(blender.createNewFile());
             String guest=WineGuiSession.windowsPath(root.toFile(),blender,'R');
-            assertEquals("R:\\\\Blender 4.1\\\\blender.exe",guest);
+            assertEquals("R:\\Blender 4.1\\blender.exe",guest);
             assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
                     "explorer.exe","/desktop=shell,1280x720",guest),
                     WineGuiSession.command(LINKER,WINE,"execwin:"+guest));
