@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 92
-        versionName = "preAlpha-0.1-r26-blender-zorder-audit"
+        versionCode = 93
+        versionName = "preAlpha-0.1-r27-blender-popup-owner-guard"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +79,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

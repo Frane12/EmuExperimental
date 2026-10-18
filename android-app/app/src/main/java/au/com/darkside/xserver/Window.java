@@ -49,6 +49,7 @@ public class Window extends Resource {
     private int _loggedStackTransitions;
     // Event-only diagnostic: no work is added to the X11 PutImage/Canvas hot paths.
     private int _criticalStackEvents;
+    private Window _blenderFallbackOwner;
     private int _visibility = NotViewable;
     private Bitmap _backgroundBitmap = null;
     private int _eventMask = 0;
@@ -517,9 +518,8 @@ public class Window extends Resource {
 
     /**
      * Small Wine/X11 window-manager compatibility aid. Wine's Blender popups
-     * frequently are separate X11 windows; only an explicit WM_TRANSIENT_FOR
-     * relationship permits restoring the dialog above its owner. Never apply
-     * global always-on-top to arbitrary unrelated application windows.
+     * frequently are separate unmanaged X11 windows. Prefer an explicit owner;
+     * a narrowly scoped Blender fallback handles the missing hint seen in r26.
      */
     private Window transientOwner() {
         Atom a = _xServer.findAtom("WM_TRANSIENT_FOR");
@@ -542,6 +542,42 @@ public class Window extends Resource {
         return null;
     }
 
+    private Window stackingOwner() {
+        Window explicit = transientOwner();
+        if (explicit != null) return explicit;
+        if (!_isMapped || _inputOnly || !_overrideRedirect || _parent == null ||
+                _client == null) return null;
+        // Do not override any explicit (even unresolved/root) owner hint.
+        Atom hint = _xServer.findAtom("WM_TRANSIENT_FOR");
+        if (hint != null && _properties.containsKey(hint.getId())) return null;
+        if (_blenderFallbackOwner != null) {
+            Window w = _blenderFallbackOwner;
+            if (w._isMapped && w._parent == _parent && w._client == _client &&
+                    _xServer.getResource(w.getId()) == w) return w;
+            _blenderFallbackOwner = null;
+        }
+        Window owner = null;
+        Window root = _screen.getRootWindow();
+        String title = titleForStackAudit();
+        for (Window w : _parent._children) {
+            if (w == this || !w._isMapped || w._inputOnly || !w._overrideRedirect ||
+                    w._client != _client) continue;
+            if (!BlenderPopupPolicy.primary(w.titleForStackAudit(), w._irect.width(),
+                    w._irect.height(), root._irect.width(), root._irect.height())) continue;
+            // Two primary Blender windows are ambiguous; leave X11 order intact.
+            if (owner != null) return null;
+            owner = w;
+        }
+        if (owner == null || !BlenderPopupPolicy.auxiliary(title, _irect.width(),
+                _irect.height(), owner._irect.width(), owner._irect.height())) return null;
+        _blenderFallbackOwner = owner;
+        _xServer.diagnostic("DRNAS_X11_BLENDER_OWNER_INFERRED child="+getId()+
+                " owner="+owner.getId()+" clientBase=0x"+
+                Integer.toHexString(_client.resourceIdBase())+" title="+title+
+                " bounds="+_orect.toShortString()+" policy=r27-same-client-single-main");
+        return owner;
+    }
+
     private String titleForStackAudit() {
         Atom a = _xServer.findAtom("_NET_WM_NAME");
         Property p = a == null ? null : _properties.get(a.getId());
@@ -557,19 +593,19 @@ public class Window extends Resource {
     }
 
     private boolean restoreTransientAboveOwner(String reason) {
-        Window owner = transientOwner();
+        Window owner = stackingOwner();
         if (!_isMapped || owner == null || !owner._isMapped || _parent == null)
             return false;
         int ownIndex = _parent._children.indexOf(this);
         int ownerIndex = _parent._children.indexOf(owner);
         if (ownIndex < 0 || ownerIndex < 0 || ownIndex > ownerIndex) return false;
-        _parent._children.remove(this);
-        _parent._children.add(this);
+        BlenderPopupPolicy.moveAbove(_parent._children, this, owner);
         _parent.updateAffectedVisibility();
         _screen.invalidateGuestRect(_orect.left,_orect.top,_orect.right,_orect.bottom);
         _xServer.diagnostic("DRNAS_X11_CRITICAL_TRANSIENT_REPAIRED child="+getId()+
                 " owner="+owner.getId()+" from="+ownIndex+" to="+
                 _parent._children.indexOf(this)+" reason="+reason+
+                " inferred="+(owner == _blenderFallbackOwner)+
                 " title="+titleForStackAudit());
         return true;
     }
@@ -578,10 +614,15 @@ public class Window extends Resource {
     private int restoreOwnedTransients() {
         if (_parent == null) return 0;
         int repaired = 0;
-        for (Window w : new Vector<Window>(_parent._children))
-            if (w != this && w.transientOwner() == this &&
+        Vector<Window> snapshot = new Vector<Window>(_parent._children);
+        // Insert directly above owner, top-to-bottom, preserving dialog order
+        // without pulling them above unrelated applications.
+        for (int i = snapshot.size() - 1; i >= 0; i--) {
+            Window w = snapshot.get(i);
+            if (w != this && w.stackingOwner() == this &&
                     w.restoreTransientAboveOwner("owner-restacked"))
                 repaired++;
+        }
         return repaired;
     }
 
@@ -1802,6 +1843,7 @@ public class Window extends Resource {
      */
     private void unmap() throws IOException {
         if (!_isMapped) return;
+        _blenderFallbackOwner = null;
 
         if (!_inputOnly && (_parent == _screen.getRootWindow() ||
                 (_irect.width() >= 350 && _irect.height() >= 200)))
@@ -2473,7 +2515,7 @@ public class Window extends Resource {
 
         // The GUI runtime, HUD and desktop companion do not request X11 raises.
         // Record the actual Wine X11 client/sequence whenever stack is requested.
-        // Only explicit transients are restored; unrelated windows are untouched.
+        // Explicit transients and the bounded Blender missing-owner fallback only.
         int transientFixes = (mask & 0x40) != 0 ? restoreOwnedTransients() : 0;
         if ((mask & 0x60) != 0 && _criticalStackEvents++ < 160 &&
                 (!_inputOnly && (_parent == _screen.getRootWindow() ||
@@ -3088,3 +3130,4 @@ public class Window extends Resource {
         return _properties.get(id);
     }
 }
+
