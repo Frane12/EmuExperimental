@@ -1,0 +1,28 @@
+DRNAS EMU experimental OpenGL / Zink bundle (r25)
+================================================
+
+This experiment carries separate, opt-in Android/Bionic graphics libraries
+produced by the Mesa, Wayland, and libarchive projects and redistributed from
+a pinned public Bannerlator snapshot. These are NOT source-owned DRNAS code.
+
+Source snapshot:
+https://github.com/The412Banner/Bannerlator/tree/5865486d275ca00758d592f6221f35f9956ff2fb/app/src/main/assets/x11/egl
+Mesa compilation reported upstream:
+Banners-Turnip exp/egl-x11-platform ab76cba3, run 36862058991
+
+Files: libEGL.so.1, libGL.so.1, libGLESv2.so.2,
+libgallium-26.3.0-devel.so, libwayland-client.so, libarchive.so.
+Each file is pinned to a Git object ID, verified at build time; individual
+SHA-256 hashes are embedded in opengl-runtime-v1.zip/manifest.json.
+No Wine/Turnip driver is replaced; this is a selectable alternative
+application-side OpenGL path.
+
+Mesa 3D project: https://mesa3d.org/  (MIT-style license)
+Wayland project: https://gitlab.freedesktop.org/wayland/wayland (MIT)
+libarchive: https://github.com/libarchive/libarchive (BSD-style license)
+Copyright and licensing conditions for each underlying work remain with its
+rightsholders; preserve their notices on subsequent redistribution.
+
+IMPORTANT: Native EGL loader presence does NOT establish successful
+eglInitialize, OpenGL 4.3, X11 swapchain presentation, or Blender stability.
+GLX/DRI3/Present are not implemented in DRNAS's X11 server by this change.
