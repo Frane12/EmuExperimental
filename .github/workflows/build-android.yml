@@ -269,11 +269,11 @@ jobs:
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           EmuDrnas preAlpha 0.1 r18 - ARM64 DXGI guard and Blender Vulkan arguments
           Package: com.drnas.console
-          versionCode: 83
+          versionCode: 84
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Extends r17 app shortcuts and r16 WineVulkan. Native ARM64/ARM64EC EXEs and opt-in Native Vulkan profiles request architecture-correct Wine built-in dxgi/d3d9/d3d11/d3d10core instead of incompatible x86/x64 DXVK PE DLLs (seen as c000007b from Windows ARM64 Blender). DXVK remains enabled for ordinary Windows x86/x64 DirectX games. Adds PE architecture check, detailed native DLL selection log, and regression tests. GLX libGL.so.1 is absent from the pinned Bionic source and is NOT fixed by this change; native Vulkan WSI/GPU display still requires a physical Blender test. Stable-signed private draft APK with same cert and applicationId, versionCode 83.
+          Changed: Extends r17 app shortcuts and r16 WineVulkan. Native ARM64/ARM64EC EXEs and opt-in Native Vulkan profiles request architecture-correct Wine built-in dxgi/d3d9/d3d11/d3d10core instead of incompatible x86/x64 DXVK PE DLLs (seen as c000007b from Windows ARM64 Blender). DXVK remains enabled for ordinary Windows x86/x64 DirectX games. Adds PE architecture check, detailed native DLL selection log, and regression tests. GLX libGL.so.1 is absent from the pinned Bionic source and is NOT fixed by this change; native Vulkan WSI/GPU display still requires a physical Blender test. Stable-signed private draft APK with same cert and applicationId, versionCode 84.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
