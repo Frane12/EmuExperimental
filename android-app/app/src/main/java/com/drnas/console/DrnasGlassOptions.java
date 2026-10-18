@@ -31,7 +31,7 @@ final class DrnasGlassOptions {
     private static final int[] ORDER={
             21,20,19,17,18,22,28,29,1,23,24,25,26,27,
             0,2,6,7,8,4,5,9,3,
-            10,11,12,13,14,15,16
+            10,11,12,13,14,15,16,31
     };
     private static final int TEXT=0xffe7f3fb;
     private static final int GREEN=0xff80edbd;
