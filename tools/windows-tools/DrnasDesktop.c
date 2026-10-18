@@ -132,7 +132,7 @@ static void audit_foreground(void)
         GetWindowTextW(now, title, 95);
         WideCharToMultiByte(CP_UTF8, 0, title, -1, utf8, sizeof(utf8), NULL, NULL);
     }
-    fprintf(stderr, "DRNAS_X11_CRITICAL_WINE_FOREGROUND tickMs=%lu hwnd=%p pid=%lu title=%.140s\\n",
+    fprintf(stderr, "DRNAS_X11_CRITICAL_WINE_FOREGROUND tickMs=%lu hwnd=%p pid=%lu title=%.140s\n",
             (unsigned long)GetTickCount(), (void *)now, (unsigned long)pid, utf8);
     fflush(stderr);
 }
