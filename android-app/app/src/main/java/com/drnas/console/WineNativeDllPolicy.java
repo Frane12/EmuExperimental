@@ -142,6 +142,93 @@ final class WineNativeDllPolicy {
     }
 
     /**
+     * The normal desktop/Explorer launch path does not provide the Android
+     * launcher with a resolvable Blender PE machine. Prefix system32/dxgi.dll
+     * may be DXVK AMD64 and cannot be imported by Windows ARM64 Blender.
+     *
+     * Stage Wine's real ARM64 builtin DXGI only beside confirmed ARM64 Blender
+     * in the app-owned C:\\DRNAS\\Apps folder. The Windows loader searches the
+     * executable directory before system32. No global DXVK DLL is modified;
+     * pre-existing application-local DXGI remains untouched.
+     */
+    static int stageKnownArm64BlenderAppDxgi(File wineLib,File prefix,
+                                              Consumer<String> log) {
+        int installed=0,checked=0;
+        try {
+            File wineRoot=wineLib.getCanonicalFile();
+            File source=new File(wineRoot,"wine/aarch64-windows/dxgi.dll");
+            if(!java.nio.file.Files.isRegularFile(source.toPath(),
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS) ||
+                    source.length()<512 || source.length()>16L*1024*1024 ||
+                    guestMachine(source)!=IMAGE_FILE_MACHINE_ARM64) {
+                log.accept("DRNAS_ARM64_BLENDER_DXGI: WINE_SOURCE_UNAVAILABLE");
+                return 0;
+            }
+            File drive=new File(prefix.getCanonicalFile(),"drive_c").getCanonicalFile();
+            File[] roots={
+                    new File(drive,"DRNAS/Apps"),
+                    new File(drive,"Program Files"),
+                    new File(drive,"Program Files/Blender Foundation")
+            };
+            for(File parent:roots) {
+                if(!java.nio.file.Files.isDirectory(parent.toPath(),
+                        java.nio.file.LinkOption.NOFOLLOW_LINKS))continue;
+                File[] dirs=parent.listFiles();
+                if(dirs==null)continue;
+                int visits=0;
+                for(File dir:dirs) {
+                    if(++visits>120)break;
+                    if(!dir.getName().toLowerCase(java.util.Locale.ROOT)
+                            .startsWith("blender"))continue;
+                    if(!java.nio.file.Files.isDirectory(dir.toPath(),
+                            java.nio.file.LinkOption.NOFOLLOW_LINKS))continue;
+                    File exe=new File(dir,"blender.exe");
+                    if(!java.nio.file.Files.isRegularFile(exe.toPath(),
+                            java.nio.file.LinkOption.NOFOLLOW_LINKS))continue;
+                    checked++;
+                    if(!dir.getCanonicalFile().toPath().startsWith(drive.toPath()) ||
+                            guestMachine(exe)!=IMAGE_FILE_MACHINE_ARM64) {
+                        log.accept("DRNAS_ARM64_BLENDER_DXGI: SKIP_NON_ARM64 "+dir.getName());
+                        continue;
+                    }
+                    File local=new File(dir,"dxgi.dll");
+                    if(java.nio.file.Files.exists(local.toPath(),
+                            java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+                        log.accept("DRNAS_ARM64_BLENDER_DXGI: EXISTING_LOCAL_DLL "+
+                                dir.getName()+" machine=0x"+
+                                Integer.toHexString(guestMachine(local)));
+                        continue;
+                    }
+                    java.nio.file.Path temp=java.nio.file.Files.createTempFile(
+                            dir.toPath(),".drnas-arm64-dxgi-",".tmp");
+                    try {
+                        java.nio.file.Files.copy(source.toPath(),temp,
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                        if(guestMachine(temp.toFile())!=IMAGE_FILE_MACHINE_ARM64)
+                            throw new IOException("temporary ARM64 PE validation failed");
+                        try {
+                            java.nio.file.Files.move(temp,local.toPath(),
+                                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                        }catch(java.nio.file.AtomicMoveNotSupportedException e) {
+                            java.nio.file.Files.move(temp,local.toPath());
+                        }
+                        installed++;
+                        log.accept("DRNAS_ARM64_BLENDER_DXGI: APP_LOCAL_ARM64_READY "+
+                                dir.getName()+" bytes="+source.length()+
+                                "; system32 DXVK untouched");
+                    }finally{java.nio.file.Files.deleteIfExists(temp);}
+                }
+            }
+            log.accept("DRNAS_ARM64_BLENDER_DXGI: SCAN_COMPLETE checked="+
+                    checked+" installed="+installed);
+        }catch(Exception problem) {
+            log.accept("DRNAS_ARM64_BLENDER_DXGI: SAFE_STAGE_ERROR "+
+                    problem.getClass().getSimpleName()+": "+problem.getMessage());
+        }
+        return installed;
+    }
+
+    /**
      * Read-only forensic inventory for an ARM64 program that still reports
      * c000007b after WINEDLLOVERRIDES=dxgi=b. Do not infer load order from
      * file presence: verbose Wine +module/+loaddll is needed to identify
