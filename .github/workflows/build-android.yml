@@ -1,4 +1,4 @@
-name: Blender DRNAS r34 - direct Android D drive and Mesa R6
+name: Blender DRNAS r35 - direct Android D drive and Mesa R6
 on:
   push:
     branches:
@@ -57,9 +57,9 @@ on:
       - "tests/test_xinput_build_sources.py"
       - ".github/workflows/build-android.yml"
   workflow_dispatch:
-# Serialise first-run identity generation to prevent different build signatures.
+# Serialize this branch; the established permanent identity is read-only here.
 concurrency:
-  group: emudrnas-signing-identity-v1
+  group: blender-direct-d-${{ github.ref }}
   cancel-in-progress: false
 permissions:
   contents: read
@@ -184,7 +184,7 @@ jobs:
       - name: Run JVM regression tests before checking signing secrets
         working-directory: android-app
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
-      - name: Load or create one permanent signing identity in a PRIVATE draft release
+      - name: Reuse the established permanent signing identity from the PRIVATE draft
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -207,29 +207,8 @@ jobs:
               --pattern "drnas-identity-v1.tar.gz" --dir "$root"
             tar -xzf "$root/drnas-identity-v1.tar.gz" -C "$root" drnas-signing.p12 password.txt
           else
-            echo "First run: generating ONE permanent PKCS12 signing identity, never a runner-debug key."
-            password="$(openssl rand -hex 32)"
-            printf '%s' "$password" > "$root/password.txt"
-            keytool -genkeypair -storetype PKCS12 \
-              -keystore "$root/drnas-signing.p12" -alias drnas-stable \
-              -keyalg RSA -keysize 3072 -validity 10000 -noprompt \
-              -storepass "$password" -keypass "$password" \
-              -dname "CN=EmuDrnas Permanent Alpha,O=Drnas,C=HR"
-            tar -czf "$root/drnas-identity-v1.tar.gz" -C "$root" drnas-signing.p12 password.txt
-            cat > "$root/identity-notes.txt" <<'IDENTITY'
-          PRIVATE SIGNING IDENTITY - NEVER PUBLISH THIS DRAFT RELEASE.
-          The archive contains BOTH the permanent PKCS12 signing key and its
-          strong random password. It can sign future Android APKs and MUST
-          be backed up to a secure offline location by the repository owner.
-          GitHub collaborators able to access private draft releases can read it.
-          Do not share this draft release, and do not make the repo public.
-          For production, transfer this identity to protected Actions Secrets
-          and delete the draft release only after verifying a secure backup.
-          IDENTITY
-            gh release create "$identity_tag" "$root/drnas-identity-v1.tar.gz" \
-              --repo "$GITHUB_REPOSITORY" --draft --target "$GITHUB_SHA" \
-              --title "PRIVATE - EmuDrnas permanent APK signing identity (DO NOT PUBLISH)" \
-              --notes-file "$root/identity-notes.txt"
+            echo "::error::Established permanent signing identity missing; refusing to generate a replacement key."
+            exit 1
           fi
           password="$(cat "$root/password.txt")"
           test -n "$password"
@@ -294,26 +273,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r34-Direct-D-Mesa-R6-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r35-Direct-D-Mesa-R6-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          Blender DRNAS r34 - direct Android D drive and Mesa R6
+          Blender DRNAS r35 - direct Android D drive and Mesa R6
           Package: com.drnas.console
-          versionCode: 100
+          versionCode: 101
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Mandatory first-launch local Android folder selection mapped directly as D:. Persisted selection and permission, real read/write/rename probe before launch, all-files Android permission requested only when direct access requires it. No SAF mirror. Blender Save/Open can use D: and menu shows actual Android path; changing folder restarts Blender after user saves. Cloud providers retain explicit Android export. New pinned Turnip 26.3.0-R6 for supported A6xx/A7xx incl. A710/A720/A722/A740, with original A8xx and Mali paths retained. Lean Blender session omits game shims, Paint, game diagnostics, Mono, wallpaper and FEX performance tuning. Mono MSI omitted from APK. Core Wine/graphics dependencies and existing user files preserved. GPU and Android storage behavior require on-device testing. Same stable certificate, versionCode 100 for updates.
+          Changed: Mandatory first-launch local Android folder selection mapped directly as D:. Persisted selection and permission, real read/write/rename probe before launch, all-files Android permission requested only when direct access requires it. No SAF mirror. Blender Save/Open can use D: and menu shows actual Android path; changing folder restarts Blender after user saves. Cloud providers retain explicit Android export. New pinned Turnip 26.3.0-R6 for supported A6xx/A7xx incl. A710/A720/A722/A740, with original A8xx and Mali paths retained. Lean Blender session omits game shims, Paint, game diagnostics, Mono, wallpaper and FEX performance tuning. Mono MSI omitted from APK. Core Wine/graphics dependencies and existing user files preserved. GPU and Android storage behavior require on-device testing. Same stable certificate, versionCode 101 for updates.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r35-Direct-D-Mesa-R6-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r35-Direct-D-Mesa-R6-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
         with:
-          name: Blender-DRNAS-r34-Direct-D-Mesa-R6-test-ZIP
+          name: Blender-DRNAS-r35-Direct-D-Mesa-R6-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -322,8 +301,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r34-direct-d-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r34 - direct D drive, Mesa R6, lean session" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r35-direct-d-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r35-Direct-D-Mesa-R6-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r35 - direct D drive, Mesa R6, lean session" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 

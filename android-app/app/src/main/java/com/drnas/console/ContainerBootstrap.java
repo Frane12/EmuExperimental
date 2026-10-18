@@ -151,6 +151,7 @@ public final class ContainerBootstrap {
                 // A bundled driver is applied only to an exactly identified GPU.
                 // A manually imported ZIP remains an explicit user-selected override.
                 if(turnip==null && archive.isFile() &&
+                        (!TurnipDevicePolicy.LEGACY.equals(claimed) || Build.VERSION.SDK_INT>=28) &&
                         (claimed.isEmpty() || TurnipDevicePolicy.matches(claimed,gpuTarget))) {
                     try {turnip=WcpRuntimeStager.stageTurnipZip(archive,vault,sha,this::log);}
                     catch(Exception e){unsupported.add("Turnip: "+e.getMessage());}

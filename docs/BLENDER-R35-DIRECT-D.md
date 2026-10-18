@@ -1,4 +1,4 @@
-# Blender DRNAS r34: direct Android project drive
+# Blender DRNAS r35: direct Android project drive
 
 At first launch select a **local folder** using Android's folder picker, for
 example `Internal storage/Documents/Blender`. The same folder appears inside
@@ -52,7 +52,7 @@ Remove the Mono MSI download from this Blender APK workflow. Preserve Wine's
 ABI modules, DXGI architecture recovery, Vulkan/OpenGL, fonts, audio, keyboard,
 diagnostics and the existing general DRNAS fallback. Do not delete user files,
 installed programs or arbitrary Wine DLLs. A truly stripped Wine distribution
-requires dependency traces and on-device regression testing; r34 does not claim
+requires dependency traces and on-device regression testing; r35 does not claim
 to be a minimal custom Wine build.
 
 ## Verification
