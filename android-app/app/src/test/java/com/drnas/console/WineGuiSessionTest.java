@@ -60,6 +60,14 @@ public class WineGuiSessionTest {
                     .forEach(p->{try {java.nio.file.Files.deleteIfExists(p);}catch(Exception ignored){}});
         }
     }
+    @Test public void nativeVulkanLaunchUsesGuestDosPathAndSeparateArgs() throws Exception {
+        String path="R:\\Blender 4.5\\blender.exe";
+        assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
+                "explorer.exe","/desktop=shell,1280x720",path,
+                "--gpu-backend","vulkan"),
+                WineGuiSession.command(LINKER,WINE,"execwin:"+path,
+                LaunchArguments.forApp(path,"",true)));
+    }
     @Test public void nativeDxvkPreferenceDoesNotFakeVulkan() {
         Map<String,String> env=new HashMap<>();
         WineGuiSession.displayEnvironment(env);
