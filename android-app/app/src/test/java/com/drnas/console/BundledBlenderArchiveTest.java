@@ -28,8 +28,8 @@ public class BundledBlenderArchiveTest {
         BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});
         assertTrue(Files.isRegularFile(target.resolve("blender.exe")));
         assertTrue(Files.isDirectory(target.resolve("4.5/config")));
-        assertEquals(hash(zip),Files.readString(target.resolve(".drnas-bundle-sha256")));
-        assertTrue(Files.readString(target.resolve("drnas-startup.py")).contains("userpref.blend"));
+        assertEquals(hash(zip),new String(Files.readAllBytes(target.resolve(".drnas-bundle-sha256")),java.nio.charset.StandardCharsets.US_ASCII));
+        assertTrue(new String(Files.readAllBytes(target.resolve("drnas-startup.py")),java.nio.charset.StandardCharsets.UTF_8).contains("userpref.blend"));
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
     }
     @Test public void badHashRollsBackAllFiles() throws Exception {
