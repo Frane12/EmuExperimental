@@ -79,6 +79,21 @@ public class WineGuiSessionTest {
         assertTrue(env.get("WINEDLLOVERRIDES").contains("dxgi=n,b"));
         assertTrue(env.get("WINEDLLOVERRIDES").contains("d3d11=n,b"));
     }
+    @Test public void wineShellLinkFlagsLaunchRealHelperWithGuestWindowsPath() throws Exception {
+        String link="C:\\users\\xuser\\Desktop\\Blender.lnk";
+        java.util.List<String> flags=LaunchArguments.forLink(link,
+                "--gpu-backend vulkan --factory-startup",true);
+        assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
+                "explorer.exe","/desktop=shell,1280x720",
+                "C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe",
+                link,"vulkan","--gpu-backend","vulkan","--factory-startup"),
+                WineGuiSession.command(LINKER,WINE,
+                        "execwin:C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe",flags));
+        assertEquals(Arrays.asList("/system/bin/linker64","/data/app/wine",
+                "explorer.exe","/desktop=shell,1280x720",link),
+                WineGuiSession.command(LINKER,WINE,"linkwin:"+link,
+                        LaunchArguments.forLink(link,"",false)));
+    }
 }
 
 
