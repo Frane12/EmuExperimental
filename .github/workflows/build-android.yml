@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r21 - Blender ARM64 DXGI loader recovery
+name: EmuDrnas preAlpha 0.1 r22 - Blender X11 popup map-state and events
 on:
   push:
     branches:
@@ -31,6 +31,7 @@ on:
       - fix/r18-blender-arm64-dxgi-guard
       - diagnostic/r19-native-dxgi-load-trace
       - fix/r21-blender-arm64-dxgi-stage
+      - fix/r22-blender-popup-map-state
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -267,36 +268,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r21-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r22-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r21 - architecture-correct Wine DXGI for ARM64 Blender
+          EmuDrnas preAlpha 0.1 r22 - Blender transient windows X11 semantics
           Package: com.drnas.console
           versionCode: 84
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Implements narrowly scoped ARM64 Blender DXGI loader recovery. r19 Wine +module trace proves the pinned DXVK PE 0x8664 in system32 is rejected as the Blender ARM64 PE 0xaa64 imports dxgi.dll (c000007b). For confirmed ARM64/ARM64EC guest EXEs ONLY, after verified DXVK installation and before any Wine process launch, atomically stage Wine's own verified ARM64 PE dxgi.dll into the active prefix system32. An ordinary x86/x64 game session reinstalls its pinned DXVK DLLs before Wine starts. Does not touch user game files or syswow64. Includes regression tests for incompatible PE, scope and idempotence, and keeps Wine loader diagnostics. This is a device test; Blender GUI and Vulkan presentation are not yet confirmed. OpenGL libGL.so.1 remains unavailable. Same permanent signing cert and applicationId, versionCode 87.
+          Changed: Fixes two X11 core window-manager protocol bugs discovered while Blender ARM64 GUI was running. GetWindowAttributes previously reported IsUnmapped for mapped windows and IsViewable for unmapped windows; r22 now reports correct 0/1/2 values including a mapped child under an unmapped parent. CreateNotify.override_redirect now reports the NEW CHILD's flag, not its parent's, so popup and transient windows are correctly identified by Wine/WM. Add bounded per-popup CREATE, MAP, and UNMAP diagnostics (not per-frame). Includes JVM regression tests for map_state, preserving r21 ARM64 DXGI loader recovery and WineVulkan. Fix is experimental; popup behavior and renderer FPS require on-device tests. Same permanent signing cert and applicationId, versionCode 88.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r21-blender-arm64-dxgi-loader.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r21-blender-arm64-dxgi-loader.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r21-blender-arm64-dxgi-loader-ZIP
+          name: EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r21-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r21-blender-arm64-dxgi-loader.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r21 - ARM64 Blender DXGI loader recovery private test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r22-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r22-blender-popup-x11-mapstate.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r22 - Blender X11 popup fix private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
