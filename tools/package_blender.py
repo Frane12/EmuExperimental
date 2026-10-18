@@ -4,7 +4,7 @@ import hashlib
 import pathlib
 import shutil
 import sys
-import urllib.request
+import subprocess
 import zipfile
 
 VERSION = '4.5.14'
@@ -19,8 +19,14 @@ def package(assets, source=None):
     target = folder / NAME
     temporary = target.with_suffix('.partial')
     try:
-        with (open(source, 'rb') if source else urllib.request.urlopen(URL, timeout=90)) as src, temporary.open('wb') as dst:
-            shutil.copyfileobj(src, dst, 128 * 1024)
+        if source:
+            with open(source, 'rb') as src, temporary.open('wb') as dst:
+                shutil.copyfileobj(src, dst, 128 * 1024)
+        else:
+            subprocess.run(['curl', '--fail', '--location', '--retry', '3',
+                            '--retry-all-errors', '--connect-timeout', '25', '--max-time', '360',
+                            '--user-agent', 'Mozilla/5.0 DRNAS-Emu-Blender/4.5.14',
+                            '--output', str(temporary), URL], check=True)
         with temporary.open('rb') as f:
             actual = hashlib.file_digest(f, 'sha256').hexdigest()
         if actual != SHA256:
