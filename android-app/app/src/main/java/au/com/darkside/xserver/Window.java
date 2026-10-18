@@ -46,6 +46,7 @@ public class Window extends Resource {
     private final Set<PassiveKeyGrab> _passiveKeyGrabs;
     private boolean _isMapped = false;
     private boolean _exposed = false;
+    private int _loggedStackTransitions;
     private int _visibility = NotViewable;
     private Bitmap _backgroundBitmap = null;
     private int _eventMask = 0;
@@ -1640,11 +1641,18 @@ public class Window extends Resource {
 
         _isMapped = true;
         if(client!=null && !_inputOnly && _irect.width()>16 && _irect.height()>16)_xServer.windowMapped(getId());
-        if(_overrideRedirect || _parent == _screen.getRootWindow())
+        // A large nested Wine client surface was invisible in r23's map logs,
+        // because only root children and override-redirect frames were traced.
+        // Include it and its stack index once per Map (never per frame).
+        if (_overrideRedirect || _parent == _screen.getRootWindow() ||
+                (!_inputOnly && _irect.width() >= 400 && _irect.height() >= 300))
             _xServer.diagnostic("DRNAS_X11_WINDOW_MAP id="+getId()+
                     " parent="+_parent.getId()+" overrideRedirect="+_overrideRedirect+
                     " mapState="+X11MapState.of(_isMapped,isViewable())+
-                    " bounds="+_orect.toShortString());
+                    " siblingIndex="+_parent._children.indexOf(this)+
+                    "/"+_parent._children.size()+
+                    " bounds="+_orect.toShortString()+
+                    " drawable="+_drawable.getWidth()+"x"+_drawable.getHeight());
 
         sc = getSelectingClients(EventCode.MaskStructureNotify);
         if (sc != null) {
@@ -2368,6 +2376,20 @@ public class Window extends Resource {
         }
 
         if (changed) {
+            // Diagnose intermittent Blender window disappearance: distinguish
+            // actual movement/restacking from a still-mapped PutImage surface.
+            // Limit to eight messages per window to avoid overwhelming logs.
+            if (_loggedStackTransitions++ < 8 &&
+                    (_overrideRedirect || _irect.width() >= 400)) {
+                _xServer.diagnostic("DRNAS_X11_WINDOW_CONFIGURE id="+getId()+
+                        " parent="+_parent.getId()+
+                        " mapped="+_isMapped+" viewable="+isViewable()+
+                        " stack="+_parent._children.indexOf(this)+
+                        "/"+_parent._children.size()+
+                        " geometry="+_orect.toShortString()+
+                        " sibling="+(sibling==null?0:sibling.getId())+
+                        " mask=0x"+Integer.toHexString(mask));
+            }
             Vector<Client> sc;
 
             sc = getSelectingClients(EventCode.MaskStructureNotify);
@@ -2739,8 +2761,20 @@ public class Window extends Resource {
                         int dy = _irect.top + y - w._irect.top;
                         int child = 0;
 
-                        for (Window c : w._children)
-                            if (c._isMapped && c._irect.contains(x, y)) child = c._id;
+                        // X11 TranslateCoordinates arguments are SOURCE-local.
+                        // Child bounds are stored in ROOT coordinates, so test
+                        // against the translated ROOT point, not (x,y). Also
+                        // use topmost visible child, including its input shape.
+                        final int rootX = _irect.left + x;
+                        final int rootY = _irect.top + y;
+                        for (int i = w._children.size() - 1; i >= 0; --i) {
+                            Window c = w._children.elementAt(i);
+                            if (!c._isMapped) continue;
+                            boolean hit = c._inputShapeRegion == null
+                                    ? c._orect.contains(rootX, rootY)
+                                    : c._inputShapeRegion.contains(rootX, rootY);
+                            if (hit) { child = c._id; break; }
+                        }
 
                         synchronized (io) {
                             Util.writeReplyHeader(client, (byte) 1);
@@ -2925,3 +2959,4 @@ public class Window extends Resource {
         return _properties.get(id);
     }
 }
+

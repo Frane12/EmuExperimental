@@ -846,10 +846,11 @@ public class Drawable {
         // GXcopy without clipping can write the destination bitmap itself.
         // This eliminates one 800x600 staging bitmap write AND Canvas blit
         // per frame while retaining the existing path for unusual X11 GCs.
+        final int copyWidth = Math.min(width, _bitmap.getWidth() - (int)dstX);
+        final int copyHeight = Math.min(height, _bitmap.getHeight() - (int)dstY);
         final boolean directCopy = gc.isUnclippedOpaqueCopy() &&
                 _shapeMask == null && dstX >= 0 && dstY >= 0 &&
-                dstX + width <= _bitmap.getWidth() &&
-                dstY + height <= _bitmap.getHeight();
+                copyWidth > 0 && copyHeight > 0;
         // Issue #10: payload 3619852 bytes could be a 1280x707 update.
         // The X11 *target drawable* may itself be 1280x707, even when the
         // 1280x720 root is larger. Never infer a 13-row gap from root size.
@@ -879,6 +880,8 @@ public class Drawable {
                         " payloadBytes="+(bytesRemaining+12)+
                         " strideBytes="+(depth==24 && format==Z_PIXMAP_FORMAT?width*4:-1)+
                         " padBytes="+pad+" opaqueCopy="+directCopy+
+                        " copyW="+(directCopy?copyWidth:-1)+
+                        " copyH="+(directCopy?copyHeight:-1)+
                         " presentationMaskCandidate="+(width==xServer.getScreen().getGuestWidth() &&
                                 height<xServer.getScreen().getGuestHeight()));
             }
@@ -905,10 +908,10 @@ public class Drawable {
             io.readSkip(pad);
             long tUploadedStart=measure?System.nanoTime():0L;
             if (directCopy) {
-                _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,width,height);
-                // Only presentation mask receives the repeated source geometry.
-                // The bitmap remains intact for all normal X11 damage/retention.
-                xServer.notePresentedImage(width,height,(int)dstX,(int)dstY,true);
+                _bitmap.setPixels(_zUploadColors,0,width,(int)dstX,(int)dstY,copyWidth,copyHeight);
+                // A cropped oversized source is not a complete presented frame.
+                if(copyWidth==width && copyHeight==height)
+                    xServer.notePresentedImage(width,height,(int)dstX,(int)dstY,true);
             } else {
                 _zUploadBitmap.setPixels(_zUploadColors,0,width,0,0,width,height);
                 _canvas.drawBitmap(_zUploadBitmap,dstX,dstY,gc.getPaint());

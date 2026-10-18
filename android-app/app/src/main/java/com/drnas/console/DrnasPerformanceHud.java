@@ -27,8 +27,6 @@ import java.util.Locale;
  * RAM = host Android system RAM percentage, not allocated guest Wine RAM.
  */
 final class DrnasPerformanceHud extends View {
-    private static final int[] ACCENTS={0xff64e6cf,0xffa5baff,0xffffc878};
-    private static final String[] TITLES={"DISPLAY FPS","SYSTEM RAM","BATTERY"};
 
     private final Paint fill=new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint border=new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -40,7 +38,6 @@ final class DrnasPerformanceHud extends View {
     private final String[] values={"--","--","--","--","--","--"};
     private final HudMetrics stats=new HudMetrics();
     private final float density,scaledDensity;
-    private final Typeface labelFont=Typeface.create("sans-serif-medium",Typeface.NORMAL);
     private final Typeface valueFont=Typeface.create("sans-serif-medium",Typeface.BOLD);
     private Shader glassGradient;
     private volatile boolean active;

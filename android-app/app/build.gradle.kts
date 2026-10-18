@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 90
-        versionName = "preAlpha-0.1-r24-blender-performance"
+        versionCode = 91
+        versionName = "preAlpha-0.1-r25-blender-performance"
     }
     androidResources {
         // Already-compressed runtime/application archives: avoid APK recompression.

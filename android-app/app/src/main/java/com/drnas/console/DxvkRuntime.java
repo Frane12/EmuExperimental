@@ -38,7 +38,7 @@ final class DxvkRuntime {
             for(String dll:dlls) {
                 File from=new File(source,arch+"/"+dll),to=new File(folder,dll);
                 byte[] data=Files.readAllBytes(from.toPath());
-                if(Files.isRegularFile(to.toPath(),LinkOption.NOFOLLOW_LINKS)&&
+                if(Files.isRegularFile(to.toPath(),LinkOption.NOFOLLOW_LINKS)&&to.length()==data.length&&
                         Arrays.equals(hash(data),hashFile(to.toPath()))){verified++;continue;}
                 // Move the symlink itself, never write through a Wine builtin link.
                 Path backup=new File(folder,dll+".drnas-before-dxvk").toPath();
