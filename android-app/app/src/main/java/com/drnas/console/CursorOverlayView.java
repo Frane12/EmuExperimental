@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
+import java.util.function.Consumer;
 import au.com.darkside.xserver.DrnasScreenTransform;
 import android.view.View;
 
@@ -23,6 +25,57 @@ final class CursorOverlayView extends View {
         }
     }
     private volatile Frame frame;
+    // Blender's 3D viewport can ask Wine for an intentionally transparent
+    // X11 cursor. Our HWUI overlay is otherwise above every guest window:
+    // when there are zero visible cursor pixels, show a small, contrasting
+    // Android-side pointer for Blender only. This does not move X11 input.
+    private boolean blenderVisibleCursor;
+    private Bitmap fallbackArrow;
+    private Bitmap lastAuditedBitmap;
+    private boolean lastAuditedWasBlank;
+    private int previousCursorState=-1;
+    private int cursorStateLogs;
+    private Consumer<String> diagnosticSink;
+    void setBlenderVisibleCursor(boolean enabled) { blenderVisibleCursor=enabled; }
+    void setDiagnosticSink(Consumer<String> sink) { diagnosticSink=sink; }
+
+    private boolean transparentCursor(Bitmap bitmap) {
+        if(bitmap==null)return true;
+        if(bitmap==lastAuditedBitmap)return lastAuditedWasBlank;
+        lastAuditedBitmap=bitmap;
+        lastAuditedWasBlank=false;
+        if(bitmap.isRecycled() || bitmap.getWidth()>64 || bitmap.getHeight()>64)
+            return false;
+        int w=bitmap.getWidth(),h=bitmap.getHeight();
+        int[] pixels=new int[w*h];
+        bitmap.getPixels(pixels,0,w,0,0,w,h);
+        boolean empty=true;
+        for(int pixel:pixels)if((pixel>>>24)!=0) {empty=false;break;}
+        lastAuditedWasBlank=empty;
+        return empty;
+    }
+    private Bitmap arrowForInvisibleCursor() {
+        if(fallbackArrow!=null && !fallbackArrow.isRecycled())return fallbackArrow;
+        Bitmap arrow=Bitmap.createBitmap(20,24,Bitmap.Config.ARGB_8888);
+        Canvas canvas=new Canvas(arrow);
+        Path silhouette=new Path();
+        silhouette.moveTo(1.5f,1.5f);
+        silhouette.lineTo(1.5f,20f);
+        silhouette.lineTo(6.5f,15.5f);
+        silhouette.lineTo(10f,22f);
+        silhouette.lineTo(13.2f,20.5f);
+        silhouette.lineTo(9.5f,14f);
+        silhouette.lineTo(18.5f,14f);
+        silhouette.close();
+        Paint ink=new Paint(Paint.ANTI_ALIAS_FLAG);
+        ink.setStyle(Paint.Style.FILL);ink.setColor(0xff111923);
+        canvas.drawPath(silhouette,ink);
+        ink.setStyle(Paint.Style.STROKE);ink.setStrokeWidth(1.65f);
+        ink.setStrokeJoin(Paint.Join.ROUND);ink.setColor(0xffffffff);
+        canvas.drawPath(silhouette,ink);
+        fallbackArrow=arrow;
+        return arrow;
+    }
     private final int guestWidth, guestHeight;
     private final Paint paint=new Paint(Paint.FILTER_BITMAP_FLAG|Paint.ANTI_ALIAS_FLAG);
     private final android.graphics.RectF destination=new android.graphics.RectF();
@@ -51,6 +104,21 @@ final class CursorOverlayView extends View {
     }
 
     void setCursor(Bitmap bitmap,int x,int y,int hotspotX,int hotspotY) {
+        if(blenderVisibleCursor) {
+            int state=bitmap==null?1:(transparentCursor(bitmap)?2:0);
+            if(state!=previousCursorState) {
+                previousCursorState=state;
+                if(cursorStateLogs++<24 && diagnosticSink!=null)
+                    diagnosticSink.accept("DRNAS_BLENDER_CURSOR source="+
+                            (state==0?"visible":state==1?"null":"transparent")+
+                            " overlayFallback="+(state!=0)+
+                            " hotspotX="+hotspotX+" hotspotY="+hotspotY);
+            }
+            if(state!=0) {
+                bitmap=arrowForInvisibleCursor();
+                hotspotX=1;hotspotY=1;
+            }
+        }
         frame=new Frame(bitmap,x,y,hotspotX,hotspotY);
         postInvalidateOnAnimation();
     }
