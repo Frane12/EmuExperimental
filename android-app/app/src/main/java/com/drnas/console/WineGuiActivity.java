@@ -85,6 +85,8 @@ public final class WineGuiActivity extends Activity {
     private boolean keyboardPending;
     private int keyboardAttempts;
     private DrnasPerformanceHud performanceHud;
+    private TextView blenderFpsBadge;
+    private static final int BLENDER_LOAD_FROM_ANDROID=603;
     private int chosenFrameCap;
     private String launchProfileId;
     private boolean renderCaptureRunning;
@@ -95,10 +97,18 @@ public final class WineGuiActivity extends Activity {
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
-            if(destroyed||performanceHud==null||!performanceHud.isActive())return;
-            performanceHud.sample(xserver.getScreen().getDisplayedFps(),
-                    xserver.getScreen().getDisplayedFrameMs());
-            performanceHud.postDelayed(this,650);
+            if(destroyed||xserver==null)return;
+            boolean hud=performanceHud!=null && performanceHud.isActive();
+            boolean blenderBadge=blenderFpsBadge!=null &&
+                    blenderFpsBadge.getVisibility()==View.VISIBLE;
+            if(!hud && !blenderBadge)return;
+            float fps=xserver.getScreen().getDisplayedFps();
+            float frametime=xserver.getScreen().getDisplayedFrameMs();
+            if(hud)performanceHud.sample(fps,frametime);
+            if(blenderBadge)blenderFpsBadge.setText(fps>0?
+                    String.format(java.util.Locale.ROOT,"DISPLAY %.0f FPS · %.1f ms",fps,frametime):
+                    "DISPLAY -- FPS");
+            (blenderBadge?blenderFpsBadge:performanceHud).postDelayed(this,650);
         }
     };
 
@@ -426,6 +436,26 @@ public final class WineGuiActivity extends Activity {
                 dp(32),Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         hp.topMargin=dp(5);
         layout.addView(performanceHud,hp);
+        if(blenderShell) {
+            blenderFpsBadge=new TextView(this);
+            blenderFpsBadge.setText("DISPLAY -- FPS");
+            blenderFpsBadge.setTextColor(0xffa8f6d7);
+            blenderFpsBadge.setTextSize(12);
+            blenderFpsBadge.setGravity(Gravity.CENTER);
+            blenderFpsBadge.setClickable(false);
+            blenderFpsBadge.setFocusable(false);
+            android.graphics.drawable.GradientDrawable shape=
+                    new android.graphics.drawable.GradientDrawable();
+            shape.setColor(0xdc0e2330);
+            shape.setCornerRadius(dp(9));
+            shape.setStroke(dp(1),0x7386daca);
+            blenderFpsBadge.setBackground(shape);
+            FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(
+                    dp(195),dp(34),Gravity.TOP|Gravity.END);
+            bp.rightMargin=dp(9);bp.topMargin=dp(46);
+            layout.addView(blenderFpsBadge,bp);
+            blenderFpsBadge.setVisibility(View.GONE);
+        }
         // A very thin, transparent gesture zone at the screen's top edge:
         // pull down to reveal toolbar, pull upward to collapse it. No gesture
         // interceptor covers the active Crysis framebuffer or virtual pads.
@@ -449,7 +479,7 @@ public final class WineGuiActivity extends Activity {
         if(!blenderShell)layout.addView(gestureEdge,gp);
         setToolbarExpanded(false);
         performanceHud.setActive(!blenderShell && getPreferences(MODE_PRIVATE).getBoolean("perf_hud",false));
-        xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive());
+        xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive() || blenderShell);
         if(blenderShell) {
             blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
                 if(destroyed||xserver==null)return;
@@ -541,6 +571,11 @@ public final class WineGuiActivity extends Activity {
                             if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
                             startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                             if(blenderKeys!=null)blenderKeys.setVisibility(View.VISIBLE);
+                            if(blenderFpsBadge!=null) {
+                                blenderFpsBadge.setVisibility(View.VISIBLE);
+                                blenderFpsBadge.removeCallbacks(hudTicker);
+                                blenderFpsBadge.post(hudTicker);
+                            }
                         },250);
                     } else {
                         startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
@@ -658,7 +693,7 @@ public final class WineGuiActivity extends Activity {
                         boolean enable=!performanceHud.isActive();
                         getPreferences(MODE_PRIVATE).edit().putBoolean("perf_hud",enable).apply();
                         performanceHud.setActive(enable);
-                        xserver.getScreen().setFpsCounterEnabled(enable);
+                        xserver.getScreen().setFpsCounterEnabled(enable || blenderShell);
                         performanceHud.removeCallbacks(hudTicker);
                         if(enable)performanceHud.post(hudTicker);
                         Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
@@ -834,20 +869,91 @@ public final class WineGuiActivity extends Activity {
 
     private void showBlenderMenu() {
         new AppDialogBuilder(this).setTitle("Blender")
-                .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
+                .setItems(new String[]{"Puna tipkovnica",
+                        "Učitaj .blend iz Android datoteka u D:",
+                        "Preuzmi Blender CC0 demo direktno u D:",
+                        "Android mapa · disk D:","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
-                    else if(which==1)startBlenderAndroidExport();
-                    else if(which==2)captureRenderSample(20000L,true);
-                    else if(which==3)shareGuiLog();
-                    else if(which==4)showGlassControls();
-                    else if(which==5)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
-                            .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
+                    else if(which==1)pickAndroidBlendFile();
+                    else if(which==2)downloadBlenderDemoToD();
+                    else if(which==3)showBlenderProjectFolder();
+                    else if(which==4)startBlenderAndroidExport();
+                    else if(which==5)captureRenderSample(20000L,true);
+                    else if(which==6)shareGuiLog();
+                    else if(which==7)showGlassControls();
+                    else if(which==8)new AppDialogBuilder(this).setTitle("Blender · DRNAS r37")
+                            .setMessage("Blender ARM64 / Wine / Android D:. "+
+                                    "DISPLAY FPS broji osvježavanja Android/X11 prikaza, "+
+                                    "ne Blenderove simulacijske ni Cycles render kadrove.")
                             .setPositiveButton("OK",null).show();
-                    else if(which==7)showBlenderProjectFolder();
                     else exitConfirmation.confirm(this);
                 }).show();
+    }
+
+    private void pickAndroidBlendFile() {
+        Intent picker=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        picker.addCategory(Intent.CATEGORY_OPENABLE);
+        picker.setType("*/*"); // Android Documents providers often use application/octet-stream
+        try {startActivityForResult(picker,BLENDER_LOAD_FROM_ANDROID);}
+        catch(Exception problem){
+            log("DRNAS_BLENDER_D_IMPORT_PICKER_ERROR: "+problem.getMessage());
+            Toast.makeText(this,"Androidov odabir datoteka nije dostupan",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void downloadBlenderDemoToD() {
+        if(!blenderShell||destroyed)return;
+        new AppDialogBuilder(this).setTitle("Blender CC0 · Scattering Pebbles")
+                .setMessage("Preuzeti javnu Blender Studio scenu (~470 KB) "+
+                        "direktno u odabranu mapu diska D:? "+
+                        "Ako postoji isto ime, original neće biti prepisan.")
+                .setPositiveButton("Preuzmi",(d,w)->new Thread(()->{
+                    try {
+                        File dest=BlenderDemoImport.downloadDemo(this);
+                        log("DRNAS_BLENDER_D_DEMO_READY: "+dest.getName()+
+                                " size="+dest.length()+" bytes");
+                        runOnUiThread(()->showImportedBlenderFile(dest));
+                    }catch(Exception failure) {
+                        log("DRNAS_BLENDER_D_DEMO_FAILED: "+failure.getMessage());
+                        runOnUiThread(()->showBlenderImportFailure(failure));
+                    }
+                },"drnas-blender-official-demo-download").start())
+                .setNegativeButton("Odustani",null).show();
+    }
+
+    private void importExternalBlendToD(android.net.Uri uri) {
+        new Thread(()->{
+            try {
+                File dest=BlenderDemoImport.fromAndroidPicker(this,uri);
+                log("DRNAS_BLENDER_D_IMPORT_OK: "+dest.getName()+
+                        " size="+dest.length()+" bytes");
+                runOnUiThread(()->showImportedBlenderFile(dest));
+            }catch(Exception failure) {
+                log("DRNAS_BLENDER_D_IMPORT_FAILED: "+failure.getMessage());
+                runOnUiThread(()->showBlenderImportFailure(failure));
+            }
+        },"drnas-blender-android-d-import").start();
+    }
+
+    private void showImportedBlenderFile(File file) {
+        if(destroyed)return;
+        new AppDialogBuilder(this).setTitle("Blender projekt je na disku D:")
+                .setMessage("Projekt je dostupan u Blenderu:\n"+
+                        "D:\\\\"+file.getName()+
+                        "\n\nU Blenderu otvori File → Open, zatim D: i odaberi projekt. "+
+                        "Nije kopiran u skriveni Wine C:.")
+                .setPositiveButton("U redu",null).show();
+    }
+
+    private void showBlenderImportFailure(Exception error) {
+        if(destroyed)return;
+        new AppDialogBuilder(this).setTitle("Učitavanje u D: nije uspjelo")
+                .setMessage(error.getMessage()+
+                        "\nProvjeri odabranu Android mapu i dozvole diska D:.")
+                .setPositiveButton("U redu",null).show();
     }
 
     private void showBlenderProjectFolder() {
@@ -997,7 +1103,8 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=line.startsWith("DRNAS_BLENDER_ANDROID_") ||
+        boolean critical=line.startsWith("DRNAS_BLENDER_D_") ||
+                line.startsWith("DRNAS_BLENDER_ANDROID_") ||
                 line.startsWith("DRNAS_BLENDER_CURSOR") ||
                 line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
@@ -1310,6 +1417,11 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==BLENDER_LOAD_FROM_ANDROID) {
+            if(result==RESULT_OK && data!=null && data.getData()!=null)
+                importExternalBlendToD(data.getData());
+            return;
+        }
         if(request==BLENDER_ANDROID_EXPORT_REQUEST) {
             BlenderAndroidExport.Project project=pendingBlenderAndroidProject;
             pendingBlenderAndroidProject=null;
