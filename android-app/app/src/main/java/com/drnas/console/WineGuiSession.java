@@ -157,7 +157,11 @@ final class WineGuiSession implements AutoCloseable {
         if(guestTarget.startsWith("linkwin:") || guestTarget.startsWith("execwin:"))
             log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
-        final boolean nativeVulkan=appProfile.nativeVulkan();
+        // Redmi 13 Mali-G52: request Wine's ARM64 Vulkan path explicitly.
+        // The Blender shell already passes --gpu-backend vulkan, but the
+        // default shortcut profile must also enable Wine's Vulkan PE bridge.
+        final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
+        final boolean nativeVulkan=appProfile.nativeVulkan() || maliBlender;
         final boolean nativeOpenGl=appProfile.nativeOpenGl();
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
@@ -328,10 +332,20 @@ final class WineGuiSession implements AutoCloseable {
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
         // after an APK upgrade, without rewriting the Wine prefix.
+        // An older Adreno boot plan must never leak onto the Mali experiment.
+        if(maliBlender) {
+            plan.remove("turnipIcd");
+            plan.remove("turnipAutoSelected");
+        }
         boolean pinnedTurnipSelected=TurnipRuntime.selectBundledA840H29(context,plan,log);
         log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
+        if(maliBlender) {
+            boolean panvkSelected=MaliPanvkRuntime.select(context,env,log);
+            log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
+                    "STAGED_NOT_DEVICE_VERIFIED":"UNAVAILABLE_SYSTEM_VULKAN_ONLY"));
+        }
         // Only the app that explicitly selects OpenGL gets these Mesa host
         // libraries. Other games retain the identical r24 Wine/DXVK path.
         if(nativeOpenGl) {
