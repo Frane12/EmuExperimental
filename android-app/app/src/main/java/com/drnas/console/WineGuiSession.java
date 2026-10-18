@@ -254,9 +254,8 @@ final class WineGuiSession implements AutoCloseable {
         // dxgi.dll produces STATUS_INVALID_IMAGE_FORMAT (c000007b).
         // Keep standard DXVK for x64 games, but choose Wine's ARM64 builtins
         // for an ARM64/ARM64EC EXE or an explicit Native Vulkan profile.
-        int guestPeMachine=0;
-        if(UserShortcuts.isId(app))
-            guestPeMachine=WineNativeDllPolicy.guestMachine(UserShortcuts.resolve(context,app));
+        File directGuestExe=UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
+        int guestPeMachine=directGuestExe==null?0:WineNativeDllPolicy.guestMachine(directGuestExe);
         WineNativeDllPolicy.configure(env,guestPeMachine,nativeVulkan,
                 WineNativeDllPolicy.hasBuiltInDxgi(lib),log);
         WineVulkanRuntime.configure(env,nativeVulkan);
@@ -268,10 +267,20 @@ final class WineGuiSession implements AutoCloseable {
                     ";xinput1_3=n,b;xinput1_4=n,b;xinput9_1_0=n,b");
             log.accept("DRNAS_XINPUT_NATIVE_OVERRIDE xinput1_3/xinput1_4/xinput9_1_0 enabled; startup probe still requires game test.");
         }
-        // These two native environment switches are read by Wine/DXVK when
-        // their processes start; Java/X11 logging can also change mid-session.
+        // Read-only PE file/machine inventory narrows down Blender's c000007b
+        // but cannot establish DLL precedence without Wine's loader trace.
+        WineNativeDllPolicy.auditModules(lib,prefix,directGuestExe,guestPeMachine,env,log);
+        // On explicitly enabled diagnostics in Native Vulkan sessions, capture
+        // actual loader selection (+loaddll/+module) to distinguish Wine's
+        // builtin dxgi.dll from the packaged x86/x64 DXVK copy. Never turn
+        // high-volume DLL tracing on for regular DirectX gaming sessions.
         env.put("WINEDEBUG",diagnosticsEnabled?
-                "-all,err+all,+seh,+process,+timestamp,+pid":"-all,err+all");
+                (nativeVulkan?
+                 "-all,err+all,+seh,+process,+module,+loaddll,+timestamp,+pid":
+                 "-all,err+all,+seh,+process,+timestamp,+pid"):"-all,err+all");
+        if(diagnosticsEnabled && nativeVulkan)
+            log.accept("DRNAS_PE_IMPORT_AUDIT: Wine +module/+loaddll enabled for Native Vulkan "+
+                    "to identify the exact dxgi.dll resolution path; exported raw trace is authoritative.");
         env.put("DXVK_LOG_LEVEL",diagnosticsEnabled?"debug":"error");
         log.accept("DRNAS_DIAGNOSTICS="+(diagnosticsEnabled?"ON":"OFF")+
                 " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
