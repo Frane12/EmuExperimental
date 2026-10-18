@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r16 - r15 desktop fixes plus Native WineVulkan
+name: EmuDrnas preAlpha 0.1 r17 - Blender/Windows .lnk GPU flags
 on:
   push:
     branches:
@@ -27,6 +27,7 @@ on:
       - fix/r13-bundled-wcp-boot
       - fix/r15-desktop-launch-keys-taskbar
       - feat/winevulkan-merged-r16
+      - feat/blender-vulkan-shortcuts-r17
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -135,7 +136,11 @@ jobs:
           i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc \
             tools/windows-tools/DrnasDesktop.c -luser32 -lgdi32 -lm \
             -o android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc \
+            tools/windows-tools/DrnasLinkLaunch.c -lole32 -luuid -lshell32 \
+            -o android-app/app/src/main/assets/windows-tools/DRNASLinkLaunch.exe
           test -s android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASLinkLaunch.exe
           test -s android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
           test -s android-app/app/src/main/assets/windows-tools/DRNASPad.exe
           file android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
@@ -232,6 +237,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPaint.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASPad.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASDesktop.exe
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep windows-tools/DRNASLinkLaunch.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep emudrnas-desktop-meadow-r13.webp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x86/xinput1_3.dll
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xinput/x64/xinput1_3.dll
@@ -258,36 +264,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r16-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/EmuDrnas-preAlpha-0.1-r17-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r16 - WineVulkan and Blender launch built on r15 desktop fixes
+          EmuDrnas preAlpha 0.1 r17 - per-shortcut GPU arguments for Blender and Wine .lnk
           Package: com.drnas.console
-          versionCode: 81
+          versionCode: 82
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Preserves ALL r15 desktop input fixes: stable taskbar/Start, saved desktop keys, optimized pollen repaint, guest Windows C:/R: DOS launch paths and corrected CMD. Adds per-shortcut Native Vulkan (WineVulkan -> Khronos loader -> Mesa X11 wrapper -> Turnip) setting and bounded launch arguments. Blender.exe with Native Vulkan automatically receives --gpu-backend vulkan as separate argv tokens. Checks WineVulkan PE and loader before launching; no claim of successful GPU/WSI without device logs. Native Vulkan is opt-in; DXVK for D3D and existing Windows programs remain unchanged. New versionCode 81 supports in-place update over r15 using the same private signing key. Device/Blender compatibility pending.
+          Changed: Preserves r16 Native WineVulkan and r15 Start/taskbar/stable shortcut input changes. Adds --gpu-backend vulkan and other custom argv input in the Add Shortcut dialog and long-press settings, persisted per .exe icon. For genuine .lnk icons with flags or Native Vulkan, builds and stages a source-owned Win32 IShellLinkW helper to resolve the true executable, preserve its saved arguments and working directory, and append requested tokens with Windows quoting. Blender.exe automatically uses Vulkan only in Native Vulkan mode unless manually selected otherwise. The default no-flag Wine .lnk execution remains unchanged. Same permanent signing key and package ID with higher versionCode 82 for in-place update. Actual Blender Vulkan GPU/WSI/Present on device remains unverified.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r16-winevulkan-merged.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r16-winevulkan-merged.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../EmuDrnas-preAlpha-0.1-r17-winevulkan-merged.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r17-winevulkan-merged.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17') }}
         with:
-          name: EmuDrnas-preAlpha-0.1-r16-winevulkan-merged-ZIP
+          name: EmuDrnas-preAlpha-0.1-r17-winevulkan-merged-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r16-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r16-winevulkan-merged.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r16 - WineVulkan and desktop fixes private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r17-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/EmuDrnas-preAlpha-0.1-r17-winevulkan-merged.zip" --draft --target "$GITHUB_SHA" --title "EmuDrnas preAlpha 0.1 r17 - Blender Vulkan shortcuts private experimental draft" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
