@@ -27,6 +27,15 @@ final class UserShortcuts {
         add(c,title,drive,relative,null);
     }
     static void add(Context c,String title,String drive,String relative,Bitmap icon) throws Exception {
+        add(c,title,drive,relative,icon,"auto","");
+    }
+    static void add(Context c,String title,String drive,String relative,Bitmap icon,
+                    String graphicsApi,String commandArgs) throws Exception {
+        // Validate the profile BEFORE writing an .exe shortcut. Arguments are
+        // stored per shortcut, never in a shell script or Windows .lnk file.
+        LaunchArguments.parse(commandArgs);
+        AppLaunchSettings.Profile profile=new AppLaunchSettings.Profile(
+                "",-1,"default",-1,-1,graphicsApi,commandArgs);
         File file=AppFiles.resolve(root(c,drive),relative);
         if(!file.isFile()||!relative.toLowerCase(Locale.ROOT).endsWith(".exe"))
             throw new IOException("Odaberi postojeću .exe datoteku");
@@ -36,6 +45,7 @@ final class UserShortcuts {
                 .put("created",System.currentTimeMillis());
         String id="user:"+UUID.randomUUID();
         File image=null;
+        boolean recordSaved=false;
         try{
             if(icon!=null){
                 image=iconFile(c,id);
@@ -48,8 +58,18 @@ final class UserShortcuts {
             }
             if(!prefs(c).edit().putString(id,record.toString()).commit())
                 throw new IOException("Prečac nije spremljen");
+            recordSaved=true;
+            if(!"auto".equals(profile.graphicsApi) || !profile.launchArgs.isEmpty())
+                AppLaunchSettings.save(c,id,profile);
             if(icon!=null)IconCache.ICONS.put(id,icon);
-        }catch(Exception error){if(image!=null)image.delete();throw error;}
+        }catch(Exception error){
+            if(recordSaved) {
+                prefs(c).edit().remove(id).commit();
+                AppLaunchSettings.remove(c,id);
+            }
+            if(image!=null)image.delete();
+            throw error;
+        }
     }
     static List<WineShortcuts.Entry> list(Context c) {
         List<WineShortcuts.Entry> result=new ArrayList<>();
