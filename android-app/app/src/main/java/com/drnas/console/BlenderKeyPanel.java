@@ -27,13 +27,15 @@ final class BlenderKeyPanel extends LinearLayout {
         if(right-left!=oldRight-oldLeft || bottom-top!=oldBottom-oldTop)
             post(this::restoreWhenMeasured);
     };
-    private final Runnable keyboard,options,exportToAndroid;
+    private final Runnable keyboard,options,exportToAndroid,importFromAndroid;
 
     BlenderKeyPanel(Context context,KeySink sink,MouseSink mouse,
-                    Runnable keyboard,Runnable options,Runnable exportToAndroid) {
+                    Runnable keyboard,Runnable options,Runnable exportToAndroid,
+                    Runnable importFromAndroid) {
         super(context);this.sink=sink;this.mouse=mouse;
         this.keyboard=keyboard;this.options=options;
         this.exportToAndroid=exportToAndroid;
+        this.importFromAndroid=importFromAndroid;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(3),dp(3),dp(3),dp(3));
@@ -68,6 +70,9 @@ final class BlenderKeyPanel extends LinearLayout {
         key(bottom,"Enter",KeyEvent.KEYCODE_ENTER);key(bottom,"Del",KeyEvent.KEYCODE_FORWARD_DEL);
         action(bottom,"Undo",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_Z));
         action(bottom,"Save",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_S));
+        // Android system picker, then copy the .blend into the selected D:
+        // folder. Blender itself continues to see only its chosen D drive.
+        action(bottom,"Load",importFromAndroid);
         // Export is explicitly separate from Blender Ctrl+S: it opens the
         // Android system document picker only AFTER a project exists in Wine.
         action(bottom,"⇩ Android",exportToAndroid);
