@@ -157,12 +157,14 @@ final class WineGuiSession implements AutoCloseable {
         if(guestTarget.startsWith("linkwin:") || guestTarget.startsWith("execwin:"))
             log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
-        // Redmi 13 Mali-G52: request Wine's ARM64 Vulkan path explicitly.
-        // The Blender shell already passes --gpu-backend vulkan, but the
-        // default shortcut profile must also enable Wine's Vulkan PE bridge.
+        // Only confirmed Mali-G52 hardware (or the verified Redmi 13 model)
+        // receives the experimental PanVK driver. The Adreno path remains
+        // Turnip and is not changed for other applications.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
         final boolean nativeVulkan=appProfile.nativeVulkan() || maliBlender;
         final boolean nativeOpenGl=appProfile.nativeOpenGl();
+        if(blenderShell)log.accept("DRNAS_UNIFIED_BLENDER_GPU="+
+                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":"ADRENO_OR_SYSTEM_VULKAN"));
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
         // an explicit argument, Native Vulkan, or OpenGL EGL is requested.
@@ -332,7 +334,7 @@ final class WineGuiSession implements AutoCloseable {
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
         // after an APK upgrade, without rewriting the Wine prefix.
-        // An older Adreno boot plan must never leak onto the Mali experiment.
+        // Remove any historical Adreno boot plan before configuring Mali.
         if(maliBlender) {
             plan.remove("turnipIcd");
             plan.remove("turnipAutoSelected");
