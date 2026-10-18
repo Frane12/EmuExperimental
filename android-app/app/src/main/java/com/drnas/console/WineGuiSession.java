@@ -267,6 +267,9 @@ final class WineGuiSession implements AutoCloseable {
         // restores the original pinned x64 DLL on the next session.
         if(WineNativeDllPolicy.isNativeArm64(guestPeMachine))
             WineNativeDllPolicy.stageArm64Dxgi(lib,prefix,guestPeMachine,log);
+        // Also cover direct Wine Explorer launches: the Android launcher
+        // sees only explorer.exe, not the ARM64 Blender child PE.
+        WineNativeDllPolicy.stageKnownArm64BlenderAppDxgi(lib,prefix,log);
         WineVulkanRuntime.configure(env,nativeVulkan);
         DxvkFrameCap.configure(env,frameCap);
         log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
