@@ -101,6 +101,40 @@ def package(archive,output):
             dynamic=subprocess.check_output(['readelf','-d',str(path)],text=True)
             deps=re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic)
             libs[soname]=data;pending.extend(deps)
+        # Wine 11 can use EGL instead of GLX for WGL, provided real Bionic
+        # EGL + desktop OpenGL libraries and an EGL-capable X11 platform exist.
+        # Do not alias GLES as desktop GL: Blender needs full OpenGL 4.3+.
+        # Import both roots atomically so a partial/dangling rootfs cannot
+        # break the known-good X11/Vulkan bundle or the permanent APK build.
+        def extra_egl():
+            extra={};queue=['libEGL.so.1','libOpenGL.so.0']
+            while queue:
+                name=queue.pop()
+                if name in SYSTEM or name in libs or name in extra:continue
+                data=content(name)
+                if data[:5]!=b'\\x7fELF\\x02' or int.from_bytes(data[18:20],'little')!=183:
+                    raise RuntimeError('not Bionic AArch64 ELF: '+name)
+                if len(data)>64*1024*1024:
+                    raise RuntimeError('oversized optional EGL dependency: '+name)
+                elf=Path(temp)/('egl-probe-'+name);elf.write_bytes(data)
+                dynamic=subprocess.check_output(['readelf','-d',str(elf)],text=True)
+                extra[name]=data
+                queue.extend(re.findall(r'\\(NEEDED\\).*?\\[(.*?)\\]',dynamic))
+            return extra
+        try:
+            egl_libs=extra_egl()
+            if 'libEGL.so.1' not in libs and 'libEGL.so.1' not in egl_libs:
+                raise RuntimeError('EGL entrypoint unavailable')
+            if 'libOpenGL.so.0' not in libs and 'libOpenGL.so.0' not in egl_libs:
+                raise RuntimeError('desktop OpenGL entrypoint unavailable')
+        except (KeyError,RuntimeError,subprocess.CalledProcessError) as error:
+            print('WARNING: pinned Bionic EGL desktop GL unavailable: '+str(error)+
+                  '; native Android GLES test remains separate from Wine WGL.')
+            egl_libs={}
+        else:
+            libs.update(egl_libs)
+            print('Wine EGL candidate: '+str(len(egl_libs))+
+                  ' dependency libraries staged (real EGL context unverified)')
         output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
         manifest={name:hashlib.sha256(data).hexdigest() for name,data in sorted(libs.items())}
         with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
