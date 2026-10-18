@@ -206,8 +206,17 @@ public class ScreenView extends View {
     private volatile float displayedFps;
     private long lastDisplaySampleNs;
     private int displayedFrames;
-    public float getDisplayedFps(){return displayedFps;}
-    public float getDisplayedFrameMs(){return displayedFps>0?1000f/displayedFps:0f;}
+    public float getDisplayedFps(){
+        // A static Blender scene may stop invalidating the X11 canvas.
+        // Don't indefinitely repeat the last nonzero FPS measurement.
+        if(lastDisplaySampleNs==0L ||
+                System.nanoTime()-lastDisplaySampleNs>2_000_000_000L)return 0f;
+        return displayedFps;
+    }
+    public float getDisplayedFrameMs(){
+        float recent=getDisplayedFps();
+        return recent>0?1000f/recent:0f;
+    }
     private boolean fpsCounterEnabled;
     public void setFpsCounterEnabled(boolean enabled) {
         fpsCounterEnabled=enabled;
