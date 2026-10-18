@@ -86,7 +86,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
     wchar_t params[4096] = {0};
     size_t used = 0;
     HRESULT hr;
-    BOOL com_ready = FALSE;
+    BOOL com_ready = FALSE, backend_chosen = FALSE;
+    SHELLEXECUTEINFOW launch = {0};
     (void)instance; (void)previous; (void)command; (void)show;
     if (!argv || argc < 3 || argc > 21 ||
         (wcscmp(argv[2], L"vulkan") && wcscmp(argv[2], L"auto"))) {
@@ -126,7 +127,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
     }
     wcscpy(params, original);
     used = wcslen(params);
-    BOOL backend_chosen = has_backend(original);
+    backend_chosen = has_backend(original);
     for (int i = 3; i < argc; ++i) {
         if (has_backend(argv[i])) backend_chosen = TRUE;
         if (!append_arg(params, sizeof(params)/sizeof(params[0]), &used, argv[i])) {
@@ -142,7 +143,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE previous, PWSTR command, int s
         }
         evidence("LINK_BLENDER_VULKAN_AUTO");
     }
-    SHELLEXECUTEINFOW launch = {0};
     launch.cbSize = sizeof(launch);
     launch.fMask = SEE_MASK_FLAG_NO_UI;
     launch.lpVerb = L"open";
