@@ -405,6 +405,10 @@ final class WineGuiSession implements AutoCloseable {
                     companion.environment().clear();companion.environment().putAll(env);
                     desktopCompanion=companion.start();
                     WineServerDiagnostics.pipe(desktopCompanion,"[Desktop style] ",log,20,raw);
+                    log.accept("DRNAS_X11_CRITICAL_RUNTIME desktop companion: pollen "+
+                            (options.getBoolean("desktop_live",true)?"ON":"OFF")+
+                            ", taskbar sizing one-shot; foreground observed every 500ms, "+
+                            "no SetForegroundWindow/BringWindowToTop calls in Android or DRNASDesktop.");
                     log.accept("DRNAS_DESKTOP_STYLE requested: original 1280x720 meadow + optional idle pollen; taskbar 44 guest pixels when enabled. Actual visual verification pending.");
                 }
             }catch(Exception styleError){log.accept("Desktop style helper unavailable: "+styleError.getMessage());}
