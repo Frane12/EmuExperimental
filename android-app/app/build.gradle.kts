@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 98
-        versionName = "preAlpha-0.1-r32-unified-mali-adreno-clicks"
+        versionCode = 99
+        versionName = "preAlpha-0.1-r33-android-blend-export"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
