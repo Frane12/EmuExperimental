@@ -170,4 +170,49 @@ public class WineNativeDllPolicyTest {
             assertEquals(0,WineNativeDllPolicy.guestMachine(path.toFile()));
         } finally {Files.deleteIfExists(path);}
     }
+    @Test public void explorerLaunchedArm64BlenderGetsOnlyAppLocalDxgi() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-blender-arm64-sidecar");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path armBlender=Files.createDirectories(
+                    root.resolve("prefix/drive_c/DRNAS/Apps/Blender-4.5.14"));
+            java.nio.file.Path x64Blender=Files.createDirectories(
+                    root.resolve("prefix/drive_c/DRNAS/Apps/Blender-x64"));
+            java.nio.file.Path system32=Files.createDirectories(
+                    root.resolve("prefix/drive_c/windows/system32"));
+            byte[] wineArm64=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64);
+            byte[] dxvkX64=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64);
+            Files.write(wine.resolve("dxgi.dll"),wineArm64);
+            Files.write(armBlender.resolve("blender.exe"),wineArm64);
+            Files.write(x64Blender.resolve("blender.exe"),dxvkX64);
+            Files.write(system32.resolve("dxgi.dll"),dxvkX64);
+            List<String> log=new ArrayList<>();
+            assertEquals(1,WineNativeDllPolicy.stageKnownArm64BlenderAppDxgi(
+                    root.resolve("wine").toFile(),root.resolve("prefix").toFile(),log::add));
+            assertArrayEquals(wineArm64,Files.readAllBytes(armBlender.resolve("dxgi.dll")));
+            assertArrayEquals(dxvkX64,Files.readAllBytes(system32.resolve("dxgi.dll")));
+            assertFalse(Files.exists(x64Blender.resolve("dxgi.dll")));
+            assertEquals(0,WineNativeDllPolicy.stageKnownArm64BlenderAppDxgi(
+                    root.resolve("wine").toFile(),root.resolve("prefix").toFile(),log::add));
+            assertTrue(log.stream().anyMatch(s->s.contains("APP_LOCAL_ARM64_READY")));
+        } finally {cleanTempTree(root);}
+    }
+    @Test public void explorerNativeStageNeverOverwritesExistingAppDll() throws Exception {
+        java.nio.file.Path root=Files.createTempDirectory("drnas-blender-app-owned-dll");
+        try {
+            java.nio.file.Path wine=Files.createDirectories(
+                    root.resolve("wine/wine/aarch64-windows"));
+            java.nio.file.Path blender=Files.createDirectories(
+                    root.resolve("prefix/drive_c/DRNAS/Apps/Blender-4.5.14"));
+            byte[] arm=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_ARM64);
+            byte[] existing=testPe(WineNativeDllPolicy.IMAGE_FILE_MACHINE_AMD64);
+            Files.write(wine.resolve("dxgi.dll"),arm);
+            Files.write(blender.resolve("blender.exe"),arm);
+            Files.write(blender.resolve("dxgi.dll"),existing);
+            assertEquals(0,WineNativeDllPolicy.stageKnownArm64BlenderAppDxgi(
+                    root.resolve("wine").toFile(),root.resolve("prefix").toFile(),s->{}));
+            assertArrayEquals(existing,Files.readAllBytes(blender.resolve("dxgi.dll")));
+        } finally {cleanTempTree(root);}
+    }
 }
