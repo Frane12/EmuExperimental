@@ -688,13 +688,19 @@ public class Window extends Resource {
         _xServer.addResource(w);
         client.addResource(w);
         _children.add(w);
+        // Popup/transient attribution is cheap (creation only, never per frame).
+        // Core CreateNotify.override_redirect belongs to CHILD w, not parent.
+        if(w._overrideRedirect)
+            _xServer.diagnostic("DRNAS_X11_POPUP_CREATE id="+w.getId()+
+                    " parent="+getId()+" overrideRedirect=true"+
+                    " bounds="+w._orect.toShortString());
 
         Vector<Client> sc;
 
         if ((sc = getSelectingClients(EventCode.MaskSubstructureNotify)) != null) {
             for (Client c : sc) {
                 if (c == null) continue;
-                EventCode.sendCreateNotify(c, this, w, x, y, width, height, borderWidth, _overrideRedirect);
+                EventCode.sendCreateNotify(c, this, w, x, y, width, height, borderWidth, w._overrideRedirect);
             }
         }
 
@@ -1646,6 +1652,11 @@ public class Window extends Resource {
 
         _isMapped = true;
         if(client!=null && !_inputOnly && _irect.width()>16 && _irect.height()>16)_xServer.windowMapped(getId());
+        if(_overrideRedirect || _parent == _screen.getRootWindow())
+            _xServer.diagnostic("DRNAS_X11_WINDOW_MAP id="+getId()+
+                    " parent="+_parent.getId()+" overrideRedirect="+_overrideRedirect+
+                    " mapState="+X11MapState.of(_isMapped,isViewable())+
+                    " bounds="+_orect.toShortString());
 
         sc = getSelectingClients(EventCode.MaskStructureNotify);
         if (sc != null) {
@@ -1712,6 +1723,10 @@ public class Window extends Resource {
 
         _isMapped = false;
         _xServer.windowUnmapped(getId());
+        if(_overrideRedirect || _parent == _screen.getRootWindow())
+            _xServer.diagnostic("DRNAS_X11_WINDOW_UNMAP id="+getId()+
+                    " parent="+_parent.getId()+" overrideRedirect="+_overrideRedirect+
+                    " bounds="+_orect.toShortString());
 
         Vector<Client> sc;
 
@@ -2416,7 +2431,7 @@ public class Window extends Resource {
                     ErrorCode.write(client, ErrorCode.Length, opcode, 0);
                 } else {
                     int vid = _xServer.getRootVisual().getId();
-                    byte mapState = (byte) (_isMapped ? 0 : 2);
+                    byte mapState = X11MapState.of(_isMapped, isViewable());
 
                     synchronized (io) {
                         Util.writeReplyHeader(client, (byte) 2);
