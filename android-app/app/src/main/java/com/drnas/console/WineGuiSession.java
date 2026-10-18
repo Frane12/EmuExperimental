@@ -259,8 +259,14 @@ final class WineGuiSession implements AutoCloseable {
         // dxgi.dll produces STATUS_INVALID_IMAGE_FORMAT (c000007b).
         // Keep standard DXVK for x64 games, but choose Wine's ARM64 builtins
         // for an ARM64/ARM64EC EXE or an explicit Native Vulkan profile.
-        File directGuestExe=UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
+        File directGuestExe=blenderShell?
+                new File(prefix,"drive_c/DRNAS/Apps/"+BundledBlenderArchive.DIRECTORY+"/blender.exe"):
+                UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
         int guestPeMachine=directGuestExe==null?0:WineNativeDllPolicy.guestMachine(directGuestExe);
+        if(blenderShell)
+            log.accept("DRNAS_BLENDER_ARM64_PE machine=0x"+
+                    Integer.toHexString(guestPeMachine)+
+                    "; Vulkan renderer flag preserved; DXGI selected by PE architecture");
         WineNativeDllPolicy.configure(env,guestPeMachine,nativeVulkan,
                 WineNativeDllPolicy.hasBuiltInDxgi(lib),log);
         // The loader's +module trace proves Wine still opens the x64 DXVK
@@ -270,6 +276,11 @@ final class WineGuiSession implements AutoCloseable {
         // restores the original pinned x64 DLL on the next session.
         if(WineNativeDllPolicy.isNativeArm64(guestPeMachine))
             WineNativeDllPolicy.stageArm64Dxgi(lib,prefix,guestPeMachine,log);
+        // Normal Wine desktop / Explorer is a distinct launch mode where the
+        // Android launcher does not know which ARM64 Blender.exe Wine opens.
+        // Resolve that case via architecture-checked app-local Wine PE only.
+        if(!blenderShell)
+            WineNativeDllPolicy.stageKnownArm64BlenderAppDxgi(lib,prefix,log);
         WineVulkanRuntime.configure(env,nativeVulkan);
         DxvkFrameCap.configure(env,frameCap);
         log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
