@@ -47,6 +47,8 @@ public class Window extends Resource {
     private boolean _isMapped = false;
     private boolean _exposed = false;
     private int _loggedStackTransitions;
+    // Event-only diagnostic: no work is added to the X11 PutImage/Canvas hot paths.
+    private int _criticalStackEvents;
     private int _visibility = NotViewable;
     private Bitmap _backgroundBitmap = null;
     private int _eventMask = 0;
@@ -511,6 +513,76 @@ public class Window extends Resource {
         } finally {
             canvas.restoreToCount(saved);
         }
+    }
+
+    /**
+     * Small Wine/X11 window-manager compatibility aid. Wine's Blender popups
+     * frequently are separate X11 windows; only an explicit WM_TRANSIENT_FOR
+     * relationship permits restoring the dialog above its owner. Never apply
+     * global always-on-top to arbitrary unrelated application windows.
+     */
+    private Window transientOwner() {
+        Atom a = _xServer.findAtom("WM_TRANSIENT_FOR");
+        if (a == null) return null;
+        Property p = _properties.get(a.getId());
+        if (p == null) return null;
+        byte[] raw = p.getData();
+        if (raw == null || raw.length < 4) return null;
+        int be = ((raw[0] & 255) << 24) | ((raw[1] & 255) << 16) |
+                ((raw[2] & 255) << 8) | (raw[3] & 255);
+        int le = ((raw[3] & 255) << 24) | ((raw[2] & 255) << 16) |
+                ((raw[1] & 255) << 8) | (raw[0] & 255);
+        // Property bytes are in X11 client's byte order. Resolve both, but
+        // only accept an existing sibling window. No guesses from its title.
+        for (int id : new int[]{le,be}) {
+            Resource r = _xServer.getResource(id);
+            if (r instanceof Window && r != this &&
+                    ((Window) r)._parent == _parent) return (Window) r;
+        }
+        return null;
+    }
+
+    private String titleForStackAudit() {
+        Atom a = _xServer.findAtom("_NET_WM_NAME");
+        Property p = a == null ? null : _properties.get(a.getId());
+        if (p == null) {
+            a = _xServer.findAtom("WM_NAME");
+            p = a == null ? null : _properties.get(a.getId());
+        }
+        if (p == null || p.getData() == null) return "?";
+        byte[] bytes = p.getData();
+        int count = Math.min(bytes.length,80);
+        String name = new String(bytes,0,count,java.nio.charset.StandardCharsets.UTF_8);
+        return name.replaceAll("[\\p{Cntrl}]", " ").trim();
+    }
+
+    private boolean restoreTransientAboveOwner(String reason) {
+        Window owner = transientOwner();
+        if (!_isMapped || owner == null || !owner._isMapped || _parent == null)
+            return false;
+        int ownIndex = _parent._children.indexOf(this);
+        int ownerIndex = _parent._children.indexOf(owner);
+        if (ownIndex < 0 || ownerIndex < 0 || ownIndex > ownerIndex) return false;
+        _parent._children.remove(this);
+        _parent._children.add(this);
+        _parent.updateAffectedVisibility();
+        _screen.invalidateGuestRect(_orect.left,_orect.top,_orect.right,_orect.bottom);
+        _xServer.diagnostic("DRNAS_X11_CRITICAL_TRANSIENT_REPAIRED child="+getId()+
+                " owner="+owner.getId()+" from="+ownIndex+" to="+
+                _parent._children.indexOf(this)+" reason="+reason+
+                " title="+titleForStackAudit());
+        return true;
+    }
+
+    // Called only after a real stacking request, not from each rendered frame.
+    private int restoreOwnedTransients() {
+        if (_parent == null) return 0;
+        int repaired = 0;
+        for (Window w : new Vector<Window>(_parent._children))
+            if (w != this && w.transientOwner() == this &&
+                    w.restoreTransientAboveOwner("owner-restacked"))
+                repaired++;
+        return repaired;
     }
 
     /**
@@ -1641,6 +1713,17 @@ public class Window extends Resource {
 
         _isMapped = true;
         if(client!=null && !_inputOnly && _irect.width()>16 && _irect.height()>16)_xServer.windowMapped(getId());
+        // A transient window must not initially enter beneath its existing owner.
+        restoreTransientAboveOwner("map");
+        if (!_inputOnly && (_parent == _screen.getRootWindow() ||
+                (_irect.width() >= 350 && _irect.height() >= 200))) {
+            Window owner = transientOwner();
+            _xServer.diagnostic("DRNAS_X11_CRITICAL_MAP id="+getId()+
+                    " parent="+_parent.getId()+" index="+_parent._children.indexOf(this)+
+                    "/"+_parent._children.size()+" transientFor="+
+                    (owner==null?0:owner.getId())+
+                    " bounds="+_orect.toShortString()+" title="+titleForStackAudit());
+        }
         // A large nested Wine client surface was invisible in r23's map logs,
         // because only root children and override-redirect frames were traced.
         // Include it and its stack index once per Map (never per frame).
@@ -1720,6 +1803,11 @@ public class Window extends Resource {
     private void unmap() throws IOException {
         if (!_isMapped) return;
 
+        if (!_inputOnly && (_parent == _screen.getRootWindow() ||
+                (_irect.width() >= 350 && _irect.height() >= 200)))
+            _xServer.diagnostic("DRNAS_X11_CRITICAL_UNMAP id="+getId()+
+                    " parent="+_parent.getId()+" index="+_parent._children.indexOf(this)+
+                    " title="+titleForStackAudit());
         _isMapped = false;
         _xServer.windowUnmapped(getId());
         if(_overrideRedirect || _parent == _screen.getRootWindow())
@@ -1897,6 +1985,11 @@ public class Window extends Resource {
             }
         }
 
+        if (!_inputOnly && (_irect.width() >= 350 && _irect.height() >= 200))
+            _xServer.diagnostic("DRNAS_X11_CRITICAL_REPARENT id="+getId()+
+                    " oldParent="+_parent.getId()+" newParent="+parent.getId()+
+                    " mapped="+mapped+" bounds="+_orect.toShortString()+
+                    " title="+titleForStackAudit());
         _parent = parent;
         if (mapped) {
             map(client);
@@ -2181,6 +2274,7 @@ public class Window extends Resource {
         int y = oldY;
         int borderWidth = _borderWidth;
         int stackMode = 0;
+        final int stackIndexBefore = _parent._children.indexOf(this);
         boolean changed = false;
         Window sibling = null;
         Rect dirty = null;
@@ -2286,7 +2380,9 @@ public class Window extends Resource {
             changed = true;
         }
 
-        if ((mask & 0x60) != 0) {
+        // Only CWStackMode (0x40) authorizes restacking. A sibling value
+        // alone (0x20) must never silently default to Above, as it did in r25.
+        if ((mask & 0x40) != 0) {
             if (sibling != null && sibling._parent != _parent) {
                 ErrorCode.write(client, ErrorCode.Match, RequestCode.ConfigureWindow, 0);
                 return false;
@@ -2373,6 +2469,30 @@ public class Window extends Resource {
                         break;
                 }
             }
+        }
+
+        // The GUI runtime, HUD and desktop companion do not request X11 raises.
+        // Record the actual Wine X11 client/sequence whenever stack is requested.
+        // Only explicit transients are restored; unrelated windows are untouched.
+        int transientFixes = (mask & 0x40) != 0 ? restoreOwnedTransients() : 0;
+        if ((mask & 0x60) != 0 && _criticalStackEvents++ < 160 &&
+                (!_inputOnly && (_parent == _screen.getRootWindow() ||
+                 _irect.width() >= 350 || _overrideRedirect))) {
+            _xServer.diagnostic("DRNAS_X11_CRITICAL_STACK timeMs="+
+                    android.os.SystemClock.uptimeMillis()+" id="+getId()+
+                    " title="+titleForStackAudit()+
+                    " parent="+_parent.getId()+
+                    " clientBase=0x"+Integer.toHexString(client.resourceIdBase())+
+                    " seq="+client.getSequenceNumber()+
+                    " mask=0x"+Integer.toHexString(mask)+
+                    " stackRequested="+((mask & 0x40) != 0)+
+                    " mode="+stackMode+
+                    " sibling="+(sibling==null?0:sibling.getId())+
+                    " before="+stackIndexBefore+
+                    " after="+_parent._children.indexOf(this)+
+                    " of="+_parent._children.size()+
+                    " transientRestored="+transientFixes+
+                    " bounds="+_orect.toShortString());
         }
 
         if (changed) {
@@ -2643,6 +2763,15 @@ public class Window extends Resource {
                 }
                 break;
             case RequestCode.ChangeProperty:
+                Property.processRequest(_xServer, client, arg, opcode, bytesRemaining, this, _properties);
+                Window transientParent = transientOwner();
+                if (transientParent != null) {
+                    _xServer.diagnostic("DRNAS_X11_CRITICAL_TRANSIENT_PROPERTY id="+getId()+
+                            " owner="+transientParent.getId()+" mapped="+_isMapped+
+                            " title="+titleForStackAudit());
+                    redraw = restoreTransientAboveOwner("property-changed");
+                }
+                break;
             case RequestCode.GetProperty:
             case RequestCode.RotateProperties:
                 Property.processRequest(_xServer, client, arg, opcode, bytesRemaining, this, _properties);
