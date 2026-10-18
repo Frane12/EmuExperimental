@@ -12,9 +12,10 @@ final class WineNativeDependencyAudit {
         log.accept("DRNAS_DEP_AUDIT BEGIN: Wine native loader search paths (no changes or installs)");
         String paths=environment.getOrDefault("LD_LIBRARY_PATH","");
         for(String name:new String[]{"libX11.so.6","libvulkan.so.1",
-                "libGL.so.1","libavutil.so.60","libgstgl-1.0.so"}) {
+                "libEGL.so.1","libGL.so.1","libavutil.so.60","libgstgl-1.0.so"}) {
             boolean found=existsOnPath(paths,name);
-            String role=name.equals("libGL.so.1")?"optional: OpenGL fallback":
+            String role=name.equals("libEGL.so.1")?"opt-in: Wine11 EGL/Zink":
+                     name.equals("libGL.so.1")?"optional: OpenGL GLX":
                     name.equals("libavutil.so.60")?"optional: Wine DMO/media":
                     name.equals("libgstgl-1.0.so")?"optional: Wine GStreamer/media":
                     "core GUI/Vulkan";
