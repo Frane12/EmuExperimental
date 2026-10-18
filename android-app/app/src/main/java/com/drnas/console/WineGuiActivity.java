@@ -764,7 +764,9 @@ public final class WineGuiActivity extends Activity {
                 line.contains(":err:") || line.contains("dlerror") ||
                 line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
                 line.startsWith("[Dependencies] ") || line.startsWith("DRNAS_DEPENDENCY_RESULT") ||
-                line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("DRNAS_DESKTOP_NOT_CONFIRMED") || line.startsWith("Desktop stopped:");
+                line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("DRNAS_DESKTOP_NOT_CONFIRMED") ||
+                line.startsWith("DRNAS_GLES_") || line.startsWith("DRNAS_WINE_EGL_") ||
+                line.startsWith("DRNAS_OPENGL_") || line.startsWith("Desktop stopped:");
         if(raw!=null) {
             if(verboseLogs)raw.write("GUI",line);
             else if(critical)raw.writeEssential("GUI",line);
