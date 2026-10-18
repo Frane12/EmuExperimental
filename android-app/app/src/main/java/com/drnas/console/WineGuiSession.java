@@ -156,27 +156,29 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
         final boolean nativeVulkan=appProfile.nativeVulkan();
+        final boolean nativeOpenGl=appProfile.nativeOpenGl();
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
-        // an explicit argument or Native Vulkan is requested.
+        // an explicit argument, Native Vulkan, or OpenGL EGL is requested.
         final List<String> linkLaunchArgs=guestTarget.startsWith("linkwin:")?
-                LaunchArguments.forLink(guestTarget.substring(8),appProfile.launchArgs,nativeVulkan):
+                LaunchArguments.forLink(guestTarget.substring(8),appProfile.launchArgs,appProfile.graphicsApi):
                 Collections.emptyList();
         final boolean linkViaHelper=!linkLaunchArgs.isEmpty();
         final String launchMode=linkViaHelper?
                 "execwin:C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe":guestTarget;
         final List<String> launchArgs=linkViaHelper?linkLaunchArgs:
                 guestTarget.startsWith("execwin:")?
-                LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,nativeVulkan):
+                LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,appProfile.graphicsApi):
                 Collections.emptyList();
         if(linkViaHelper)log.accept("DRNAS_LINK_ARGUMENT_FORWARDER selected: "+
                 "Wine IShellLinkW reads .lnk target, original args and working directory; "+
-                "requested nativeVulkan="+nativeVulkan+" extraArgc="+(launchArgs.size()-2));
+                "requestedGraphics="+appProfile.graphicsApi+" extraArgc="+(launchArgs.size()-2));
         log.accept("DRNAS_LAUNCH_PROFILE graphics="+appProfile.graphicsApi+
                 " program="+(guestTarget.startsWith("execwin:")||guestTarget.startsWith("linkwin:")?
                     guestTarget.substring(8):app)+
                 " argc="+launchArgs.size()+
-                (nativeVulkan?" (WineVulkan requested; device validation pending)":""));
+                (nativeVulkan?" (WineVulkan requested; device validation pending)":
+                 nativeOpenGl?" (Wine11 EGL/Zink requested; OpenGL context not verified)":""));
         if("builtin:cmd".equals(launchMode)) {
             File systemCmd=new File(prefix,"drive_c/windows/system32/cmd.exe");
             log.accept("DRNAS_CMD_PREFIX_FILE="+(systemCmd.isFile()?"PRESENT":"NOT_STAGED")+
@@ -300,12 +302,14 @@ final class WineGuiSession implements AutoCloseable {
                     "Actual GPU and Present remain unverified.");
         }
         File gl=new File(guiRuntime,"lib/libGL.so.1");
-        log.accept(gl.isFile()
-                ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
-                : "DRNAS_GLX_UNAVAILABLE: pinned GameNative Bionic runtime lacks libGL.so.1; " +
-                  "Wine OpenGL/WGL fallback is disabled. Native Vulkan may still work " +
-                  "through WineVulkan/Turnip if Vulkan device and X11 WSI succeed. " +
-                  "This build does NOT claim to repair missing GLX.");
+        if(nativeOpenGl)
+            log.accept("DRNAS_OPENGL_PROFILE: GLX still unavailable on Java X11 server; "+
+                    "isolated Mesa EGL/Zink Wine11 route will be staged AFTER Turnip.");
+        else
+            log.accept(gl.isFile()
+                    ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
+                    : "DRNAS_GLX_UNAVAILABLE: pinned Bionic runtime lacks libGL.so.1; "+
+                      "GLX fallback disabled. This does not affect Vulkan/DXVK.");
         log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
@@ -314,6 +318,12 @@ final class WineGuiSession implements AutoCloseable {
         log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
+        // Only the app that explicitly selects OpenGL gets these Mesa host
+        // libraries. Other games retain the identical r24 Wine/DXVK path.
+        if(nativeOpenGl) {
+            File mesa = WineOpenGlRuntime.install(context,log);
+            WineOpenGlRuntime.configure(mesa,env,log);
+        }
         TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
         audio=new PulseAudioRuntime();
