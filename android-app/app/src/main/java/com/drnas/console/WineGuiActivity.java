@@ -751,7 +751,9 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=AutomaticLogTrigger.matches(line) ||
+        boolean critical=line.startsWith("DRNAS_X11_CRITICAL_") ||
+                line.contains("DRNAS_X11_CRITICAL_") ||
+                AutomaticLogTrigger.matches(line) ||
                 line.contains(":err:") || line.contains("dlerror") ||
                 line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
                 line.startsWith("[Dependencies] ") || line.startsWith("DRNAS_DEPENDENCY_RESULT") ||
