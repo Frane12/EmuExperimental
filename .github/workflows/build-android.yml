@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r30 - Blender cursor and minimal startup progress
+name: EmuDrnas preAlpha 0.1 r31 - Blender keyboard viewport restoration
 on:
   push:
     branches:
@@ -38,6 +38,7 @@ on:
       - feat/r28-blender-shell
       - fix/r29-blender-arm64-dxgi-launch
       - fix/r30-blender-cursor-startup
+      - fix/r31-blender-keypanel-viewport
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -285,36 +286,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r30-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r31-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r30 - Blender cursor and minimal startup progress
+          EmuDrnas preAlpha 0.1 r31 - Blender keyboard viewport restoration
           Package: com.drnas.console
-          versionCode: 96
+          versionCode: 97
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Blender-only compact high-contrast fallback arrow when Wine X11 supplies a null or fully transparent cursor inside Blender viewport (does not modify Wine mouse events, pointer grabs or X11/window framebuffer). Logs bounded DRNAS_BLENDER_CURSOR state changes. Minimal Blender launch screen shows only 'Starting Blender' plus a monotonic 0%-100% progress bar based on actual boot milestones, not wall-clock estimation. First-run install and Wine diagnostics stay in TXT; 100% only after Blender primary window maps. Keyboard and draggable Blender shortcuts remain available after startup. Preserves r29 architecture-correct DXGI fix and r27 popup guard. Stable signing identity and versionCode 96 for in-place app update. Experimental pending actual device test.
+          Changed: Fixes r30 Blender shortcut panel unexpectedly appearing below the screen. The panel was GONE during startup and its constructor restored the saved position before it had a measured height, placing controls beyond the lower edge once the primary Blender window appeared. r31 restores its position only after visible layout measurement, clamps its edges to the current parent viewport, and limits wide key rows to an independently horizontally scrolling strip while grip, toggle and menu stay accessible. Preserves saved draggable positions, collapsed controls, modifiers, keyboard, Vulkan DXGI repair, and the 'Starting Blender' 0-100 percent UI. No Wine save-path changes, no changes to graphics rendering or DXVK. In-place signed update, versionCode 97. Pending real device verification.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r30-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r30-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r31-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r31-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/fix/r31-blender-keypanel-viewport') }}
         with:
           name: EmuDrnas-preAlpha-0.1-r28-blender-shell-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/fix/r31-blender-keypanel-viewport')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r30-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r30-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r30 - cursor and startup UI test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r31-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r31-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r31 - onscreen shortcut layout test" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
