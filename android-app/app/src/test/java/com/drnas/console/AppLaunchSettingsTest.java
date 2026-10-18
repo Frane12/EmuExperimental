@@ -33,4 +33,15 @@ public class AppLaunchSettingsTest {
         assertEquals(40,AppLaunchSettings.Profile.parse("broken").fps(40));
         assertEquals(7f,new AppLaunchSettings.Profile("",-1,"default",-1,Float.NaN).sensitivity(7f),0f);
     }
+    @Test public void eglOpenGlModePersistsWithoutChangingNativeVulkanSelection() throws Exception {
+        AppLaunchSettings.Profile profile=AppLaunchSettings.Profile.defaults()
+                .withGraphicsApi("opengl");
+        assertTrue(profile.nativeOpenGl());
+        assertFalse(profile.nativeVulkan());
+        AppLaunchSettings.Profile restored=AppLaunchSettings.Profile.parse(profile.json());
+        assertEquals("opengl",restored.graphicsApi);
+        assertTrue(restored.nativeOpenGl());
+        assertEquals("auto",AppLaunchSettings.Profile.defaults().graphicsApi);
+    }
+
 }
