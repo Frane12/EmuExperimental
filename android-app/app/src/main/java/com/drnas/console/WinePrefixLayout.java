@@ -12,6 +12,7 @@ final class WinePrefixLayout {
     private static final String[] FOLDERS={
             "drive_c/users", "drive_c/users/xuser",
             "drive_c/users/xuser/Documents", "drive_c/users/xuser/Documents/My Games",
+            "drive_c/users/xuser/Documents/Blender",
             "drive_c/users/xuser/Desktop", "drive_c/users/xuser/Downloads",
             "drive_c/users/xuser/Pictures", "drive_c/users/xuser/Music",
             "drive_c/users/xuser/Videos", "drive_c/users/xuser/Saved Games",
@@ -50,6 +51,8 @@ final class WinePrefixLayout {
         ensureSystemDriveMapping(base, log);
         ensureMyDocumentsAlias(base, log);
         log.accept("Wine profile repaired: C:\\users\\xuser\\Documents (+ My Games), created "+made+" folders.");
+        log.accept("DRNAS_BLENDER_SAVE_PATH_READY: C:\\users\\xuser\\Documents\\Blender "+
+                "(writable Wine C: folder inside private prefix, not exported to Android Documents)");
     }
 
 
