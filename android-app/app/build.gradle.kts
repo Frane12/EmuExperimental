@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 99
-        versionName = "preAlpha-0.1-r33-android-blend-export"
+        versionCode = 100
+        versionName = "preAlpha-0.1-r34-direct-d-mesa-r6"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +79,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

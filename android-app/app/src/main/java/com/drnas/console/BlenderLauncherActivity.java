@@ -13,6 +13,9 @@ public final class BlenderLauncherActivity extends Activity {
     private TextView status;
     private boolean opened;
     private volatile boolean destroyed;
+    private static final int PICK_FOLDER=3401, STORAGE_ACCESS=3402, LEGACY_STORAGE=3403;
+    private boolean preparing, checking;
+    private android.net.Uri pickedTree;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -32,6 +35,91 @@ public final class BlenderLauncherActivity extends Activity {
         status.setTextSize(13);status.setTextColor(0xffaaaab2);status.setPadding(16,20,16,20);
         status.setGravity(Gravity.CENTER);panel.addView(status);
         setContentView(panel);
+        if(state!=null) {
+            String pending=state.getString("pickedTree");
+            if(pending!=null)pickedTree=android.net.Uri.parse(pending);
+            // The external picker/settings activity will return its result to us.
+            if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
+        }
+        if(getIntent().getBooleanExtra("choose_project_folder",false))chooseFolder();
+        else checkFolder();
+    }
+    private boolean waitingExternal;
+    private void checkFolder() {
+        if(destroyed||opened||preparing||checking)return;
+        if(BlenderProjectDrive.selected(this)==null) {chooseFolder();return;}
+        checking=true;
+        status.setText("Provjeravam disk D:…");
+        new Thread(()->{
+            boolean usable=BlenderProjectDrive.ready(this);
+            runOnUiThread(()->{
+                checking=false;if(destroyed)return;
+                if(usable)prepareRuntime();
+                else new AppDialogBuilder(this).setTitle("Blender · Android disk D:")
+                        .setMessage("Odabrana mapa nije dostupna za izravno čitanje i spremanje. Provjeri dozvolu ili odaberi drugu lokalnu mapu.")
+                        .setPositiveButton("Dozvola za datoteke",(d,w)->requestStorageAccess())
+                        .setNeutralButton("Odaberi mapu",(d,w)->chooseFolder())
+                        .setNegativeButton("Zatvori",(d,w)->finish()).setCancelable(false).show();
+            });
+        },"blender-d-check").start();
+    }
+    private void chooseFolder() {
+        status.setText("Odaberi Android mapu za Blenderov disk D:");
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        android.net.Uri previous=BlenderProjectDrive.selected(this);
+        if(previous!=null)intent.putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,previous);
+        try {waitingExternal=true;startActivityForResult(intent,PICK_FOLDER);}
+        catch(android.content.ActivityNotFoundException e){waitingExternal=false;folderError("Androidov odabir mape nije dostupan.");}
+    }
+    private void requestStorageAccess() {
+        if(android.os.Build.VERSION.SDK_INT>=30) {
+            if(android.os.Environment.isExternalStorageManager()) {checkFolder();return;}
+            new AppDialogBuilder(this).setTitle("Izravno spremanje iz Blendera")
+                    .setMessage("Wine treba pristup stvarnim datotekama kako bi Blenderov Save/Open radio na disku D:. Android za to traži širu dozvolu ‘Pristup svim datotekama’. D: će pokazivati samo odabranu mapu. Dozvolu možeš naknadno ukinuti u Android postavkama.")
+                    .setPositiveButton("Otvori postavke",(d,w)->{
+                        Intent intent=new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                android.net.Uri.parse("package:"+getPackageName()));
+                        try {waitingExternal=true;startActivityForResult(intent,STORAGE_ACCESS);}
+                        catch(android.content.ActivityNotFoundException e){
+                            try {startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),STORAGE_ACCESS);}
+                            catch(android.content.ActivityNotFoundException unavailable){waitingExternal=false;folderError("Postavka pristupa datotekama nije dostupna.");}
+                        }
+                    }).setNegativeButton("Odustani",(d,w)->folderError("Disk D: nije spreman. Možeš pokušati s drugom mapom.")).show();
+        } else {
+            requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE},LEGACY_STORAGE);
+        }
+    }
+    private void folderError(String text) {
+        if(destroyed)return;
+        new AppDialogBuilder(this).setTitle("Blender · disk D:").setMessage(text)
+                .setPositiveButton("Odaberi mapu",(d,w)->chooseFolder())
+                .setNegativeButton("Zatvori",(d,w)->finish()).setCancelable(false).show();
+    }
+    @Override protected void onActivityResult(int request,int result,Intent data) {
+        super.onActivityResult(request,result,data);waitingExternal=false;
+        if(request==PICK_FOLDER) {
+            if(result!=RESULT_OK||data==null||data.getData()==null){folderError("Odaberi mapu za projekte prije pokretanja.");return;}
+            pickedTree=data.getData();
+            try {BlenderProjectDrive.remember(this,pickedTree,data.getFlags());}
+            catch(Exception e){folderError(e.getMessage());return;}
+            // Try actual access first: never request broad permission if unnecessary.
+            checkFolder();
+        } else if(request==STORAGE_ACCESS)checkFolder();
+    }
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants) {
+        super.onRequestPermissionsResult(request,permissions,grants);
+        if(request==LEGACY_STORAGE)checkFolder();
+    }
+    @Override protected void onSaveInstanceState(Bundle out) {
+        if(pickedTree!=null)out.putString("pickedTree",pickedTree.toString());
+        out.putBoolean("waitingExternal",waitingExternal);super.onSaveInstanceState(out);
+    }
+    private void prepareRuntime() {
+        if(preparing||opened||destroyed)return;
+        preparing=true;
         if(ready())open();
         else new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
             public void onLog(String line) {
@@ -68,3 +156,4 @@ public final class BlenderLauncherActivity extends Activity {
     }
     @Override protected void onDestroy(){destroyed=true;super.onDestroy();}
 }
+

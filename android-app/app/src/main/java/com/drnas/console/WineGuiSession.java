@@ -147,7 +147,11 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final boolean blenderShell=BlenderShellLaunch.ID.equals(app);
-        if(blenderShell)BundledBlender.install(context,prefix,log);
+        File blenderFolder=null;
+        if(blenderShell) {
+            blenderFolder=BlenderProjectDrive.map(context,prefix,log);
+            BundledBlender.install(context,prefix,log);
+        }
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
         final String guestTarget=blenderShell?"execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
@@ -195,7 +199,7 @@ final class WineGuiSession implements AutoCloseable {
         }
         // Fix only Crysis 1's windowed user config; NEVER touch its R: binaries.
         // An invalid/locked game.cfg must not prevent the whole Wine desktop.
-        try {
+        if(!blenderShell)try {
             boolean directCrysis=launchMode.startsWith("execwin:")&&
                     launchMode.substring(8).replace('/','\\').toLowerCase(Locale.ROOT)
                             .endsWith("\\crysis.exe");
@@ -208,9 +212,9 @@ final class WineGuiSession implements AutoCloseable {
         // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
         String selectedDxvk=dxvkVariant==null?appProfile.dxvk(DxvkVariants.selected(context)):dxvkVariant;
         boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log,selectedDxvk);
-        WineGraphicsTests.install(context,prefix,log);
+        if(!blenderShell)WineGraphicsTests.install(context,prefix,log);
         // Always available source-owned Paint, independent of Wine's optional mspaint.
-        try { DrnasPaintRuntime.install(context,prefix,log); }
+        if(!blenderShell)try { DrnasPaintRuntime.install(context,prefix,log); }
         catch(IOException problem) { log.accept("DRNAS Paint staging failed: "+problem.getMessage()); }
         // Never silently fall back to explorer.exe's .lnk opening path when
         // extra flags were requested: that path may drop them without an error.
@@ -219,9 +223,9 @@ final class WineGuiSession implements AutoCloseable {
         // Local source-built XInput ABI shim: no Wine bus/uinput/root access.
         // If installation fails, retain the original Wine XInput built-ins.
         boolean xinputReady=false;
-        try {DrnasXInputRuntime.install(context,prefix,log);xinputReady=true;}
+        if(!blenderShell)try {DrnasXInputRuntime.install(context,prefix,log);xinputReady=true;}
         catch(Exception error){log.accept("DRNAS_XINPUT_SETUP_FAILED: "+error.getMessage()+"; Wine default preserved");}
-        SharedFolderDrive.mapWineDrive(context,prefix,log);
+        if(!blenderShell)SharedFolderDrive.mapWineDrive(context,prefix,log);
         File wine=WineLaunchProbe.selectWine(proton,log);
         if(wine==null)throw new IOException("Bionic Wine entry missing");
         File lib=new File(proton,plan.optString("protonLibPath","lib")).getCanonicalFile();
@@ -389,7 +393,7 @@ final class WineGuiSession implements AutoCloseable {
             // The desktop is held until one-time prerequisite installers complete.
             // A missing MSI/EXE never masquerades as an installed dependency.
             log.accept("[Startup] Provjera Wine dodataka");
-            WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            if(!blenderShell)WinePrerequisites.installPending(context,prefix,linker,wine,proton,env,raw,log);
             if(stopped)return;
             // Only locally imported, offline setup files. No .NET or websetup.
             // The [Dependencies] progress messages drive the first-install bar.
@@ -400,11 +404,11 @@ final class WineGuiSession implements AutoCloseable {
             // the guest desktop wallpaper is installed and registered. A proper
             // Windows BMP is staged inside xuser/Pictures; failure never blocks GUI.
             log.accept("[Startup] Priprema Windows pozadine");
-            try { WineWallpaper.ensure(context,prefix,linker,wine,proton,env,log,raw); }
+            if(!blenderShell)try { WineWallpaper.ensure(context,prefix,linker,wine,proton,env,log,raw); }
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
-            FexPerformanceProfile.apply(env);
-            log.accept("FEX Performance requested: TSO/vector/memcpy/halfbarrier=0; x87 reduced precision=1; multiblock=1. Effective bridge settings and speed require device verification.");
+            if(!blenderShell)FexPerformanceProfile.apply(env);
+            if(blenderShell)log.accept("DRNAS_BLENDER_LEAN: no game controller shim, Paint, game diagnostics, Mono installer, wallpaper or FEX performance setup; Wine ABI and graphics dependencies retained");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
                     "user-shortcut":app)+" target="+launchMode);
@@ -416,7 +420,8 @@ final class WineGuiSession implements AutoCloseable {
             Map<String,String> dxvkSeen=new HashMap<>();
             DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode,launchArgs)).directory(proton).redirectErrorStream(true);
+            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode,launchArgs))
+                    .directory(blenderShell?blenderFolder:proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             log.accept("[Startup] Pokretanje Explorera · čekam Windows prozor");
             if(nativeVulkan)log.accept("DRNAS_WINEVULKAN_LAUNCH_ARGUMENTS "+launchArgs+
@@ -511,6 +516,7 @@ final class WineGuiSession implements AutoCloseable {
         WineServerDiagnostics.ManagedServer s=server;if(s!=null)s.close();
     }
 }
+
 
 
 

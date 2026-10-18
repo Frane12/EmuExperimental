@@ -56,12 +56,14 @@ final class TurnipRuntime {
     static boolean selectBundledA840H29(Context context,JSONObject plan,
                                         Consumer<String> log) {
         String target=gpuTarget(NativeHost.vulkanDeviceName());
-        if("A740".equals(target)&&android.os.Build.VERSION.SDK_INT<27){
-            log.accept("A740 Turnip R8 requires Android API 27+; preserving driver");return false;
+        if(TurnipDevicePolicy.legacy(target)) {
+            if(android.os.Build.VERSION.SDK_INT<28) {
+                log.accept("Turnip R6 requires Android API 28+; preserving system driver");return false;
+            }
+            return selectPinned(context,plan,log,TurnipDevicePolicy.LEGACY,
+                    "Turnip-A6xx-A7xx-R6.zip","Turnip_v26.3.0-R6.zip",
+                    "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81","A6XX_A7XX_R6");
         }
-        if("A740".equals(target))return selectPinned(context,plan,log,"A740",
-                "Turnip-A740-R8.zip","Turnip_v26.0.0_R8.zip",
-                "e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715","A740_R8");
         if(!"A840".equals(target)) {
             log.accept("DRNAS_A840_H29_SKIP gpu="+
                     target+
@@ -132,13 +134,8 @@ final class TurnipRuntime {
         }
     }
 
-    private static final Pattern ADRENO =
-            Pattern.compile("(?i)adreno\\s*(?:\\(tm\\))?[^0-9]{0,12}(740|810|830|840)(?![0-9])");
-
     static String gpuTarget(String gpuName) {
-        if(gpuName==null) return "";
-        Matcher match=ADRENO.matcher(gpuName);
-        return match.find()?"A"+match.group(1):"";
+        return TurnipDevicePolicy.target(gpuName);
     }
 
     static File writeIcd(WcpRuntimeStager.PackageInfo info,File vault,Consumer<String> log)
@@ -325,5 +322,6 @@ final class TurnipRuntime {
 
     private TurnipRuntime(){}
 }
+
 
 

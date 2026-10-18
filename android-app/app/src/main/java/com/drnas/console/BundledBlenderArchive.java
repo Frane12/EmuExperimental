@@ -17,6 +17,23 @@ final class BundledBlenderArchive {
     static final String WINDOWS_SETUP="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\drnas-startup.py";
     static final long MAX_EXPANDED=1024L*1024*1024;
     static final String SETUP="import bpy, os\n"+
+            "# D: is a real selected Android folder, validated before Wine starts.\n"+
+            "if os.path.isdir('D:\\\\'):\n"+
+            "    os.chdir('D:\\\\')\n"+
+            "    def drnas_file_browser_directory():\n"+
+            "        for window in bpy.context.window_manager.windows:\n"+
+            "            for area in window.screen.areas:\n"+
+            "                if area.type == 'FILE_BROWSER':\n"+
+            "                    space = area.spaces.active\n"+
+            "                    key = area.as_pointer()\n"+
+            "                    if space.params and key not in drnas_file_browsers:\n"+
+            "                        directory = os.fsdecode(space.params.directory)\n"+
+            "                        if not bpy.data.filepath and (not directory or directory.lower().startswith('c:')):\n"+
+            "                            space.params.directory = b'D:\\\\'\n"+
+            "                        drnas_file_browsers.add(key)\n"+
+            "        return 0.5\n"+
+            "    drnas_file_browsers = set()\n"+
+            "    bpy.app.timers.register(drnas_file_browser_directory, first_interval=0.5, persistent=True)\n"+
             "# First-run portable preferences only. Preserve every later user edit.\n"+
             "if not os.path.isfile(bpy.utils.user_resource('CONFIG', path='userpref.blend')):\n"+
             "    bpy.context.preferences.view.show_splash = False\n"+
@@ -113,4 +130,5 @@ final class BundledBlenderArchive {
     }
     private BundledBlenderArchive(){}
 }
+
 

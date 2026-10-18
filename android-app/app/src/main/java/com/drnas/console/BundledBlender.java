@@ -8,7 +8,14 @@ import java.util.function.Consumer;
 final class BundledBlender {
     static synchronized void install(Context context,File prefix,Consumer<String> log) throws Exception {
         Path target=prefix.toPath().resolve("drive_c/DRNAS/Apps/"+BundledBlenderArchive.DIRECTORY);
-        if(BundledBlenderArchive.ready(target))return;
+        if(BundledBlenderArchive.ready(target)) {
+            // Refresh our integration script on upgrades without re-extracting Blender
+            // or changing any saved project, startup.blend or user preferences.
+            Path script=target.resolve("drnas-startup.py");
+            if(Files.isSymbolicLink(script))throw new IOException("Unsafe Blender setup script");
+            Files.write(script,BundledBlenderArchive.SETUP.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return;
+        }
         File available=target.toFile().getParentFile();
         while(available!=null&&!available.exists())available=available.getParentFile();
         if(available!=null&&available.getUsableSpace()<900L*1024*1024)
@@ -19,4 +26,5 @@ final class BundledBlender {
     }
     private BundledBlender(){}
 }
+
 

@@ -70,12 +70,13 @@ def drnas_turnip_assets():
              "compression": "ZIP", "url": base + tag + "/" + name,
              "sha256": sha, "gpuTarget": gpu, "releaseAssetName": name}
             for gpu, tag, name, sha in pinned]
-    # Unmodified upstream A7xx driver, distinct from Drnas A8xx experiments.
-    a740 = {"kind":"Turnip", "name":"Turnip-A740-R8.zip", "compression":"ZIP",
-            "url":"https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/v26.0.0-rc08/Turnip_v26.0.0_R8.zip",
-            "sha256":"e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715",
-            "gpuTarget":"A740", "releaseAssetName":"Turnip_v26.0.0_R8.zip"}
-    return [a740] + own
+    # Author-published upstream-Mesa A6xx/A7xx R6, including A710/A720/A722.
+    # One payload serves the family: no duplicate ZIP per individual GPU.
+    legacy = {"kind":"Turnip", "name":"Turnip-A6xx-A7xx-R6.zip", "compression":"ZIP",
+            "url":"https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/v37/Turnip_v26.3.0-R6.zip",
+            "sha256":"5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81",
+            "gpuTarget":"A6XX_A7XX", "releaseAssetName":"Turnip_v26.3.0-R6.zip"}
+    return [legacy] + own
 
 
 def check_turnip_zip(archive):
@@ -165,3 +166,4 @@ def package(directory):
 
 if __name__ == "__main__":
     package(sys.argv[1])
+

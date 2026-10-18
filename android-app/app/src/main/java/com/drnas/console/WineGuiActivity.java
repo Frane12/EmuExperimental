@@ -836,7 +836,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Spremi .blend na Android",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -845,7 +845,22 @@ public final class WineGuiActivity extends Activity {
                     else if(which==5)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
                             .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
                             .setPositiveButton("OK",null).show();
+                    else if(which==7)showBlenderProjectFolder();
                     else exitConfirmation.confirm(this);
+                }).show();
+    }
+
+    private void showBlenderProjectFolder() {
+        String path;
+        try {path=BlenderProjectDrive.folder(this,BlenderProjectDrive.selected(this)).getAbsolutePath();}
+        catch(Exception e){path="Mapa nije dostupna";}
+        new AppDialogBuilder(this).setTitle("D:\\ · Android mapa")
+                .setMessage(path+"\n\nU Blenderovu Save/Open dijalogu odaberi D:\\. Datoteke se spremaju izravno u ovu Android mapu.\n\nPrije promjene mape spremi projekt; Blender će se zatvoriti i ponovno pokrenuti.")
+                .setPositiveButton("OK",null)
+                .setNeutralButton("Promijeni mapu",(d,w)->{
+                    if(session!=null)session.close();
+                    startActivity(new Intent(this,BlenderLauncherActivity.class)
+                            .putExtra("choose_project_folder",true));finish();
                 }).show();
     }
 
@@ -1427,6 +1442,7 @@ public final class WineGuiActivity extends Activity {
         super.onDestroy();
     }
 }
+
 
 
 

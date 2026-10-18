@@ -1,4 +1,4 @@
-name: EmuDrnas preAlpha 0.1 r31 - Mali G52 PanVK Blender experimental APK
+name: Blender DRNAS r34 - direct Android D drive and Mesa R6
 on:
   push:
     branches:
@@ -41,6 +41,7 @@ on:
       - experiment/r31-blender-mali-g52-panvk
       - feat/r32-unified-blender-mali-merged
       - feat/r33-blender-android-save-export
+      - feat/r34-blender-direct-d-drive
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -94,12 +95,6 @@ jobs:
       - name: Bundle verified Blender 4.5.14 Windows ARM64
         run: |
           python3 tools/package_blender.py android-app/app/src/main/assets
-      - name: Bundle pinned Wine Mono 11.3.0 ARM64 for automatic first-run setup
-        run: |
-          curl -fL --retry 3 --retry-delay 3 \
-            "https://github.com/wine-mono/wine-mono/releases/download/wine-mono-11.3.0/wine-mono-11.3.0-arm64.msi" \
-            -o android-app/app/src/main/assets/wine-mono.msi
-          echo "b0c47d374efaf22cbff76cb10488ac2d1627b067e085aef7acec573884120e0f  android-app/app/src/main/assets/wine-mono.msi" | sha256sum --check
       - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
         run: |
           python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
@@ -265,7 +260,6 @@ jobs:
           sha256sum android-app/app/build/outputs/apk/debug/app-debug.apk
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E 'AndroidManifest.xml|classes.dex'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep runtime-components-v1.json
-          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep wine-mono.msi
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep graphics-tests/TestD3D.exe
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep blender/blender-4.5.14-windows-arm64.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep emudrnas-meadow-r6.webp
@@ -281,7 +275,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/FEXCore-2609.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/dxvk_1.10.3.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Dxvk-1.10.3-async.wcp
-          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A740-R8.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A6xx-A7xx-R6.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/mali-panvk-26.3.0-devel-r4.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
@@ -300,36 +294,37 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r33-Unified-AndroidSave-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r34-Direct-D-Mesa-R6-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          EmuDrnas preAlpha 0.1 r33 - Android .blend export
+          Blender DRNAS r34 - direct Android D drive and Mesa R6
           Package: com.drnas.console
-          versionCode: 99
+          versionCode: 100
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: r33 adds an Android DocumentsProvider Save As flow for real Blender .blend project files. First Save inside Blender into C:/users/xuser/Documents/Blender, then use the new Android shortcut or Blender menu to choose the saved .blend and Android Documents, Downloads, SD-card or supported cloud folder. Files are streamed with constant RAM and the Wine original is never removed. Android SAF does not mount content:// into Wine, so this is explicit export rather than direct write-through; use the export button again after edits. Includes symlink-safe bounded file discovery and JVM regression tests; no storage-wide permissions. Preserves unified Mali-G52 experimental PanVK and Adreno Turnip, touchscreen left-click, LMB/RMB, keyboard, Blender Vulkan and bootbar. Mali rendering remains unverified on target devices. Same stable signing identity, versionCode 99 for in-place updates.
+          Changed: Mandatory first-launch local Android folder selection mapped directly as D:. Persisted selection and permission, real read/write/rename probe before launch, all-files Android permission requested only when direct access requires it. No SAF mirror. Blender Save/Open can use D: and menu shows actual Android path; changing folder restarts Blender after user saves. Cloud providers retain explicit Android export. New pinned Turnip 26.3.0-R6 for supported A6xx/A7xx incl. A710/A720/A722/A740, with original A8xx and Mali paths retained. Lean Blender session omits game shims, Paint, game diagnostics, Mono, wallpaper and FEX performance tuning. Mono MSI omitted from APK. Core Wine/graphics dependencies and existing user files preserved. GPU and Android storage behavior require on-device testing. Same stable certificate, versionCode 100 for updates.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r33-Unified-AndroidSave-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r33-Unified-AndroidSave-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r33-blender-android-save-export') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
         with:
-          name: Blender-DRNAS-r33-Unified-AndroidSave-test-ZIP
+          name: Blender-DRNAS-r34-Direct-D-Mesa-R6-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r33-blender-android-save-export')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r33-android-save-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r33-Unified-AndroidSave-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r33 - Android folder project export" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r34-direct-d-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r34-Direct-D-Mesa-R6-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r34 - direct D drive, Mesa R6, lean session" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+
 
 
 

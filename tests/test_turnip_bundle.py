@@ -18,15 +18,15 @@ class TurnipBundleTest(unittest.TestCase):
         root = Path(__file__).parents[1]
         installer = (root/"android-app/app/src/main/java/com/drnas/console/BundledComponents.java").read_text()
         self.assertIn("items.length() > 8", installer)
-        self.assertIn('gpuTarget.equals("A740")', installer)
+        self.assertIn('gpuTarget.equals(TurnipDevicePolicy.LEGACY)', installer)
         self.assertIn('kinds.contains("DXVKasync")', installer)
 
     def test_all_supported_gpus_have_reproducible_published_drivers(self):
         drivers = bundle.drnas_turnip_assets()
-        self.assertEqual([x["gpuTarget"] for x in drivers], ["A740", "A810", "A830", "A840"])
+        self.assertEqual([x["gpuTarget"] for x in drivers], ["A6XX_A7XX", "A810", "A830", "A840"])
         for driver in drivers:
             self.assertRegex(driver["sha256"], r"^[0-9a-f]{64}$")
-            self.assertTrue(driver["url"].startswith("https://github.com/K11MCH1/AdrenoToolsDrivers/releases/download/" if driver["gpuTarget"]=="A740" else "https://github.com/Frane12/Testturnip/releases/download/"))
+            self.assertTrue(driver["url"].startswith("https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/" if driver["gpuTarget"]=="A6XX_A7XX" else "https://github.com/Frane12/Testturnip/releases/download/"))
             self.assertNotIn("Source", driver["url"])
         self.assertIn("TESTING-ONLY", drivers[3]["url"])
         self.assertEqual(drivers, bundle.drnas_turnip_assets())
@@ -39,8 +39,8 @@ class TurnipBundleTest(unittest.TestCase):
 
     def test_a740_uses_unchanged_upstream_a7xx_not_a840_experiment(self):
         d = bundle.drnas_turnip_assets()[0]
-        self.assertEqual(d["sha256"], "e634db0f929e2205e95511c769071817d0390180ec72c8e690bc76375e813715")
-        self.assertIn("/Turnip_v26.0.0_R8.zip", d["url"])
+        self.assertEqual(d["sha256"], "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81")
+        self.assertIn("/Turnip_v26.3.0-R6.zip", d["url"])
         self.assertNotIn("a8xx", d["url"])
 
     def test_validates_both_library_names_and_rejects_metadata_path(self):
@@ -59,3 +59,4 @@ class TurnipBundleTest(unittest.TestCase):
                 z.writestr("meta.json",json.dumps({"libraryName":"../untrusted.so"}))
                 z.writestr("../untrusted.so",header)
             with self.assertRaises(ValueError):bundle.check_turnip_zip(archive)
+

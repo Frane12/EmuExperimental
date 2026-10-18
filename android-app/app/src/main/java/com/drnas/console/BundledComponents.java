@@ -36,7 +36,7 @@ final class BundledComponents {
         if (manifest.getInt("schema") != 1) throw new IOException("Unsupported bundled schema");
         JSONArray items = manifest.getJSONArray("items");
         // 2 core WCPs (Proton, FEXCore) + 2 DXVK WCP variants +
-        // 4 per-GPU Turnip ZIPs (A740, A810, A830, A840) = 8 entries.
+        // 4 Turnip ZIPs (shared A6xx/A7xx, A810, A830, A840) = 8 entries.
         // The count is a sanity guard, not a requirement for every optional GPU.
         log.accept("[bundle] Manifest lists " + items.length() + " bundled components");
         if (items.length() < 3 || items.length() > 8)
@@ -62,7 +62,7 @@ final class BundledComponents {
                     !(kind.equals("Proton") || kind.equals("FEXCore") ||
                       kind.equals("DXVK") || kind.equals("Turnip")) ||
                     (kind.equals("Turnip") &&
-                       !(gpuTarget.equals("A740") || gpuTarget.equals("A810") ||
+                       !(gpuTarget.equals(TurnipDevicePolicy.LEGACY) || gpuTarget.equals("A810") ||
                          gpuTarget.equals("A830") || gpuTarget.equals("A840"))) ||
                     !name.matches("[A-Za-z0-9][A-Za-z0-9_.-]{1,100}\\.(?:wcp|zip)") ||
                     !asset.equals("bundled/" + name) ||
@@ -183,3 +183,4 @@ final class BundledComponents {
 
     private BundledComponents() {}
 }
+

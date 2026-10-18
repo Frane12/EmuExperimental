@@ -19,9 +19,10 @@ public final class TurnipRuntimeTest {
         assertEquals("A840",TurnipRuntime.gpuTarget("Adreno 840"));
         assertEquals("A740",TurnipRuntime.gpuTarget("Adreno 740"));
         assertEquals("",TurnipRuntime.gpuTarget("Adreno 7400"));
-        assertEquals("",TurnipRuntime.gpuTarget("Adreno 730"));
+        assertEquals("A730",TurnipRuntime.gpuTarget("Adreno 730"));
         assertEquals("",TurnipRuntime.gpuTarget("Adreno 8400"));
         assertEquals("",TurnipRuntime.gpuTarget(""));
         assertEquals("",TurnipRuntime.gpuTarget(null));
     }
 }
+
