@@ -44,6 +44,9 @@ final class WineGuiSession implements AutoCloseable {
         return command(linker,wine,"desktop");
     }
     static List<String> command(File linker,File wine,String app) {
+        return command(linker,wine,app,Collections.emptyList());
+    }
+    static List<String> command(File linker,File wine,String app,List<String> launchArguments) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         // Explorer is the persistent guest desktop. Do not start winecfg by
         // default; keep it available for explicit maintenance only.
@@ -62,11 +65,13 @@ final class WineGuiSession implements AutoCloseable {
             // explorer.exe expects a Wine DOS path, not an Android Unix file.
             // The root and path are validated/translated in runOwned first.
             args.add(app.substring(8));
+            if(launchArguments!=null)args.addAll(launchArguments);
         } else if(app.startsWith("link:") || app.startsWith("exec:")) {
             // Legacy path retained only for old unit-test/tool launch callers.
             args.add("start.exe");
             args.add("/unix");
             args.add(app.substring(5));
+            if(launchArguments!=null)args.addAll(launchArguments);
         } else if (!"desktop".equals(app)) throw new IllegalArgumentException("Unknown desktop mode");
         return args;
     }
@@ -141,6 +146,7 @@ final class WineGuiSession implements AutoCloseable {
         if(!new File(prefix,"drive_c/windows").isDirectory())
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
+        final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
         final String launchMode=app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
                         WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
@@ -149,6 +155,16 @@ final class WineGuiSession implements AutoCloseable {
         if(launchMode.startsWith("linkwin:") || launchMode.startsWith("execwin:"))
             log.accept("DRNAS_GUEST_PATH_OK: "+launchMode.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
+        final boolean nativeVulkan=appProfile.nativeVulkan();
+        final List<String> launchArgs=launchMode.startsWith("execwin:")?
+                LaunchArguments.forApp(launchMode.substring(8),appProfile.launchArgs,nativeVulkan):
+                launchMode.startsWith("linkwin:")?
+                LaunchArguments.forApp(null,appProfile.launchArgs,nativeVulkan):
+                Collections.emptyList();
+        log.accept("DRNAS_LAUNCH_PROFILE graphics="+appProfile.graphicsApi+
+                " program="+(launchMode.startsWith("execwin:")?launchMode.substring(8):app)+
+                " argc="+launchArgs.size()+
+                (nativeVulkan?" (WineVulkan requested; device validation pending)":""));
         if("builtin:cmd".equals(launchMode)) {
             File systemCmd=new File(prefix,"drive_c/windows/system32/cmd.exe");
             log.accept("DRNAS_CMD_PREFIX_FILE="+(systemCmd.isFile()?"PRESENT":"NOT_STAGED")+
@@ -167,7 +183,7 @@ final class WineGuiSession implements AutoCloseable {
         }
         // DLLs are swapped exclusively before launching Wine: switching mode
         // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
-        String selectedDxvk=dxvkVariant==null?AppLaunchSettings.load(context,app).dxvk(DxvkVariants.selected(context)):dxvkVariant;
+        String selectedDxvk=dxvkVariant==null?appProfile.dxvk(DxvkVariants.selected(context)):dxvkVariant;
         boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log,selectedDxvk);
         WineGraphicsTests.install(context,prefix,log);
         // Always available source-owned Paint, independent of Wine's optional mspaint.
@@ -218,6 +234,7 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        WineVulkanRuntime.configure(env,nativeVulkan);
         DxvkFrameCap.configure(env,frameCap);
         log.accept("DRNAS_DXVK_FRAME_CAP "+frameCap+
                 (frameCap==0?" (no DXVK cap)":" FPS, D3D9 and DXGI"));
@@ -235,6 +252,12 @@ final class WineGuiSession implements AutoCloseable {
                 " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
         File guiRuntime=WineGuiRuntime.install(context,log);
         WineGuiRuntime.configure(guiRuntime,prefix,env);
+        if(nativeVulkan){
+            WineVulkanRuntime.requireBridge(lib,new File(guiRuntime,"lib"),log);
+            log.accept("DRNAS_WINEVULKAN_REQUESTED: vulkan-1=b;winevulkan=b, "+
+                    "WineVulkan -> Khronos -> X11 wrapper -> Turnip. "+
+                    "Actual GPU and Present remain unverified.");
+        }
         File gl=new File(guiRuntime,"lib/libGL.so.1");
         log.accept(gl.isFile()
                 ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
@@ -309,9 +332,11 @@ final class WineGuiSession implements AutoCloseable {
             Map<String,String> dxvkSeen=new HashMap<>();
             DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode)).directory(proton).redirectErrorStream(true);
+            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode,launchArgs)).directory(proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
             log.accept("[Startup] Pokretanje Explorera · čekam Windows prozor");
+            if(nativeVulkan)log.accept("DRNAS_WINEVULKAN_LAUNCH_ARGUMENTS "+launchArgs+
+                    " | WineVulkan files checked, actual Windows Vulkan device unverified.");
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);
