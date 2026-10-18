@@ -90,6 +90,8 @@ public final class WineGuiActivity extends Activity {
     private boolean renderCaptureRunning;
     private boolean blenderShell;
     private BlenderKeyPanel blenderKeys;
+    private BlenderAndroidExport.Project pendingBlenderAndroidProject;
+    private static final int BLENDER_ANDROID_EXPORT_REQUEST=602;
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
@@ -460,7 +462,8 @@ public final class WineGuiActivity extends Activity {
                 // Send a regular X11 click at the current pointer coordinates;
                 // ScreenView's independent touchscreen left-click stays active.
                 xserver.getScreen().updatePointerButtons(button,pressed);
-            },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},this::showBlenderMenu);
+            },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},
+              this::showBlenderMenu,this::startBlenderAndroidExport);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
             // No extra controls over the simple "Starting Blender" boot screen.
             // Full keyboard + hotkey panel become available once Blender maps.
@@ -831,17 +834,100 @@ public final class WineGuiActivity extends Activity {
 
     private void showBlenderMenu() {
         new AppDialogBuilder(this).setTitle("Blender")
-                .setItems(new String[]{"Puna tipkovnica","Test performansi · 20 sekundi",
-                        "Pošalji log","Postavke i dijagnostika","O ovom izdanju","Zatvori Blender"},(d,which)->{
+                .setItems(new String[]{"Puna tipkovnica","Spremi .blend na Android",
+                        "Test performansi · 20 sekundi","Pošalji log",
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
-                    else if(which==1)captureRenderSample(20000L,true);
-                    else if(which==2)shareGuiLog();
-                    else if(which==3)showGlassControls();
-                    else if(which==4)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
+                    else if(which==1)startBlenderAndroidExport();
+                    else if(which==2)captureRenderSample(20000L,true);
+                    else if(which==3)shareGuiLog();
+                    else if(which==4)showGlassControls();
+                    else if(which==5)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
                             .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
                             .setPositiveButton("OK",null).show();
                     else exitConfirmation.confirm(this);
                 }).show();
+    }
+
+    private void startBlenderAndroidExport() {
+        if(!blenderShell||destroyed)return;
+        // File system enumeration must never block Android drawing or X11.
+        new Thread(()->{
+            try {
+                final java.util.List<BlenderAndroidExport.Project> projects=
+                        BlenderAndroidExport.projects(WineShortcuts.prefix(this));
+                runOnUiThread(()->{
+                    if(destroyed)return;
+                    if(projects.isEmpty()) {
+                        new AppDialogBuilder(this).setTitle("Spremi Blender na Android")
+                                .setMessage("Najprije spremi projekt u Blenderu (Save As) u:\n"+
+                                        "C:\\users\\xuser\\Documents\\Blender\\\n\n"+
+                                        "Zatim dodirni '⇩ Android' i odaberi Android mapu. "+
+                                        "Wine C: i Android Documents nisu ista pohrana.")
+                                .setPositiveButton("U redu",null).show();
+                        return;
+                    }
+                    String[] choices=new String[projects.size()];
+                    for(int i=0;i<projects.size();i++)
+                        choices[i]=projects.get(i).title();
+                    new AppDialogBuilder(this)
+                            .setTitle("Odaberi .blend za spremanje na Android")
+                            .setItems(choices,(dialog,which)->{
+                                if(which>=0 && which<projects.size())
+                                    openAndroidBlenderSavePicker(projects.get(which));
+                            }).setNegativeButton("Odustani",null).show();
+                });
+            }catch(Exception e){
+                log("DRNAS_BLENDER_ANDROID_SCAN_ERROR: "+e.getMessage());
+                runOnUiThread(()->{
+                    if(!destroyed)Toast.makeText(this,
+                            "Ne mogu pronaći Wine Blender projekt: "+e.getMessage(),
+                            Toast.LENGTH_LONG).show();
+                });
+            }
+        },"drnas-blender-project-scan").start();
+    }
+
+    private void openAndroidBlenderSavePicker(BlenderAndroidExport.Project project) {
+        pendingBlenderAndroidProject=project;
+        Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/octet-stream");
+        intent.putExtra(Intent.EXTRA_TITLE,project.file.getName());
+        try {
+            startActivityForResult(intent,BLENDER_ANDROID_EXPORT_REQUEST);
+        } catch(Exception error) {
+            pendingBlenderAndroidProject=null;
+            log("DRNAS_BLENDER_ANDROID_PICKER_ERROR: "+error.getMessage());
+            Toast.makeText(this,"Android upravitelj datoteka nije dostupan",
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void finishAndroidBlenderExport(android.net.Uri destination,
+                                             BlenderAndroidExport.Project project) {
+        new Thread(()->{
+            try {
+                long bytes=BlenderAndroidExport.export(this,project.file,destination);
+                log("DRNAS_BLENDER_ANDROID_EXPORT_OK: source="+
+                        project.guestRelativePath+" bytes="+bytes+" uri="+destination.getScheme());
+                runOnUiThread(()->{
+                    if(!destroyed)Toast.makeText(this,
+                            "Spremljeno u Android mapu: "+project.file.getName(),
+                            Toast.LENGTH_LONG).show();
+                });
+            } catch(Exception error) {
+                log("DRNAS_BLENDER_ANDROID_EXPORT_ERROR: "+
+                        error.getClass().getSimpleName()+": "+error.getMessage());
+                runOnUiThread(()->{
+                    if(!destroyed)new AppDialogBuilder(this)
+                            .setTitle("Spremanje na Android nije uspjelo")
+                            .setMessage(error.getMessage()+
+                                    "\nOriginalni Blender projekt u Wineu nije obrisan.")
+                            .setPositiveButton("U redu",null).show();
+                });
+            }
+        },"drnas-blender-android-export").start();
     }
 
     private void captureRenderSample(long durationMs,boolean blenderBenchmark) {
@@ -896,7 +982,8 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=line.startsWith("DRNAS_BLENDER_CURSOR") ||
+        boolean critical=line.startsWith("DRNAS_BLENDER_ANDROID_") ||
+                line.startsWith("DRNAS_BLENDER_CURSOR") ||
                 line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
                 line.startsWith("DRNAS_X11_CRITICAL_") ||
@@ -1208,6 +1295,16 @@ public final class WineGuiActivity extends Activity {
 
     @Override protected void onActivityResult(int request,int result,Intent data) {
         super.onActivityResult(request,result,data);
+        if(request==BLENDER_ANDROID_EXPORT_REQUEST) {
+            BlenderAndroidExport.Project project=pendingBlenderAndroidProject;
+            pendingBlenderAndroidProject=null;
+            if(result==RESULT_OK && data!=null && data.getData()!=null) {
+                if(project!=null)finishAndroidBlenderExport(data.getData(),project);
+                else Toast.makeText(this,"Ponovi izvoz; projekt nije ostao odabran",
+                        Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if(request!=601 || result!=RESULT_OK || data==null || data.getData()==null)return;
         final android.net.Uri uri=data.getData();
         new Thread(()->{
