@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "EmuDrnas preAlpha 0.1"
-        versionCode = 87
-        versionName = "preAlpha-0.1-r21-blender-arm64-dxgi-loader-fix"
+        versionCode = 88
+        versionName = "preAlpha-0.1-r22-blender-popup-x11-mapstate"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
