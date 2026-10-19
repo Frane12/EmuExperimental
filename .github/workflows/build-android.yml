@@ -293,11 +293,11 @@ jobs:
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender Hotfix 1.1 - private review
           Package: com.drnas.console
-          versionCode: 113
+          versionCode: 114
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 113. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
+          Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 114. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           cp releases/blender-hotfix-1.1.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
