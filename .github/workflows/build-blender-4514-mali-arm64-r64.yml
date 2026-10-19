@@ -138,11 +138,19 @@ jobs:
           $ErrorActionPreference='Stop'
           $found=Get-Command clang-cl.exe -ErrorAction Stop
           $exe=$found.Source
-          $version=(& $exe --version | Select-Object -First 1)
-          if ($LASTEXITCODE -ne 0) { throw 'Compiler missing' }
+          if (!(Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw "LLVM executable path is missing: $exe"
+          }
+          # IMPORTANT: never pipe clang-cl --version into Select-Object -First 1.
+          # Closing the native-command output pipe early makes LLVM return a
+          # nonzero exit code on this Windows runner even though it is installed.
+          $lines=@(& $exe --version 2>&1)
+          $clangExit=$LASTEXITCODE
+          $version=if ($lines.Count -gt 0) { [string]$lines[0] } else { '<no output>' }
+          Write-Host "LLVM candidate: $exe; exit=$clangExit; version=$version"
+          if ($clangExit -ne 0) { throw "LLVM --version failed (exit=$clangExit): $version" }
           $m=[regex]::Match($version,'version ([0-9]+)\.([0-9]+)')
           if (!$m.Success -or [int]$m.Groups[1].Value -lt 20) { throw "LLVM >=20 required: $version" }
-          if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Pinned LLVM executable missing' }
           "LLVM_EXE=$exe" >> $env:GITHUB_ENV
           Write-Host "Pinned $version from $exe"
 
