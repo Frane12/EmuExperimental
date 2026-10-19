@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 123
-        versionName = "1.1-r55-window-timer-rollback"
+        versionCode = 124
+        versionName = "1.1-r56-android-host-fullscreen"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
