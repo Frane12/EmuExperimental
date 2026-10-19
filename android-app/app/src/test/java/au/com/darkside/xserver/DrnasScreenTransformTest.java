@@ -29,6 +29,23 @@ public class DrnasScreenTransformTest {
         assertEquals(1279,t.guestX(2160));
         assertEquals(0,t.guestX(-1));
     }
+    @Test public void blenderSafeFullscreenMapsCroppingAndTouchInversely(){
+        DrnasScreenTransform t=DrnasScreenTransform.forSize(1536,708,1280,720,true,23);
+        assertEquals(1536f/1280f,t.scaleX,.0001f);
+        assertEquals(708f/697f,t.scaleY,.0001f);
+        assertEquals(0f,t.physicalY(23),.001f);
+        assertEquals(708f,t.physicalY(720),.001f);
+        assertEquals(23,t.guestY(0));
+        assertEquals(360,t.guestY(t.physicalY(360)));
+        assertEquals(1f,t.deltaY(t.scaleY),.001f);
+    }
+    @Test public void hostCropHasBoundedSafeFallback(){
+        DrnasScreenTransform fit=DrnasScreenTransform.forSize(1536,708,1280,720,false,23);
+        assertEquals(0f,fit.offsetY,.001f);
+        DrnasScreenTransform bounded=DrnasScreenTransform.forSize(1536,708,1280,720,true,999);
+        assertEquals(72,bounded.guestY(0));
+        assertEquals(0f,DrnasScreenTransform.forSize(1536,708,1280,720,true).offsetY,.001f);
+    }
     @Test public void tallerViewAlsoStretchesVertically(){
         DrnasScreenTransform t=DrnasScreenTransform.forSize(1280,1000,1280,720,true);
         assertEquals(1f,t.scaleX,.0001f);

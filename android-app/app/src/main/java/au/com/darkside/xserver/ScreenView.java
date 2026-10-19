@@ -160,7 +160,14 @@ public class ScreenView extends View {
     private int _guestHeight;
     // Non-uniform Android scaling only; Wine/X11 stays 1280x720.
     private volatile boolean stretchFullscreen=true;
+    private volatile int hostCropTopGuestPx;
     private volatile DrnasScreenTransform cachedTransform;
+    public void setHostCropTopGuestPx(int top) {
+        hostCropTopGuestPx=Math.max(0,Math.min(48,top));
+        recalculateScreenTransform();
+        postInvalidateOnAnimation();
+    }
+    public int getHostCropTopGuestPx(){return hostCropTopGuestPx;}
     public void setStretchFullscreen(boolean enabled) {
         stretchFullscreen=enabled;
         recalculateScreenTransform();
@@ -169,7 +176,7 @@ public class ScreenView extends View {
     public boolean isStretchFullscreen(){return stretchFullscreen;}
     private void recalculateScreenTransform() {
         cachedTransform=DrnasScreenTransform.forSize(getWidth(),getHeight(),
-                getGuestWidth(),getGuestHeight(),stretchFullscreen);
+                getGuestWidth(),getGuestHeight(),stretchFullscreen,hostCropTopGuestPx);
     }
     private DrnasScreenTransform screenTransform() {
         DrnasScreenTransform t=cachedTransform;

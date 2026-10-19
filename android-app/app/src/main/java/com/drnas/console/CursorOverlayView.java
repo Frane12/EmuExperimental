@@ -80,7 +80,13 @@ final class CursorOverlayView extends View {
     private final Paint paint=new Paint(Paint.FILTER_BITMAP_FLAG|Paint.ANTI_ALIAS_FLAG);
     private final android.graphics.RectF destination=new android.graphics.RectF();
     private volatile boolean stretchFullscreen=true;
+    private volatile int hostCropTopGuestPx;
     private volatile DrnasScreenTransform cachedTransform;
+    void setHostCropTopGuestPx(int top) {
+        hostCropTopGuestPx=Math.max(0,Math.min(48,top));
+        refreshTransform();
+        postInvalidateOnAnimation();
+    }
     void setStretchFullscreen(boolean enabled){
         stretchFullscreen=enabled;
         refreshTransform();
@@ -88,7 +94,7 @@ final class CursorOverlayView extends View {
     }
     private void refreshTransform(){
         cachedTransform=DrnasScreenTransform.forSize(getWidth(),getHeight(),
-                guestWidth,guestHeight,stretchFullscreen);
+                guestWidth,guestHeight,stretchFullscreen,hostCropTopGuestPx);
     }
     @Override protected void onSizeChanged(int w,int h,int oldW,int oldH){
         super.onSizeChanged(w,h,oldW,oldH);

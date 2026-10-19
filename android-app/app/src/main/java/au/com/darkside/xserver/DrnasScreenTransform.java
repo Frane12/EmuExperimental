@@ -23,11 +23,18 @@ public final class DrnasScreenTransform {
     }
     public static DrnasScreenTransform forSize(int viewW,int viewH,
                                                int guestW,int guestH,boolean fill){
+        return forSize(viewW,viewH,guestW,guestH,fill,0);
+    }
+    // Android-only top-strip crop; X11 window geometry remains unchanged.
+    // Input, compositor and cursor use the same transform.
+    public static DrnasScreenTransform forSize(int viewW,int viewH,
+                                               int guestW,int guestH,boolean fill,int cropTop){
+        int safeCrop=fill?Math.max(0,Math.min(Math.max(0,guestH/10),cropTop)):0;
         if(viewW<=0||viewH<=0||guestW<=0||guestH<=0)
             return new DrnasScreenTransform(1f,1f,0f,0f,
                     Math.max(1,guestW),Math.max(1,guestH),fill);
-        float sx=(float)viewW/guestW,sy=(float)viewH/guestH;
-        if(fill)return new DrnasScreenTransform(sx,sy,0f,0f,guestW,guestH,true);
+        float sx=(float)viewW/guestW,sy=(float)viewH/(guestH-safeCrop);
+        if(fill)return new DrnasScreenTransform(sx,sy,0f,-safeCrop*sy,guestW,guestH,true);
         float s=Math.min(sx,sy);
         return new DrnasScreenTransform(s,s,(viewW-guestW*s)*.5f,
                 (viewH-guestH*s)*.5f,guestW,guestH,false);
