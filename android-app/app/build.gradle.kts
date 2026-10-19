@@ -19,13 +19,13 @@ android {
     namespace = "com.drnas.console"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.drnas.console"
+        applicationId = "com.drnas.blender.xclipse940.lab"
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 104
-        versionName = "preAlpha-0.1-r38-render-transfer-fps"
+        manifestPlaceholders["appLabel"] = "Blender Xclipse LAB"
+        versionCode = 1
+        versionName = "r38-xclipse940-lab1"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
