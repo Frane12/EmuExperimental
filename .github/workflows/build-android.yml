@@ -42,6 +42,7 @@ on:
       - feat/r32-unified-blender-mali-merged
       - feat/r33-blender-android-save-export
       - feat/r34-blender-direct-d-drive
+      - experiment/neuroflow-npu-shadow-r47
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -276,6 +277,9 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
+          if [[ "$GITHUB_REF_NAME" == "experiment/neuroflow-npu-shadow-r47" ]]; then
+            unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_npu_probe.so'
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
       - name: Stage stable-signed EmuDrnas preAlpha APK (updates enabled)
         if: github.event_name != 'pull_request'
@@ -289,7 +293,11 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-Hotfix-1.1-STABLE-SIGNED.apk"
+          if [[ "$GITHUB_REF_NAME" == "experiment/neuroflow-npu-shadow-r47" ]]; then
+            cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-NeuroFlow-NPU-r47-STABLE-SIGNED.apk"
+          else
+            cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-Hotfix-1.1-STABLE-SIGNED.apk"
+          fi
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender Hotfix 1.1 - private review
           Package: com.drnas.console
@@ -300,26 +308,44 @@ jobs:
           Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 113. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
-          cp releases/blender-hotfix-1.1.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          if [[ "$GITHUB_REF_NAME" == "experiment/neuroflow-npu-shadow-r47" ]]; then
+            cp docs/NEUROFLOW_NPU_SHADOW_R47.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+            sed -i 's/versionCode: 113/versionCode: 114/g' "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+            cat >> "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<'EOF'
+          Additional private r47 experiment: 2-second low-priority CPU shadow predictor of Android/X11 DISPLAY frame intervals, NNAPI accelerator enumeration (NOT NPU inference), user A/B toggle, unchanged GPU/Blender/WSI. Experimental, unverified on device. No neural network is running on an NPU.
+          EOF
+            bundle="Blender-DRNAS-NeuroFlow-NPU-r47-preview.zip"
+          else
+            cp releases/blender-hotfix-1.1.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+            bundle="Blender-Hotfix-1.1-preview.zip"
+          fi
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-Hotfix-1.1-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
-          unzip -t "$RUNNER_TEMP/Blender-Hotfix-1.1-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../$bundle" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
+          unzip -t "$RUNNER_TEMP/$bundle"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/neuroflow-npu-shadow-r47') }}
         with:
           name: Blender-Hotfix-1.1-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/neuroflow-npu-shadow-r47')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="blender-hotfix-1.1-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-Hotfix-1.1-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender Hotfix 1.1 - PRIVATE REVIEW" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          if [[ "$GITHUB_REF_NAME" == "experiment/neuroflow-npu-shadow-r47" ]]; then
+            tag="blender-neuroflow-npu-r47-private-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            bundle="Blender-DRNAS-NeuroFlow-NPU-r47-preview.zip"
+            title="Blender DRNAS NeuroFlow NPU r47 - PRIVATE SHADOW EXPERIMENT"
+          else
+            tag="blender-hotfix-1.1-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            bundle="Blender-Hotfix-1.1-preview.zip"
+            title="Blender Hotfix 1.1 - PRIVATE REVIEW"
+          fi
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/$bundle" --draft --target "$GITHUB_SHA" --title "$title" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
 
 
 
