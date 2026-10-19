@@ -9,6 +9,7 @@ val drnasStableSigning = listOf(
 // owns its own private storage and cannot overwrite user projects.
 val drnasPrefixRecoveryLab = System.getenv("DRNAS_PREFIX_RECOVERY_LAB") == "1"
 val drnasA142GpuLab = System.getenv("DRNAS_A142_GPU_LAB") == "1"
+val drnasG57GpuLab = System.getenv("DRNAS_G57_GPU_LAB") == "1"
 
 // Build jobs that distribute APKs must never silently fall back to a one-off
 // Android debug certificate. Local debug/test builds remain possible.
@@ -28,7 +29,7 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 131
+        versionCode = 132
         versionName = "1.1"
     }
     packaging {
@@ -58,7 +59,12 @@ android {
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
             }
-            if (drnasA142GpuLab) {
+            if (drnasG57GpuLab) {
+                // G57 is a strictly isolated OpenGL experiment; never overwrite
+                // the approved Blender v1.1 app or the G610 LAB prefix.
+                applicationIdSuffix = ".g57lab"
+                manifestPlaceholders["appLabel"] = "Blender G57 LAB"
+            } else if (drnasA142GpuLab) {
                 // TEST ONLY: isolated Nothing A142 G610 fallback. Never overwrite
                 // public Blender's prefix, signing identity or Android app data.
                 applicationIdSuffix = ".g610lab"
