@@ -1,4 +1,4 @@
-name: Blender r59 - private X11 wheel button map fix
+name: Blender r60 - private smooth Blender viewport zoom
 on:
   push:
     branches:
@@ -45,7 +45,7 @@ on:
       - experiment/blender-window-r38-ab-r48
       - experiment/blender-window-unforced-r49
       - experiment/blender-window-frames-r50
-      - experiment/blender-x11-wheel-buttons-r59
+      - experiment/blender-smooth-viewport-zoom-r60
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -293,37 +293,37 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-r59-X11-Wheel-Zoom-Fix-VULKAN-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-r60-Smooth-Viewport-Zoom-VULKAN-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender Hotfix 1.1 - private review
           Package: com.drnas.console
-          versionCode: 127
+          versionCode: 128
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Experiment r59 PRIVATE: Fix X11 pointer mapping to five buttons so Blender Zoom slider 4/5 pulses are delivered; retain r58 slider and r57 safe fullscreen. Device testing pending.
+          Experiment r60 PRIVATE: True smooth VIEW_3D view_distance interpolation on Blender main thread; Android sends sub-wheel zoom delta in coalesced atomic file. Wheel fallback remains available via long-press ZOOM; no Win32 fullscreen changes.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
-          cp releases/blender-x11-wheel-zoom-r59.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          cp releases/blender-smooth-viewport-zoom-r60.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-r59-X11-Wheel-Zoom-Fix-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
-          unzip -t "$RUNNER_TEMP/Blender-r59-X11-Wheel-Zoom-Fix-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-r60-Smooth-Viewport-Zoom-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
+          unzip -t "$RUNNER_TEMP/Blender-r60-Smooth-Viewport-Zoom-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/experiment/blender-x11-wheel-buttons-r59') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/experiment/blender-smooth-viewport-zoom-r60') }}
         with:
-          name: Blender-r59-X11-Wheel-Zoom-Fix-private
+          name: Blender-r60-Smooth-Viewport-Zoom-private
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/experiment/blender-x11-wheel-buttons-r59')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/experiment/blender-smooth-viewport-zoom-r60')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="blender-r59-x11-wheel-zoom-fix-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-r59-X11-Wheel-Zoom-Fix-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender r59 - PRIVATE X11 Wheel Zoom Fix" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          tag="blender-r60-smooth-viewport-zoom-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-r60-Smooth-Viewport-Zoom-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender r60 - PRIVATE Smooth Viewport Zoom" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
 
 
 

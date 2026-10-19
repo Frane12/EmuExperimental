@@ -35,6 +35,10 @@ public class BundledBlenderArchiveTest {
         assertFalse(startup.contains("runpy.run_path"));
         assertTrue(startup.contains("DRNAS_BLENDER_LAYOUT_DISABLED"));
         assertTrue(startup.contains("DRNAS_BLENDER_SAFE_FULLSCREEN_MENU"));
+        assertTrue(startup.contains("DRNAS_SMOOTH_ZOOM_TIMER"));
+        assertTrue(startup.contains("drnas-smooth-zoom.signal"));
+        assertTrue(startup.contains("region.view_distance"));
+        assertTrue(startup.contains("area.tag_redraw()"));
         assertTrue(startup.contains("drnas.safe_fullscreen"));
         assertTrue(startup.contains("drnas-host-fullscreen.signal"));
         assertTrue(startup.contains("DRNAS_BLENDER_SAFE_FULLSCREEN_REQUEST"));

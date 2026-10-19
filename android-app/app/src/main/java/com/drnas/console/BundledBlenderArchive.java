@@ -102,7 +102,71 @@ final class BundledBlenderArchive {
             "    drnas_topbar.TOPBAR_MT_window.draw = drnas_window_menu\n"+
             "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=true r57\", flush=True)\n"+
             "except Exception as exc:\n"+
-            "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=false\", repr(exc), flush=True)\n";
+            "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=false\", repr(exc), flush=True)\n"+
+            "# r60: truly smooth camera distance, no Win32 window resizing or fullscreen.\n"+
+            "# A 40 Hz Blender main-thread timer is used only for normal VIEW_3D RNA updates.\n"+
+            "try:\n"+
+            "    import math\n"+
+            "    _drnas_zoom_signal = os.path.join(os.path.dirname(__file__), 'drnas-smooth-zoom.signal')\n"+
+            "    _drnas_zoom_seq = 0\n"+
+            "    _drnas_zoom_total = 0\n"+
+            "    _drnas_zoom_pending = 0\n"+
+            "    _drnas_zoom_target = None\n"+
+            "    _drnas_zoom_warnings = 0\n"+
+            "    def drnas_smooth_zoom_tick():\n"+
+            "        global _drnas_zoom_seq, _drnas_zoom_total, _drnas_zoom_pending\n"+
+            "        global _drnas_zoom_target, _drnas_zoom_warnings\n"+
+            "        try:\n"+
+            "            try:\n"+
+            "                with open(_drnas_zoom_signal, 'r', encoding='ascii') as command:\n"+
+            "                    raw = command.read(64).strip().split(':')\n"+
+            "                if len(raw) == 3 and raw[0] == 'r60':\n"+
+            "                    seq = int(raw[1])\n"+
+            "                    total = int(raw[2])\n"+
+            "                    if seq > _drnas_zoom_seq:\n"+
+            "                        change = max(-250, min(250, total - _drnas_zoom_total))\n"+
+            "                        _drnas_zoom_seq = seq\n"+
+            "                        _drnas_zoom_total = total\n"+
+            "                        _drnas_zoom_pending = max(-500, min(500, _drnas_zoom_pending + change))\n"+
+            "            except OSError:\n"+
+            "                pass\n"+
+            "            area = None\n"+
+            "            if _drnas_zoom_pending or _drnas_zoom_target is not None:\n"+
+            "                score = -1\n"+
+            "                for window in bpy.context.window_manager.windows:\n"+
+            "                    for candidate in window.screen.areas:\n"+
+            "                        if candidate.type == 'VIEW_3D':\n"+
+            "                            measure = candidate.width * candidate.height\n"+
+            "                            if measure > score:\n"+
+            "                                score = measure\n"+
+            "                                area = candidate\n"+
+            "            if area is not None:\n"+
+            "                region = area.spaces.active.region_3d\n"+
+            "                current = max(0.00001, float(region.view_distance))\n"+
+            "                if _drnas_zoom_pending:\n"+
+            "                    change = max(-100, min(100, _drnas_zoom_pending))\n"+
+            "                    _drnas_zoom_pending -= change\n"+
+            "                    base = _drnas_zoom_target if _drnas_zoom_target is not None else current\n"+
+            "                    _drnas_zoom_target = max(0.08, min(20000.0, base * math.exp(-0.023 * change)))\n"+
+            "                target = _drnas_zoom_target\n"+
+            "                if target is not None:\n"+
+            "                    remaining = math.log(target / current)\n"+
+            "                    if abs(remaining) < 0.001:\n"+
+            "                        region.view_distance = target\n"+
+            "                        _drnas_zoom_target = None\n"+
+            "                    else:\n"+
+            "                        region.view_distance = current * math.exp(remaining * 0.32)\n"+
+            "                    area.tag_redraw()\n"+
+            "            return 0.025 if (_drnas_zoom_target is not None or _drnas_zoom_pending) else 0.065\n"+
+            "        except Exception as error:\n"+
+            "            if _drnas_zoom_warnings < 4:\n"+
+            "                print('DRNAS_SMOOTH_ZOOM_TICK_ERROR', repr(error), flush=True)\n"+
+            "            _drnas_zoom_warnings += 1\n"+
+            "            return 0.16\n"+
+            "    bpy.app.timers.register(drnas_smooth_zoom_tick, first_interval=0.16, persistent=True)\n"+
+            "    print('DRNAS_SMOOTH_ZOOM_TIMER registered=true r60 interval_active_ms=25 easing=0.32', flush=True)\n"+
+            "except Exception as error:\n"+
+            "    print('DRNAS_SMOOTH_ZOOM_TIMER registered=false r60', repr(error), flush=True)\n";
 
     static boolean ready(Path target) throws IOException {
         Path marker=target.resolve(".drnas-bundle-sha256");
