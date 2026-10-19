@@ -1484,6 +1484,12 @@ public class Window extends Resource {
      * @return The window it was sent to, or null if not sent.
      */
     public Window buttonNotify(boolean pressed, int x, int y, int button, int timestamp, Client grabClient) {
+        return buttonNotify(pressed,x,y,button,timestamp,grabClient,
+                X11ButtonState.beforeTransition(_screen.getButtons(),button));
+    }
+
+    private Window buttonNotify(boolean pressed, int x, int y, int button, int timestamp,
+            Client grabClient, int eventState) {
         Window evw = this;
         Window child = null;
         int mask = pressed ? EventCode.MaskButtonPress : EventCode.MaskButtonRelease;
@@ -1511,9 +1517,9 @@ public class Window extends Resource {
 
             try {
                 if (pressed)
-                    EventCode.sendButtonPress(c, timestamp, button, _screen.getRootWindow(), evw, child, x, y, x - evw._irect.left, y - evw._irect.top, _screen.getButtons());
+                    EventCode.sendButtonPress(c, timestamp, button, _screen.getRootWindow(), evw, child, x, y, x - evw._irect.left, y - evw._irect.top, eventState);
                 else
-                    EventCode.sendButtonRelease(c, timestamp, button, _screen.getRootWindow(), evw, child, x, y, x - evw._irect.left, y - evw._irect.top, _screen.getButtons());
+                    EventCode.sendButtonRelease(c, timestamp, button, _screen.getRootWindow(), evw, child, x, y, x - evw._irect.left, y - evw._irect.top, eventState);
                 sentWindow = evw;
             } catch (IOException e) {
                 evw.removeSelectingClient(c);
@@ -1536,10 +1542,16 @@ public class Window extends Resource {
      * @param ownerEvents Owner-events flag.
      */
     public void grabButtonNotify(boolean pressed, int x, int y, int button, int eventMask, Client grabClient, boolean ownerEvents) {
+        grabButtonNotify(pressed,x,y,button,eventMask,grabClient,ownerEvents,
+                X11ButtonState.beforeTransition(_screen.getButtons(),button));
+    }
+
+    public void grabButtonNotify(boolean pressed, int x, int y, int button, int eventMask,
+            Client grabClient, boolean ownerEvents, int eventState) {
         if (ownerEvents) {
             Window w = _screen.getRootWindow().windowAtPoint(x, y);
 
-            if (w.buttonNotify(pressed, x, y, button, _xServer.getTimestamp(), grabClient) != null)
+            if (w.buttonNotify(pressed, x, y, button, _xServer.getTimestamp(), grabClient, eventState) != null)
                 return;
         }
 
@@ -1549,9 +1561,9 @@ public class Window extends Resource {
 
         try {
             if (pressed)
-                EventCode.sendButtonPress(grabClient, _xServer.getTimestamp(), button, _screen.getRootWindow(), this, null, x, y, x - _irect.left, y - _irect.top, _screen.getButtons());
+                EventCode.sendButtonPress(grabClient, _xServer.getTimestamp(), button, _screen.getRootWindow(), this, null, x, y, x - _irect.left, y - _irect.top, eventState);
             else
-                EventCode.sendButtonRelease(grabClient, _xServer.getTimestamp(), button, _screen.getRootWindow(), this, null, x, y, x - _irect.left, y - _irect.top, _screen.getButtons());
+                EventCode.sendButtonRelease(grabClient, _xServer.getTimestamp(), button, _screen.getRootWindow(), this, null, x, y, x - _irect.left, y - _irect.top, eventState);
         } catch (IOException e) {
             removeSelectingClient(grabClient);
         }
@@ -3140,4 +3152,5 @@ public class Window extends Resource {
         return _properties.get(id);
     }
 }
+
 

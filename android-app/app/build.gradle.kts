@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 120
-        versionName = "1.1-r52-first-input-anti-hang"
+        versionCode = 121
+        versionName = "1.1-r53-x11-button-state"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +79,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

@@ -55,6 +55,7 @@ public class ScreenView extends View {
         private int mMotionY;
         private int mButton;
         private int mGrabEventMask;
+        private int mEventState;
         private Client mGrabPointerClient;
         private boolean mGrabPointerOwnerEvents;
 
@@ -64,13 +65,14 @@ public class ScreenView extends View {
             mMotionX = motionX;
             mMotionY = motionY;
             mButton = button;
+            mEventState = X11ButtonState.beforeTransition(_buttons, button);
             mGrabEventMask = grabEventMask;
             mGrabPointerClient = grabPointerClient;
             mGrabPointerOwnerEvents = grabPointerOwnerEvents;
         }
 
         public void run() {
-            callGrabButtonNotify(mWindow, mPressed, mMotionX, mMotionY, mButton, mGrabEventMask, mGrabPointerClient, mGrabPointerOwnerEvents);
+            callGrabButtonNotify(mWindow, mPressed, mMotionX, mMotionY, mButton, mGrabEventMask, mGrabPointerClient, mGrabPointerOwnerEvents, mEventState);
         }
     }
 
@@ -276,7 +278,7 @@ public class ScreenView extends View {
                     if(delay>600 && (serial<=4 || delay>2500))
                         _xServer.diagnostic("DRNAS_X11_INPUT_SLOW seq="+serial+
                                 " label="+label+" elapsedMs="+delay);
-                    else if(serial<=3)
+                    else if(serial<=24)
                         _xServer.diagnostic("DRNAS_X11_INPUT_DONE seq="+serial+
                                 " label="+label+" elapsedMs="+delay);
                 }
@@ -287,10 +289,10 @@ public class ScreenView extends View {
                     " (Android UI remains responsive; reset session)");
             return false;
         }
-        if(serial<=3)_xServer.diagnostic("DRNAS_X11_INPUT_QUEUED seq="+serial+" label="+label);
+        if(serial<=24)_xServer.diagnostic("DRNAS_X11_INPUT_QUEUED seq="+serial+" label="+label);
         // Never waits for the worker. Capture its stack if X11 stalls; keep
         // the Android UI, controls and log export responsive.
-        if(serial<=3 || label.startsWith("button") || label.startsWith("key")) {
+        if(serial<=24 || label.startsWith("button") || label.startsWith("key")) {
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
                 if(finished.get() || !nonBlockingInputEnabled)return;
                 if(inputStalls.incrementAndGet()>5)return;
@@ -408,11 +410,11 @@ public class ScreenView extends View {
                     if(_enableTouchClicks){
                         if(event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getActionIndex() == 0)
                             updatePointerButtons (1, true);
-                        if(event.getActionMasked() == MotionEvent.ACTION_UP && event.getActionIndex() == 0)
+                        if((event.getActionMasked() == MotionEvent.ACTION_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL) && event.getActionIndex() == 0)
                             updatePointerButtons (1, false);
                         if(event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN && event.getActionIndex() == 1)
                             updatePointerButtons (3, true);
-                        if((event.getActionMasked() == MotionEvent.ACTION_POINTER_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL)  && event.getActionIndex() == 1)
+                        if((event.getActionMasked() == MotionEvent.ACTION_POINTER_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL)  && (event.getActionIndex() == 1 || event.getActionMasked() == MotionEvent.ACTION_CANCEL))
                             updatePointerButtons (3, false);
                     }
                 }
@@ -1290,6 +1292,7 @@ public class ScreenView extends View {
      * @param button  The button that was pressed/released.
      * @param pressed True if the button was pressed.
      */
+    private int buttonTraceCount;
     public void updatePointerButtons(int button, boolean pressed) {
         Pointer p = _xServer.getPointer();
 
@@ -1308,6 +1311,11 @@ public class ScreenView extends View {
             _buttons &= ~mask;
         }
 
+        if (nonBlockingInputEnabled && buttonTraceCount++ < 32)
+            _xServer.diagnostic("DRNAS_X11_BUTTON button="+button+" pressed="+pressed+
+                    " before="+X11ButtonState.beforeTransition(_buttons,button)+
+                    " after="+_buttons+" grab="+(_grabPointerWindow==null?0:_grabPointerWindow.getId())+
+                    " sync="+_grabPointerSynchronous+" pending="+mPendingPointerEvents.mQueue.size());
         if (_grabPointerWindow == null) {
             Window w = _rootWindow.windowAtPoint(_motionX, _motionY);
             PassiveButtonGrab pbg = null;
@@ -1330,6 +1338,10 @@ public class ScreenView extends View {
                 if (_grabCursor == null) _grabCursor = _grabPointerWindow.getCursor();
 
                 updatePointer(1);
+                _grabPointerFreezeNextEvent = _grabPointerSynchronous;
+                _grabKeyboardFreezeNextEvent = _grabKeyboardSynchronous;
+                callGrabButtonNotify(_grabPointerWindow, true, _motionX, _motionY,
+                        button, _grabEventMask, _grabPointerClient, _grabPointerOwnerEvents);
             } else {
                 int timestamp = _xServer.getTimestamp();
                 Window ew = w.buttonNotify(pressed, _motionX, _motionY, button, timestamp, null);
@@ -2287,7 +2299,14 @@ public class ScreenView extends View {
     }
 
     private void callGrabButtonNotify(Window w, boolean pressed, int motionX, int motionY, int button, int grabEventMask, Client grabPointerClient, boolean grabPointerOwnerEvents) {
-        w.grabButtonNotify(pressed, motionX, motionY, button, grabEventMask, grabPointerClient, grabPointerOwnerEvents);
+        callGrabButtonNotify(w, pressed, motionX, motionY, button, grabEventMask,
+                grabPointerClient, grabPointerOwnerEvents, X11ButtonState.beforeTransition(_buttons,button));
+    }
+
+    private void callGrabButtonNotify(Window w, boolean pressed, int motionX, int motionY, int button,
+            int grabEventMask, Client grabPointerClient, boolean grabPointerOwnerEvents, int eventState) {
+        w.grabButtonNotify(pressed, motionX, motionY, button, grabEventMask,
+                grabPointerClient, grabPointerOwnerEvents, eventState);
         reflectPointerFreezeNextEvent();
     }
 
@@ -2329,5 +2348,6 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+
 
 
