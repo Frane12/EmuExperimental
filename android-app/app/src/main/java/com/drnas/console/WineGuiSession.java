@@ -190,7 +190,13 @@ final class WineGuiSession implements AutoCloseable {
                 " selectedOpenGL="+nativeOpenGl+
                 " (Wine bridge checked before launch; first rendered frame not yet verified)");
         if(blenderShell)log.accept("DRNAS_UNIFIED_BLENDER_GPU="+
-                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":"ADRENO_OR_SYSTEM_VULKAN"));
+                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":
+                SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName())?
+                SamsungXclipseSupport.backend(NativeHost.vulkanDeviceName()):
+                "ADRENO_OR_SYSTEM_VULKAN"));
+        if(blenderShell && SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName()))
+            log.accept("DRNAS_XCLIPSE_940_SUPPORT: Samsung AMD RDNA3 / firmware Vulkan ICD only; "+
+                    "no Turnip/PanVK injection; GPU compatibility requires on-device validation.");
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
         // an explicit argument, Native Vulkan, or OpenGL EGL is requested.
