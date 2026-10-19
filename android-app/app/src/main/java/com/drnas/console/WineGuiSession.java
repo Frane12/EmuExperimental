@@ -353,7 +353,7 @@ final class WineGuiSession implements AutoCloseable {
         log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
-        if(maliBlender && !"system".equals(TurnipRuntime.driverChoice(context))) {
+        if(maliBlender&&!TurnipRuntime.automaticSystemBackend(context)) {
             boolean panvkSelected=MaliPanvkRuntime.select(context,env,log);
             log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
                     "STAGED_NOT_DEVICE_VERIFIED":"UNAVAILABLE_SYSTEM_VULKAN_ONLY"));
@@ -364,7 +364,9 @@ final class WineGuiSession implements AutoCloseable {
             File mesa = WineOpenGlRuntime.install(context,log);
             WineOpenGlRuntime.configure(mesa,env,log);
         }
-        TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
+        if(blenderShell&&!nativeOpenGl)
+            TurnipRuntime.verifyAutomaticBackend(context,guiRuntime,plan,env,log,raw);
+        else TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
         audio=new PulseAudioRuntime();
         try {audio.start(context,env,log,raw);}

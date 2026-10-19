@@ -5,6 +5,12 @@ import static org.junit.Assert.*;
 import java.util.HashSet;
 
 public class GraphicsDriverCatalogTest {
+    @Test public void automaticOrderKeepsACompatibleLastVerifiedDriverFirst() {
+        assertEquals("A840_H2.9",GraphicsDriverCatalog.ordered("A840",35,"").get(0).id);
+        assertEquals("A840_H2.8",GraphicsDriverCatalog.ordered("A840",35,"A840_H2.8").get(0).id);
+        assertEquals("A840_H2.9",GraphicsDriverCatalog.ordered("A840",35,"A810_H2.7").get(0).id);
+        assertEquals(2,GraphicsDriverCatalog.ordered("A840",35,"A840_H2.8").size());
+    }
     @Test public void choicesNeverCrossChipFamilies() {
         for(String target:new String[]{"A810","A830","A840"}) {
             assertEquals(2,GraphicsDriverCatalog.compatible(target,35).size());

@@ -17,15 +17,24 @@ import java.util.regex.Pattern;
  * a working AdrenoTools injection path. We log this distinction explicitly.
  */
 final class TurnipRuntime {
-    static String driverChoice(Context context) {
-        return context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE)
-                .getString("graphics-driver-choice","auto");
+    private static String automaticDeviceKey(Context context) {
+        long version=0;
+        try {version=context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionCode;}
+        catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
+        return android.os.Build.FINGERPRINT+":"+gpuTarget(NativeHost.vulkanDeviceName())+":"+version;
     }
-    static void setDriverChoice(Context context,String id) {
-        if(!"auto".equals(id)&&!"system".equals(id)&&GraphicsDriverCatalog.find(id)==null)
-            throw new IllegalArgumentException("Unknown driver choice");
+    private static String rememberedDriver(Context context) {
+        android.content.SharedPreferences prefs=context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE);
+        return automaticDeviceKey(context).equals(prefs.getString("automatic-driver-device",""))?
+                prefs.getString("automatic-driver-id",""):"";
+    }
+    private static void rememberDriver(Context context,String id) {
         context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE).edit()
-                .putString("graphics-driver-choice",id).apply();
+                .putString("automatic-driver-device",automaticDeviceKey(context))
+                .putString("automatic-driver-id",id).apply();
+    }
+    static boolean automaticSystemBackend(Context context) {
+        return "system".equals(rememberedDriver(context));
     }
     private static void clearSelection(JSONObject plan) {
         for(String key:new String[]{"turnipIcd","turnipAutoSelected","turnipArchive","turnipPreferenceRequested"})
@@ -58,53 +67,58 @@ final class TurnipRuntime {
         return hex.toString();
     }
 
-    /**
-     * Invoked at EACH Explorer launch. Existing Wineboot boot plans may still
-     * reference old A840 H2.8: replace only this session's in-memory choice.
-     * Never update the saved boot plan, user-imported ZIPs or system driver.
-     *
-     * The APK manifest/asset SHA and embedded target are checked *before*
-     * selecting H2.9. Exact GPU family required; do not spoof Adreno IDs.
-     * When unsupported or invalid, leave the known-good plan unchanged.
-     */
-    static boolean selectBundledA840H29(Context context,JSONObject plan,
-                                        Consumer<String> log) {
+    /** Hardware detection and pinned candidates only; no end-user driver choices. */
+    static boolean selectBundledA840H29(Context context,JSONObject plan,Consumer<String> log) {
+        clearSelection(plan);
+        if("system".equals(rememberedDriver(context))) {
+            log.accept("DRNAS_DRIVER_AUTO: using last verified system backend for this device/build");
+            return false;
+        }
+        return selectAutomatic(context,plan,log,new java.util.HashSet<>());
+    }
+    private static boolean selectAutomatic(Context context,JSONObject plan,Consumer<String> log,
+                                            java.util.Set<String> attempted) {
         String target=gpuTarget(NativeHost.vulkanDeviceName());
-        String choice=driverChoice(context);
-        if("system".equals(choice)) {
-            clearSelection(plan);log.accept("DRNAS_DRIVER_SYSTEM requested explicitly");return false;
+        for(GraphicsDriverCatalog.Entry entry:GraphicsDriverCatalog.ordered(target,
+                android.os.Build.VERSION.SDK_INT,rememberedDriver(context))) {
+            if(!attempted.add(entry.id))continue;
+            if("A840_H2.9".equals(entry.id)&&!autoH29Enabled(context))continue;
+            if(selectPinned(context,plan,log,entry.target,entry.asset,entry.source,entry.sha,entry.id))return true;
         }
-        if(!"auto".equals(choice)) {
-            GraphicsDriverCatalog.Entry entry=GraphicsDriverCatalog.find(choice);
-            clearSelection(plan);
-            if(entry==null||!entry.supports(target,android.os.Build.VERSION.SDK_INT)) {
-                log.accept("DRNAS_DRIVER_REJECTED incompatible choice="+choice+" gpu="+target+"; system fallback");return false;
+        clearSelection(plan);
+        return false;
+    }
+
+    /** Native enumeration failure retries a compatible driver in a NEW child
+     * before Blender starts. This does not claim to detect later render crashes. */
+    static void verifyAutomaticBackend(Context context,File gui,JSONObject plan,Map<String,String> env,
+                                        Consumer<String> log,RawWineTrace raw) throws Exception {
+        java.util.Set<String> attempted=new java.util.HashSet<>();
+        String current=plan.optString("turnipAutoSelected","");
+        if(!current.isEmpty())attempted.add(current);
+        boolean panvk="1".equals(env.get("DRNAS_MALI_PANVK_PREFERRED"));
+        boolean custom=env.containsKey("ADRENOTOOLS_DRIVER_NAME");
+        if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+            rememberDriver(context,current.isEmpty()?(panvk?"panvk":"system"):current);
+            log.accept("DRNAS_DRIVER_AUTO_VERIFIED backend="+(current.isEmpty()?(panvk?"PanVK":"system"):current));
+            return;
+        }
+        if(!panvk)while(selectAutomatic(context,plan,log,attempted)) {
+            configureWine(context,plan,env,log);
+            current=plan.optString("turnipAutoSelected","");
+            log.accept("DRNAS_DRIVER_AUTO_RETRY backend="+current);
+            if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+                rememberDriver(context,current);return;
             }
-            return selectPinned(context,plan,log,entry.target,entry.asset,entry.source,entry.sha,entry.id);
         }
-        if(TurnipDevicePolicy.legacy(target)) {
-            if(android.os.Build.VERSION.SDK_INT<28) {
-                log.accept("Turnip R6 requires Android API 28+; preserving system driver");return false;
+        if(custom || !attempted.isEmpty()) {
+            clearSelection(plan);configureWine(context,plan,env,log);
+            log.accept("DRNAS_DRIVER_AUTO_RETRY backend=system");
+            if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+                rememberDriver(context,"system");return;
             }
-            return selectPinned(context,plan,log,TurnipDevicePolicy.LEGACY,
-                    "Turnip-A6xx-A7xx-R6.zip","Turnip_v26.3.0-R6.zip",
-                    "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81","A6XX_A7XX_R6");
         }
-        if(!"A840".equals(target)) {
-            GraphicsDriverCatalog.Entry entry=GraphicsDriverCatalog.find(
-                    "A810".equals(target)?"A810_ULTIMATE":"A830".equals(target)?"A830_SMART":"");
-            if(entry!=null)return selectPinned(context,plan,log,entry.target,entry.asset,entry.source,entry.sha,entry.id);
-            log.accept("DRNAS_A840_H29_SKIP gpu="+
-                    target+
-                    " (never force H2.9 onto another Adreno)");
-            return false;
-        }
-        if(!autoH29Enabled(context)) {
-            log.accept("DRNAS_A840_H29_DISABLED: keeping previous Vulkan driver selection");
-            return false;
-        }
-        return selectPinned(context,plan,log,"A840",A840_H29_ARCHIVE,
-                A840_H29_ORIGINAL,A840_H29_SHA256,"A840_H2.9");
+        throw new IOException("Nijedan kompatibilan Vulkan driver nije prošao automatsku provjeru. Pošalji log za ovaj uređaj.");
     }
 
     private static boolean selectPinned(Context context,JSONObject plan,Consumer<String> log,
@@ -284,6 +298,7 @@ final class TurnipRuntime {
         env.remove("ADRENOTOOLS_DRIVER_PATH");env.remove("ADRENOTOOLS_DRIVER_NAME");
         env.remove("DRNAS_TURNIP_EXPECTED_SO");env.remove("DRNAS_TURNIP_BUILD_ID");
         env.remove("TU_FRANE_A840_AGGRESSIVE");
+        env.remove("DRNAS_MALI_PANVK_PREFERRED");env.remove("PANVK_DEBUG");
         env.put("DRNAS_TURNIP_PREFERRED","0");
         // sw selects CPU *presentation*, not software shader execution. The
         // real driver still renders; Mesa copies its image to X11 PutImage.
@@ -317,7 +332,7 @@ final class TurnipRuntime {
         probeWine(context,gui,env,log,raw,present,immediate?"immediate":"fifo");
     }
 
-    static void probeWine(Context context,File gui,Map<String,String> env,
+    static boolean probeWine(Context context,File gui,Map<String,String> env,
                           Consumer<String> log,RawWineTrace raw,boolean present,String testMode) {
         // Probe even without a bundled Turnip selection: distinguish Vulkan
         // enumeration from an X11 WSI/Direct3D adapter failure.
@@ -357,7 +372,8 @@ final class TurnipRuntime {
                         "create-checkpoints".equals(testMode)||"create-only".equals(testMode)?"Native Vulkan create/destroy and X11 cleanup PASSED (no Present attempted).":present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
                         "Native Vulkan GPU enumeration PASSED. Windows DXVK adapter/presentation remain unverified.");
             else log.accept("Native Vulkan "+(present?"presentation/cleanup":"enumeration")+" FAILED (exit="+p.exitValue()+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
-        } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());}
+            return ended && p.exitValue()==0;
+        } catch(Exception e){log.accept("Wine Vulkan probe: "+e.getMessage());return false;}
         finally {if(p!=null && p.isAlive())p.destroyForcibly();}
     }
 

@@ -27,5 +27,11 @@ final class GraphicsDriverCatalog {
     static List<Entry> compatible(String gpu,int api){
         List<Entry> result=new ArrayList<>();for(Entry e:ENTRIES)if(e.supports(gpu,api))result.add(e);return result;
     }
+    static List<Entry> ordered(String gpu,int api,String lastVerified) {
+        List<Entry> entries=compatible(gpu,api);
+        Entry previous=find(lastVerified);
+        if(previous!=null && entries.remove(previous))entries.add(0,previous);
+        return entries;
+    }
     private GraphicsDriverCatalog(){}
 }

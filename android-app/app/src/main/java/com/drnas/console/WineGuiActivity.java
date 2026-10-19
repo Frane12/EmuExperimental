@@ -847,7 +847,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Grafički driver · izbor"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -865,29 +865,8 @@ public final class WineGuiActivity extends Activity {
                         performanceHud.removeCallbacks(hudTicker);
                         if(enable)performanceHud.post(hudTicker);
                     }
-                    else if(which==9)showGraphicsDriverPicker();
                     else exitConfirmation.confirm(this);
                 }).show();
-    }
-
-    private void showGraphicsDriverPicker() {
-        String gpu=TurnipRuntime.gpuTarget(NativeHost.vulkanDeviceName());
-        java.util.List<String> ids=new java.util.ArrayList<>();
-        java.util.List<String> labels=new java.util.ArrayList<>();
-        ids.add("auto");labels.add("Automatic · preporučeni odabir");
-        ids.add("system");labels.add("System Vulkan · tvornički driver");
-        for(GraphicsDriverCatalog.Entry entry:GraphicsDriverCatalog.compatible(gpu,android.os.Build.VERSION.SDK_INT)) {
-            ids.add(entry.id);labels.add(entry.label);
-        }
-        String selected=TurnipRuntime.driverChoice(this);
-        for(int i=0;i<ids.size();i++)if(ids.get(i).equals(selected))labels.set(i,"✓ "+labels.get(i));
-        new AppDialogBuilder(this).setTitle("Grafički driver · "+(gpu.isEmpty()?"sistemski GPU":gpu))
-                .setItems(labels.toArray(new String[0]),(dialog,index)->{
-                    TurnipRuntime.setDriverChoice(this,ids.get(index));
-                    new AppDialogBuilder(this).setTitle("Driver spremljen")
-                            .setMessage("Primjenjuje se pri sljedećem pokretanju Blendera. Spremi projekt prije ponovnog pokretanja. Experimental označava driver koji još treba provjeriti na ovom uređaju.")
-                            .setPositiveButton("U redu",null).show();
-                }).setNegativeButton("Zatvori",null).show();
     }
 
     private void showBlenderProjectFolder() {
