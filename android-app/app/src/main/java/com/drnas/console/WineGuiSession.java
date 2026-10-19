@@ -165,10 +165,11 @@ final class WineGuiSession implements AutoCloseable {
         // receives the experimental PanVK driver. The Adreno path remains
         // Turnip and is not changed for other applications.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
-        final boolean nativeVulkan=appProfile.nativeVulkan() || maliBlender;
+        final boolean xclipseBlender=blenderShell && XclipseRadvRuntime.matchesDevice();
+        final boolean nativeVulkan=appProfile.nativeVulkan() || maliBlender || xclipseBlender;
         final boolean nativeOpenGl=appProfile.nativeOpenGl();
         if(blenderShell)log.accept("DRNAS_UNIFIED_BLENDER_GPU="+
-                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":"ADRENO_OR_SYSTEM_VULKAN"));
+                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":xclipseBlender?"XCLIPSE_940_RADV_EXPERIMENT":"ADRENO_OR_SYSTEM_VULKAN"));
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
         // an explicit argument, Native Vulkan, or OpenGL EGL is requested.
@@ -339,7 +340,7 @@ final class WineGuiSession implements AutoCloseable {
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
         // after an APK upgrade, without rewriting the Wine prefix.
         // Remove any historical Adreno boot plan before configuring Mali.
-        if(maliBlender) {
+        if(maliBlender || xclipseBlender) {
             plan.remove("turnipIcd");
             plan.remove("turnipAutoSelected");
         }
@@ -351,6 +352,11 @@ final class WineGuiSession implements AutoCloseable {
             boolean panvkSelected=MaliPanvkRuntime.select(context,env,log);
             log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
                     "STAGED_NOT_DEVICE_VERIFIED":"UNAVAILABLE_SYSTEM_VULKAN_ONLY"));
+        }
+        if(xclipseBlender) {
+            boolean radvSelected=XclipseRadvRuntime.select(context,env,log);
+            log.accept("DRNAS_XCLIPSE_940_EXPERIMENT="+(radvSelected?
+                    "RADV_STAGED_UNVERIFIED":"SAMSUNG_FIRMWARE_VULKAN_FALLBACK"));
         }
         // Only the app that explicitly selects OpenGL gets these Mesa host
         // libraries. Other games retain the identical r24 Wine/DXVK path.
