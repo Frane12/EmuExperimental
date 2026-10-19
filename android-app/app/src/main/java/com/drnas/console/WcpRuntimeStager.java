@@ -9,6 +9,8 @@ import org.tukaani.xz.XZInputStream;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -307,14 +309,33 @@ public final class WcpRuntimeStager {
         return true;
     }
 
-    public static void unpackPrefixPack(File prefixPack,File prefix,Consumer<String> report)
+    // The activity may start multiple bootstrap instances. Serialize both within the
+    // app process and across Android processes; the marker must be checked UNDER lock.
+    public static synchronized void unpackPrefixPack(File prefixPack,File prefix,
+                                                       Consumer<String> report)
             throws Exception {
-        File marker=new File(prefix,"drnas-prefix.ready");
-        if(marker.isFile())return;
         File parent=prefix.getParentFile();
         if(!parent.isDirectory() && !parent.mkdirs())throw new IOException("No prefix parent");
-        File temp=new File(parent,".prefix-"+System.nanoTime());
-        if(!temp.mkdir())throw new IOException("Cannot create prefix");
+        File lockPath=new File(parent,".drnas-prefix-init.lock");
+        if(Files.isSymbolicLink(lockPath.toPath()))
+            throw new IOException("Unsafe prefix lock path");
+        try(RandomAccessFile lockHandle=new RandomAccessFile(lockPath,"rw");
+            FileChannel lockChannel=lockHandle.getChannel();
+            FileLock installLock=lockChannel.lock()) {
+            if(Files.isSymbolicLink(prefix.toPath()))
+                throw new IOException("Unsafe prefix symlink");
+            File marker=new File(prefix,"drnas-prefix.ready");
+            if(marker.isFile()) {
+                report.accept("PREFIX_READY: existing staged Wine prefix reused");
+                return;
+            }
+            if(prefix.exists()) {
+                if(!prefix.isDirectory())
+                    throw new IOException("Existing prefix is not a directory");
+                report.accept("PREFIX_RECOVERY: incomplete prefix detected; preserving it before replacement");
+            }
+            File temp=new File(parent,".prefix-"+System.nanoTime());
+            if(!temp.mkdir())throw new IOException("Cannot create prefix");
         boolean ok=false;
         int regular=0, symlinks=0, deferredDrives=0, hardlinks=0;long sum=0;
         List<String[]> pendingSymlinks=new ArrayList<>();
@@ -387,13 +408,30 @@ public final class WcpRuntimeStager {
                         " hardlinks="+hardlinks+" deferredDrives="+deferredDrives)
                         .getBytes(StandardCharsets.UTF_8));
             }
-            if(prefix.exists())throw new IOException("Existing partial prefix; avoid overwriting");
-            if(!temp.renameTo(prefix))throw new IOException("Could not commit prefix");
+            // Never delete an incomplete prefix: it may contain user data. Rename
+            // it into a same-filesystem backup only AFTER the new image is ready.
+            File backup=null;
+            if(prefix.exists()) {
+                if(Files.isSymbolicLink(prefix.toPath()) || !prefix.isDirectory())
+                    throw new IOException("Unsafe existing prefix at commit");
+                backup=new File(parent,".prefix-incomplete-backup-"+System.currentTimeMillis()+
+                        "-"+System.nanoTime());
+                if(backup.exists() || !prefix.renameTo(backup))
+                    throw new IOException("Could not preserve incomplete prefix; nothing overwritten");
+                report.accept("PREFIX_RECOVERY_BACKUP: "+backup.getAbsolutePath());
+            }
+            if(!temp.renameTo(prefix)) {
+                boolean restored=backup!=null && !prefix.exists() && backup.renameTo(prefix);
+                throw new IOException("Could not commit prefix"+
+                        (restored?"; original restored":
+                         backup!=null?"; original preserved in "+backup.getAbsolutePath():""));
+            }
             ok=true;
             report.accept("Wine prefix staged ("+regular+" files, "+symlinks+
                     " internal symlinks, "+hardlinks+" hardlinks, "+deferredDrives+
                     " external drive mappings deferred)");
         } finally {if(!ok)remove(temp);}
+        }
     }
 
     public static JSONObject readJson(File file) throws Exception {
