@@ -8,17 +8,16 @@ final class BlenderShellLaunch {
     static List<String> arguments(String custom,String graphicsApi) throws IOException {
         List<String> args=new java.util.ArrayList<>(LaunchArguments.forApp(
                 BundledBlenderArchive.WINDOWS_EXE,custom,graphicsApi));
-        boolean backend=false,windowMode=false,python=false;
+        boolean backend=false,python=false;
         for(String a:args) {
             if(a.equals("--gpu-backend")||a.startsWith("--gpu-backend="))backend=true;
-            if(a.equals("-W")||a.equals("--window-fullscreen")||a.equals("-w")||
-                    a.equals("--window-border")||a.equals("-M")||a.equals("--window-maximized"))windowMode=true;
             if(a.equals("-P")||a.equals("--python"))python=true;
         }
         // Match the tested r27 ARM64 launch; auto must not fall back to GLX.
         if(!backend){args.add("--gpu-backend");args.add("vulkan");}
-        // A/B r48: restore r38 Blender-owned fullscreen; modern Vulkan unchanged.
-        if(!windowMode)args.add("--window-fullscreen");
+        // r49 A/B: no implicit window state. Keep explicit -W/-w/-M untouched.
+        // Android remains immersive, but Blender decides how to size its top-level
+        // and Render/Preferences windows without a forced guest fullscreen mode.
         if(!python){args.add("--python");args.add(BundledBlenderArchive.WINDOWS_SETUP);}
         return args;
     }

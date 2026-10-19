@@ -1,4 +1,4 @@
-name: Blender r48 A/B - private r38 window policy experiment
+name: Blender r49 A/B - private unforced guest window experiment
 on:
   push:
     branches:
@@ -43,6 +43,7 @@ on:
       - feat/r33-blender-android-save-export
       - feat/r34-blender-direct-d-drive
       - experiment/blender-window-r38-ab-r48
+      - experiment/blender-window-unforced-r49
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -290,37 +291,37 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-r48-R38-Window-AB-VULKAN-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-r49-Unforced-Windows-VULKAN-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender Hotfix 1.1 - private review
           Package: com.drnas.console
-          versionCode: 116
+          versionCode: 117
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Experiment r48 (PRIVATE): restore r38 fullscreen argument, disable r46 Win32 window layout script and delete persistent Blender-only Managed/Decorated registry overrides. Preserve r47 WineVulkan/Turnip, native ARM64 Blender, D: access, direct launch and controls. Compare main viewport, Blender Render and Preferences windows against r47 on the same device. First Vulkan frame and actual fix require device verification; no OpenGL fallback. The app and signing key are unchanged, versionCode 116.
+          Experiment r49 (PRIVATE): r48 baseline, remove the default Blender --window-fullscreen argument entirely and leave explicit user-selected window flags untouched. Keep Android immersive mode, native WineVulkan/Turnip, D: project access and all controls. Wine registry r46 frame overrides remain removed and r46 layout hook disabled. A/B compare visible main Blender window and Render/Preferences separately; no device-side confirmation until user tests. Same APK package, stable signing certificate, versionCode 117.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
-          cp releases/blender-window-ab-r48.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          cp releases/blender-window-unforced-r49.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-r48-R38-Window-AB-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
-          unzip -t "$RUNNER_TEMP/Blender-r48-R38-Window-AB-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-r49-Unforced-Windows-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
+          unzip -t "$RUNNER_TEMP/Blender-r49-Unforced-Windows-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48') }}
+        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49') }}
         with:
-          name: Blender-r48-R38-Window-AB-private
+          name: Blender-r49-Unforced-Windows-private
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="blender-r48-r38-window-ab-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-r48-R38-Window-AB-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender r48 - PRIVATE r38 Window A/B Test" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          tag="blender-r49-unforced-window-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-r49-Unforced-Windows-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender r49 - PRIVATE Unforced Guest Window A/B" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
 
 
 
