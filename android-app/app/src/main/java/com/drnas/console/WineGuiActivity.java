@@ -868,7 +868,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution","NeuroFlow NPU Shadow (experimental)"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -894,8 +894,34 @@ public final class WineGuiActivity extends Activity {
                                         .setPositiveButton("OK",null).show();
                             }).show();
                     else if(which==10)showBlenderResolution();
+                    else if(which==11)toggleNeuroFlowShadow();
                     else exitConfirmation.confirm(this);
                 }).show();
+    }
+
+    /** Explicit A/B toggle for the private r47 experiment. No render mutations. */
+    private void toggleNeuroFlowShadow() {
+        boolean enabled=neuroflowShadow==null;
+        getPreferences(MODE_PRIVATE).edit().putBoolean("neuroflow_npu_shadow",enabled).apply();
+        if(enabled) {
+            neuroflowShadow=new NeuroFlowShadow(getApplicationContext(),this::log);
+            if(performanceHud!=null) {
+                performanceHud.removeCallbacks(hudTicker);
+                performanceHud.postDelayed(hudTicker,650);
+            }
+        } else {
+            neuroflowShadow.close();
+            neuroflowShadow=null;
+            if(performanceHud!=null && !performanceHud.isActive())
+                performanceHud.removeCallbacks(hudTicker);
+        }
+        log("DRNAS_NPU_SHADOW_SWITCH enabled="+enabled+" mode=read-only");
+        new AppDialogBuilder(this).setTitle("NeuroFlow shadow: "+(enabled?"ON":"OFF"))
+                .setMessage("Experimental CPU forecast and NNAPI hardware inventory only. "+
+                        "No LiteRT/QNN/NeuroPilot inference yet. No GPU settings are changed. "+
+                        "Compare UI FPS and timing with this toggle ON and OFF; "+
+                        "these metrics are not Blender render FPS.")
+                .setPositiveButton("OK",null).show();
     }
 
     private void showBlenderResolution() {
