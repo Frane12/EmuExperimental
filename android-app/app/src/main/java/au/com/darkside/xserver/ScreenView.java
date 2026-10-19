@@ -216,6 +216,21 @@ public class ScreenView extends View {
     private float _touchTravel;
     private long _touchStartedAt;
     private boolean _touchTwoFingers, _touchDragging;
+    private int _overlayButtons;
+    private boolean _touchUsedOverlay;
+
+    /** Overlay presses are independent of tap-to-click touchpad gestures. */
+    public void setOverlayPointerButton(int button,boolean pressed) {
+        synchronized(_xServer) {
+            if(_rootWindow==null)return;
+            if(pressed) {
+                _overlayButtons|=1<<button;
+                _touchUsedOverlay=true;
+                if(button==1)_touchDragging=false;
+            } else _overlayButtons&=~(1<<button);
+            updatePointerButtons(button,pressed);
+        }
+    }
 
     public void setRelativeTouchMode(boolean enabled) {
         _relativeTouchMode=enabled;
@@ -232,6 +247,7 @@ public class ScreenView extends View {
             _touchRemainderX=_touchRemainderY=0f;
             _touchTwoFingers=false;
             _touchDragging=false;
+            _touchUsedOverlay=_overlayButtons!=0;
             return true;
         case MotionEvent.ACTION_POINTER_DOWN:
             _touchTwoFingers=true;
@@ -250,7 +266,7 @@ public class ScreenView extends View {
             // Hold the finger for 400 ms and begin a slow drag to press mouse
             // button one; keep it held while moving, release on finger up.
             // Fast swipes only move the pointer. A quick tap clicks instead.
-            if(!_cameraTouchMode && !_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
+            if(!_cameraTouchMode && !_touchUsedOverlay && !_touchDragging && event.getEventTime()-_touchStartedAt>=400 &&
                     _touchTravel<dpTouch(24)) {
                 updatePointerButtons(1,true);
                 _touchDragging=true;
@@ -274,6 +290,9 @@ public class ScreenView extends View {
         case MotionEvent.ACTION_UP:
             if(_touchDragging) {
                 updatePointerButtons(1,false);
+            } else if(_touchUsedOverlay) {
+                // The overlay owns its release. A short motion/tap here must
+                // not release its LMB or synthesize an unrelated right click.
             } else if(_touchTwoFingers && !_cameraTouchMode) {
                 updatePointerButtons(3,true);
                 updatePointerButtons(3,false);
@@ -2127,4 +2146,5 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+
 

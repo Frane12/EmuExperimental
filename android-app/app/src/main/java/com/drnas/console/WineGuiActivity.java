@@ -465,7 +465,7 @@ public final class WineGuiActivity extends Activity {
                 if(destroyed||xserver==null)return;
                 // Send a regular X11 click at the current pointer coordinates;
                 // ScreenView's independent touchscreen left-click stays active.
-                xserver.getScreen().updatePointerButtons(button,pressed);
+                xserver.getScreen().setOverlayPointerButton(button,pressed);
             },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},
               this::showBlenderMenu,this::showBlenderProjectFolder);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
@@ -1420,6 +1420,7 @@ public final class WineGuiActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
+        if(!focused && blenderKeys!=null)blenderKeys.releaseAll();
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
     }
 
@@ -1460,6 +1461,7 @@ public final class WineGuiActivity extends Activity {
         super.onDestroy();
     }
 }
+
 
 
 

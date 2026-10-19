@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 104
-        versionName = "preAlpha-0.1-r38-render-transfer-fps"
+        versionCode = 105
+        versionName = "preAlpha-0.1-r39-mouse-hold-named-controls"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +79,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

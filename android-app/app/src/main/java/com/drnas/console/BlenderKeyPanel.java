@@ -19,6 +19,8 @@ final class BlenderKeyPanel extends LinearLayout {
     private final HorizontalScrollView keyStrip;
     private final Button toggle;
     private final Map<Integer,Button> held=new LinkedHashMap<>();
+    private final Map<Integer,Button> heldMouse=new LinkedHashMap<>();
+    private final MouseButtonHold mouseHold;
     private boolean expanded;
     private float dragX,dragY,startX,startY;
     private boolean dragging;
@@ -32,6 +34,8 @@ final class BlenderKeyPanel extends LinearLayout {
     BlenderKeyPanel(Context context,KeySink sink,MouseSink mouse,
                     Runnable keyboard,Runnable options,Runnable exportToAndroid) {
         super(context);this.sink=sink;this.mouse=mouse;
+        mouseHold=new MouseButtonHold(mouse::send);
+        setMotionEventSplittingEnabled(true);
         this.keyboard=keyboard;this.options=options;
         this.exportToAndroid=exportToAndroid;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
@@ -56,16 +60,16 @@ final class BlenderKeyPanel extends LinearLayout {
         });
         rows=new LinearLayout(context);rows.setOrientation(VERTICAL);
         LinearLayout top=row(),bottom=row();
-        key(top,"Tab",KeyEvent.KEYCODE_TAB);
-        key(top,"G",KeyEvent.KEYCODE_G);key(top,"R",KeyEvent.KEYCODE_R);key(top,"S",KeyEvent.KEYCODE_S);
-        gap(top);key(top,"X",KeyEvent.KEYCODE_X);key(top,"Y",KeyEvent.KEYCODE_Y);key(top,"Z",KeyEvent.KEYCODE_Z);
-        gap(top);key(top,"E",KeyEvent.KEYCODE_E);key(top,"B",KeyEvent.KEYCODE_B);key(top,"A",KeyEvent.KEYCODE_A);
-        key(top,"F3",KeyEvent.KEYCODE_F3);key(top,"Space",KeyEvent.KEYCODE_SPACE);
+        key(top,"Edit Mode",KeyEvent.KEYCODE_TAB);
+        key(top,"Move",KeyEvent.KEYCODE_G);key(top,"Rotate",KeyEvent.KEYCODE_R);key(top,"Scale",KeyEvent.KEYCODE_S);
+        gap(top);key(top,"Axis X",KeyEvent.KEYCODE_X);key(top,"Axis Y",KeyEvent.KEYCODE_Y);key(top,"Axis Z",KeyEvent.KEYCODE_Z);
+        gap(top);key(top,"Extrude",KeyEvent.KEYCODE_E);key(top,"Box Select",KeyEvent.KEYCODE_B);key(top,"Select All",KeyEvent.KEYCODE_A);
+        key(top,"Search",KeyEvent.KEYCODE_F3);key(top,"Play/Pause",KeyEvent.KEYCODE_SPACE);
         modifier(bottom,"Shift",KeyEvent.KEYCODE_SHIFT_LEFT);
         modifier(bottom,"Ctrl",KeyEvent.KEYCODE_CTRL_LEFT);
         modifier(bottom,"Alt",KeyEvent.KEYCODE_ALT_LEFT);
-        gap(bottom);key(bottom,"Esc",KeyEvent.KEYCODE_ESCAPE);
-        key(bottom,"Enter",KeyEvent.KEYCODE_ENTER);key(bottom,"Del",KeyEvent.KEYCODE_FORWARD_DEL);
+        gap(bottom);key(bottom,"Cancel",KeyEvent.KEYCODE_ESCAPE);
+        key(bottom,"Confirm",KeyEvent.KEYCODE_ENTER);key(bottom,"Delete",KeyEvent.KEYCODE_FORWARD_DEL);
         action(bottom,"Undo",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_Z));
         action(bottom,"Save",()->chord(KeyEvent.KEYCODE_CTRL_LEFT,KeyEvent.KEYCODE_S));
         // Export is explicitly separate from Blender Ctrl+S: it opens the
@@ -107,6 +111,7 @@ final class BlenderKeyPanel extends LinearLayout {
         post(this::restoreWhenMeasured);
     }
     @Override protected void onDetachedFromWindow(){
+        releaseAll();
         if(getParent() instanceof View)
             ((View)getParent()).removeOnLayoutChangeListener(parentResize);
         super.onDetachedFromWindow();
@@ -160,9 +165,31 @@ final class BlenderKeyPanel extends LinearLayout {
         LayoutParams params=new LayoutParams(dp(42),dp(34));
         params.leftMargin=dp(1);
         addView(b,params);
-        // A deliberate one-tap click, without faking a MotionEvent in the
-        // Blender framebuffer. The normal touch-left-click path still runs.
+        heldMouse.put(x11Button,b);
+        b.setContentDescription(description+" — hold while moving another finger to drag");
+        // Preserve DOWN/MOVE/UP instead of synthesizing a full click on UP.
+        // Disallow interception so sliding off the button still keeps the
+        // press until UP or CANCEL. Split touches let another finger move
+        // the framebuffer pointer independently.
+        b.setOnTouchListener((v,e)->{
+            switch(e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                v.getParent().requestDisallowInterceptTouchEvent(true);
+                mouseHold.press(x11Button);
+                b.setPressed(true);b.setBackground(glass(0xb0b97830));
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                mouseHold.release(x11Button);
+                b.setPressed(false);b.setBackground(glass(0x60303740));
+                v.getParent().requestDisallowInterceptTouchEvent(false);
+                return true;
+            default:return true;
+            }
+        });
+        // Accessibility activation is still a complete click.
         b.setOnClickListener(v->{
+            if(mouseHold.isHeld(x11Button))return;
             mouse.send(x11Button,true);
             mouse.send(x11Button,false);
         });
@@ -174,7 +201,7 @@ final class BlenderKeyPanel extends LinearLayout {
     private void gap(LinearLayout r){r.addView(new View(getContext()),new LayoutParams(dp(5),1));}
     private Button action(LinearLayout r,String label,Runnable run) {
         Button b=button(label,label);LayoutParams p=new LayoutParams(dp(label.contains("Android")?74:
-                label.length()>3?44:32),dp(27));
+                label.length()>3?Math.max(44,label.length()*7+12):32),dp(27));
         p.setMargins(dp(1),dp(1),dp(1),dp(1));r.addView(b,p);b.setOnClickListener(v->run.run());return b;
     }
     private void key(LinearLayout r,String label,int code){action(r,label,()->{
@@ -192,6 +219,10 @@ final class BlenderKeyPanel extends LinearLayout {
         sink.send(key,false);sink.send(modifier,false);
     }
     void releaseAll() {
+        mouseHold.releaseAll();
+        for(Button b:heldMouse.values()) {
+            b.setPressed(false);b.setBackground(glass(0x60303740));
+        }
         for(Map.Entry<Integer,Button> e:held.entrySet()) {
             sink.send(e.getKey(),false);e.getValue().setBackground(glass(0x60303740));
         }
@@ -219,3 +250,4 @@ final class BlenderKeyPanel extends LinearLayout {
                 .putFloat("y",(getY()+getHeight()+dp(8))/Math.max(1,parent.getHeight())).apply();
     }
 }
+
