@@ -1,0 +1,143 @@
+# SPDX-FileCopyrightText: 2026 DRNAS contributors
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Explicitly isolated experimental Android-ARM64 *native* build.
+# Only this branch can trigger it. No releases/publishing or writes to main.
+name: DRNAS Blender Native Lite — experimental APK
+
+on:
+  push:
+    branches:
+      - experiment/blender-native-android-v0.1
+    paths:
+      - "native-blender/**"
+      - ".github/workflows/native-blender-lite.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: drnas-blender-native-lite-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-lite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - name: Checkout DRNAS source overlay
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate DRNAS source overlay unit tests
+        run: python3 -m unittest discover -s native-blender/tests -v
+
+      - name: Checkout pinned native Blender Android source
+        uses: actions/checkout@v4
+        with:
+          repository: simfeo/blender
+          ref: 4bd0075178bdf71c9aa3de139af6d07e9da61b4d
+          path: blender-src
+          lfs: false
+          submodules: false
+          persist-credentials: false
+
+      - name: Validate pinned upstream checkout and dry-run changes
+        run: |
+          git -C blender-src rev-parse HEAD
+          python3 native-blender/tools/prepare_upstream.py blender-src
+          python3 native-blender/tools/prepare_upstream.py blender-src --apply
+          python3 native-blender/tools/prepare_upstream.py blender-src
+          git -C blender-src diff --check
+          git -C blender-src status --short
+          grep -F 'com.drnas.blendernative' blender-src/build_files/android/apk/app/src/main/AndroidManifest.xml
+          grep -F 'DrnasNativeControls.java' blender-src/build_files/android/apk/package.sh
+
+      - name: Prepare host dependencies for native arm64 build
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            gcc-14 g++-14 git-lfs ninja-build cmake patchelf zip unzip \
+            openjdk-17-jdk-headless curl pkg-config
+          git lfs install --skip-repo
+          cmake --version
+          gcc-14 --version | head -n 1
+          df -h .
+
+      - name: Install *upstream-required* Android SDK and NDK r30 beta1
+        env:
+          ANDROID_SDK_ROOT_ORIGINAL: ${{ env.ANDROID_HOME }}
+        run: |
+          set -euo pipefail
+          # Upstream build_apk.sh unsets ANDROID_HOME deliberately; it then
+          # resolves the SDK at $HOME/android-sdk. Install it THERE.
+          BOOTSTRAP_SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          test -x "$BOOTSTRAP_SDK/cmdline-tools/latest/bin/sdkmanager"
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          cp -a "$BOOTSTRAP_SDK/cmdline-tools/latest" "$HOME/android-sdk/cmdline-tools/latest"
+          export ANDROID_HOME="$HOME/android-sdk"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null || true
+          "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --channel=3 \
+            "ndk;30.0.14904198-beta1" \
+            "platform-tools" \
+            "build-tools;35.0.1" \
+            "platforms;android-35"
+          test -f "$ANDROID_HOME/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
+          test -x "$ANDROID_HOME/build-tools/35.0.1/aapt2"
+          df -h .
+
+      - name: Fetch upstream Blender LFS and arm64 prebuilts
+        run: |
+          set -euo pipefail
+          cd blender-src
+          git config lfs.url https://projects.blender.org/blender/blender.git/info/lfs
+          git config --local credential.https://projects.blender.org.helper \
+            '!f() { echo username=; echo password=; }; f'
+          GIT_TERMINAL_PROMPT=0 git lfs pull
+          # Upstream host codegen requires a matching Linux prebuilt set,
+          # and the Android target requires lib/android_arm64.
+          GIT_TERMINAL_PROMPT=0 git -c submodule.lib/linux_x64.update=checkout \
+            submodule update --init lib/linux_x64
+          GIT_TERMINAL_PROMPT=0 git submodule update --init lib/android_arm64
+          test -d lib/linux_x64/tbb/lib
+          test -d lib/android_arm64
+          df -h .
+
+      - name: Fetch pinned Vulkan headers required by GHOST
+        run: |
+          set -euo pipefail
+          VER=1.4.341
+          BUILD_BASE="$GITHUB_WORKSPACE/blender_build_android"
+          curl --fail --location --retry 3 \
+            -o "$RUNNER_TEMP/vulkan-headers.tar.gz" \
+            "https://github.com/KhronosGroup/Vulkan-Headers/archive/refs/tags/v$VER.tar.gz"
+          tar -xzf "$RUNNER_TEMP/vulkan-headers.tar.gz" -C "$RUNNER_TEMP"
+          mkdir -p "$BUILD_BASE/lib/vulkan_headers"
+          cp -a "$RUNNER_TEMP/Vulkan-Headers-$VER/include" "$BUILD_BASE/lib/vulkan_headers/include"
+
+      - name: Compile native Blender Lite (vendor Vulkan)
+        working-directory: blender-src
+        env:
+          ANDROID_HOST_CC: gcc-14
+          ANDROID_HOST_CXX: g++-14
+          BUILD_BASE: ${{ github.workspace }}/blender_build_android
+        run: |
+          set -euo pipefail
+          # No Wine, FEX, DXVK or custom Turnip injection in this initial build.
+          bash build_files/android/build_apk.sh lite
+          test -s "$BUILD_BASE/android_apk_stage_lite/blender-lite.apk"
+          file "$BUILD_BASE/android_apk_stage_lite/blender-lite.apk"
+          sha256sum "$BUILD_BASE/android_apk_stage_lite/blender-lite.apk"
+
+      - name: Upload private native Lite APK test artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Blender-Native-Lite-v0.1-UNTESTED
+          path: ${{ github.workspace }}/blender_build_android/android_apk_stage_lite/blender-lite.apk
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
