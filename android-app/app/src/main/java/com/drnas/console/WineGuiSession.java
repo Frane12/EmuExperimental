@@ -40,6 +40,10 @@ final class WineGuiSession implements AutoCloseable {
 
     static final int DESKTOP_WIDTH=1280;
     static final int DESKTOP_HEIGHT=720;
+    static boolean needsNativeWineVulkan(boolean blenderShell,boolean nativeVulkanProfile,
+                                         boolean nativeOpenGlProfile) {
+        return nativeVulkanProfile || (blenderShell && !nativeOpenGlProfile);
+    }
     static boolean isLaunchMarker(String line) {
         return line!=null && (line.startsWith("Launching Wine explorer") ||
                 line.startsWith("Launching Blender directly"));
@@ -175,8 +179,16 @@ final class WineGuiSession implements AutoCloseable {
         // receives the experimental PanVK driver. The Adreno path remains
         // Turnip and is not changed for other applications.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
-        final boolean nativeVulkan=appProfile.nativeVulkan() || maliBlender;
         final boolean nativeOpenGl=appProfile.nativeOpenGl();
+        // Blender's default CLI explicitly requests --gpu-backend vulkan.
+        // The normal default app profile is not marked Native Vulkan, which
+        // previously skipped winevulkan.dll's bridge / override on Adreno.
+        // The isolated OpenGL profile remains an explicit opt-out.
+        final boolean nativeVulkan=needsNativeWineVulkan(blenderShell,
+                appProfile.nativeVulkan() || maliBlender,nativeOpenGl);
+        if(blenderShell)log.accept("DRNAS_BLENDER_VULKAN_BRIDGE_MODE requested="+nativeVulkan+
+                " selectedOpenGL="+nativeOpenGl+
+                " (Wine bridge checked before launch; first rendered frame not yet verified)");
         if(blenderShell)log.accept("DRNAS_UNIFIED_BLENDER_GPU="+
                 (maliBlender?"MALI_G52_PANVK_EXPERIMENT":"ADRENO_OR_SYSTEM_VULKAN"));
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
