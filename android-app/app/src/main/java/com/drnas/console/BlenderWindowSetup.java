@@ -12,7 +12,7 @@ final class BlenderWindowSetup {
     static void ensure(File prefix,File linker,File wine,File cwd,Map<String,String> env,
                        Consumer<String> log,RawWineTrace raw) throws Exception {
         Path root=prefix.getCanonicalFile().toPath();
-        Path marker=root.resolve(".drnas-blender-window-r38-restore-v1");
+        Path marker=root.resolve(".drnas-blender-window-unmanaged-decorated-r50");
         if(Files.isSymbolicLink(marker))throw new IOException("Unsafe Blender frame marker");
         if(Files.isRegularFile(marker,LinkOption.NOFOLLOW_LINKS))return;
         Path setup=root.resolve("drive_c/DRNAS-Setup");
@@ -20,11 +20,12 @@ final class BlenderWindowSetup {
         Files.createDirectories(setup);
         Path file=setup.resolve("blender-window-frames.reg");
         if(Files.isSymbolicLink(file))throw new IOException("Unsafe Blender frame policy file");
-        // A/B r48: explicitly undo the persistent r46 Wine per-app overrides.
-        // Remove only these two values; keep all other user/prefix settings.
+        // r50 A/B: no X11 window manager is running in our Android X server.
+        // Tell Wine to paint Windows non-client titlebars and close controls.
+        // Isolate this policy from the r49 guest window mode and Vulkan route.
         String registry="\ufeffWindows Registry Editor Version 5.00\r\n\r\n"+
                 "[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\blender.exe\\X11 Driver]\r\n"+
-                "\"Managed\"=-\r\n\"Decorated\"=-\r\n";
+                "\"Managed\"=\"N\"\r\n\"Decorated\"=\"Y\"\r\n";
         Files.write(file,registry.getBytes(StandardCharsets.UTF_16LE));
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         args.set(args.size()-1,"reg.exe");
@@ -42,7 +43,7 @@ final class BlenderWindowSetup {
         }
         if(result!=0)throw new IOException("Blender window-frame setup failed: "+result);
         Files.write(marker,new byte[]{'o','k'},StandardOpenOption.CREATE_NEW);
-        log.accept("DRNAS_BLENDER_AB_R38_POLICY: removed managed/decorated overrides; fullscreen without Win32 layout hook");
+        log.accept("DRNAS_BLENDER_R50_FRAME_POLICY: Managed=N Decorated=Y; guest window mode unforced");
     }
     private BlenderWindowSetup(){}
 }
