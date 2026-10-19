@@ -48,6 +48,7 @@ on:
       - release/blender-v1.1-review
       - experiment/blender-prefix-watchdog-render-r62
       - release/blender-v1.1-r62-compatible
+      - experiment/blender-nothing-a142-g610-rescue-r63
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -250,6 +251,7 @@ jobs:
         env:
           DRNAS_REQUIRE_STABLE_SIGNING: "1"
           DRNAS_PREFIX_RECOVERY_LAB: "0"
+          DRNAS_A142_GPU_LAB: ${{ github.ref == 'refs/heads/experiment/blender-nothing-a142-g610-rescue-r63' && '1' || '0' }}
         run: gradle --no-daemon --stacktrace :app:assembleDebug
       - name: Verify APK contains native ARM64 host and Android manifest
         if: github.event_name != 'pull_request'
@@ -284,7 +286,11 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E "package: name='com.drnas.console' versionCode='130'"
+          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-nothing-a142-g610-rescue-r63" ]]; then
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E "package: name='com.drnas.console.g610lab' versionCode='131'"
+          else
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep -E "package: name='com.drnas.console' versionCode='131'"
+          fi
       - name: Stage standard-package v1.1 r62 upgrade APK (private source only)
         if: github.event_name != 'pull_request'
         shell: bash
@@ -297,6 +303,21 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
+          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-nothing-a142-g610-rescue-r63" ]]; then
+            cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-G610-A142-GPU-LAB-r63-SIGNED.apk"
+            cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
+          Blender r63 - Nothing Phone (2a) A142 / Mali-G610 MC4 GPU rescue LAB
+          PRIVATE DRAFT test build; renderer success NOT validated.
+          Package: com.drnas.console.g610lab (isolated alongside public Blender)
+          VersionCode: 131
+          Signed by established DRNAS certificate SHA-256: $CERT
+          Route: A142 stock auto profile uses Wine EGL + bundled Mesa/Zink OpenGL instead of failing Vulkan configuration.
+          Vulkan is still the physical system Mali backend. NO Mali-G610 PanVK or Qualcomm Turnip injected.
+          Explicit graphics profile or --gpu-backend launch args disable the rescue.
+          Install alongside existing Blender. Export DRNAS log, test viewport and simple cube only.
+          Failed GL context/device startup is a test result, not proof of success.
+          EOF
+          else
           cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-v1.1-r62-PrefixFix-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender v1.1 r62 PrefixFix - compatible signed upgrade, private source
@@ -308,14 +329,17 @@ jobs:
           PrefixFix r62: Wine prefix installation integrity checks, bounded recovery and retained backup for failed initializations. Blender graphics, input and bundled components unchanged. Private source APK; back up .blend files before upgrading.
           Upgrade allowed only when installed app signing certificate matches and older versionCode is below 130; never uninstall the existing app merely to resolve a signature mismatch.
           EOF
+          fi
           cp releases/Blender-v1.1-CHANGELOG.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-PrefixFix-LAB-r62-private.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
-          unzip -t "$RUNNER_TEMP/Blender-PrefixFix-LAB-r62-private.zip"
+          ARCHIVE="Blender-PrefixFix-LAB-r62-private.zip"
+          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-nothing-a142-g610-rescue-r63" ]]; then ARCHIVE="Blender-G610-GPU-LAB-r63-private.zip"; fi
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../$ARCHIVE" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
+          unzip -t "$RUNNER_TEMP/$ARCHIVE"
       # This branch intentionally skips Actions artifact upload (account quota full).
       # Its APK is preserved only as an unlisted private draft release below.
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request' && github.ref != 'refs/heads/experiment/blender-prefix-watchdog-render-r62' && github.ref != 'refs/heads/release/blender-v1.1-r62-compatible'
+        if: github.event_name != 'pull_request' && github.ref != 'refs/heads/experiment/blender-prefix-watchdog-render-r62' && github.ref != 'refs/heads/release/blender-v1.1-r62-compatible' && github.ref != 'refs/heads/experiment/blender-nothing-a142-g610-rescue-r63'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review') }}
         with:
@@ -324,11 +348,20 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review' || github.ref == 'refs/heads/experiment/blender-prefix-watchdog-render-r62' || github.ref == 'refs/heads/release/blender-v1.1-r62-compatible')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review' || github.ref == 'refs/heads/experiment/blender-prefix-watchdog-render-r62' || github.ref == 'refs/heads/release/blender-v1.1-r62-compatible' || github.ref == 'refs/heads/experiment/blender-nothing-a142-g610-rescue-r63')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-prefix-watchdog-render-r62" ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-nothing-a142-g610-rescue-r63" ]]; then
+            tag="blender-a142-g610-rescue-r63-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            gh release create "$tag" \
+              "$RUNNER_TEMP/drnas-distribution/Blender-G610-A142-GPU-LAB-r63-SIGNED.apk" \
+              "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" \
+              "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt" \
+              --draft --target "$GITHUB_SHA" \
+              --title "Blender A142 Mali-G610 GPU Rescue r63 - PRIVATE DRAFT" \
+              --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          elif [[ "$GITHUB_REF" == "refs/heads/experiment/blender-prefix-watchdog-render-r62" ]]; then
             tag="blender-prefixfix-lab-r62-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             gh release create "$tag" \
               "$RUNNER_TEMP/drnas-distribution/Blender-v1.1-r62-PrefixFix-STABLE-SIGNED.apk" \
