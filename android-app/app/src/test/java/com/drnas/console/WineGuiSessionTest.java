@@ -13,6 +13,13 @@ public class WineGuiSessionTest {
         assertFalse(WineGuiSession.isLaunchMarker("Blender archive staged"));
         assertFalse(WineGuiSession.isLaunchMarker(null));
     }
+    @Test public void blenderVulkanBridgeIsRequiredOnAdrenoEvenWithDefaultProfile() {
+        assertTrue(WineGuiSession.needsNativeWineVulkan(true,false,false));
+        assertTrue(WineGuiSession.needsNativeWineVulkan(true,true,false));
+        assertFalse(WineGuiSession.needsNativeWineVulkan(true,false,true));
+        assertFalse(WineGuiSession.needsNativeWineVulkan(false,false,false));
+        assertTrue(WineGuiSession.needsNativeWineVulkan(false,true,false));
+    }
     @Test public void blenderStartsDirectlyWithoutExplorerDesktop() {
         List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,
                 List.of("--gpu-backend","vulkan","--window-fullscreen"));
