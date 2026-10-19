@@ -243,6 +243,9 @@ public final class WineGuiActivity extends Activity {
                 guestWidth,guestHeight);
         xserver.getScreen().setStretchFullscreen(stretchFullscreen);
         xserver.getScreen().setRelativeTouchMode(true);
+        // r52 Blender input hotfix: Android must never wait for Wine/X11
+        // under the global XServer lock when a touch, click or key arrives.
+        xserver.getScreen().setNonBlockingInputEnabled(blenderShell);
         xserver.getScreen().setCameraTouchMode(false);
         // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
         // This does NOT implement X11 DRI3/Present or Wine Vulkan WSI.
@@ -1493,6 +1496,7 @@ public final class WineGuiActivity extends Activity {
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
+        if(xserver!=null)xserver.getScreen().setNonBlockingInputEnabled(false);
         if(xinputState!=null)xinputState.close();
         AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
