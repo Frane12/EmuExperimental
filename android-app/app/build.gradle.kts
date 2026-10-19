@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 125
-        versionName = "1.1-r57-safe-fullscreen-bridge"
+        versionCode = 126
+        versionName = "1.1-r58-viewport-zoom-slider"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

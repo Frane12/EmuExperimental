@@ -93,6 +93,7 @@ public final class WineGuiActivity extends Activity {
     private boolean blenderHostFullscreen=true;
     private int guestWidth=WineGuiSession.DESKTOP_WIDTH,guestHeight=WineGuiSession.DESKTOP_HEIGHT;
     private BlenderKeyPanel blenderKeys;
+    private BlenderZoomPanel blenderZoom;
     private BlenderAndroidExport.Project pendingBlenderAndroidProject;
     private static final int BLENDER_ANDROID_EXPORT_REQUEST=602;
     private boolean relativeCameraEnabled;
@@ -568,6 +569,19 @@ public final class WineGuiActivity extends Activity {
             // No extra controls over the simple "Starting Blender" boot screen.
             // Full keyboard + hotkey panel become available once Blender maps.
             blenderKeys.setVisibility(View.GONE);
+            // Independent, collapsible viewport zoom control; does not alter
+            // keyboard size or force native Wine fullscreen/3D window reflow.
+            blenderZoom=new BlenderZoomPanel(this,(button,pressed)->{
+                if(destroyed||xserver==null)return;
+                xserver.getScreen().setOverlayPointerButton(button,pressed);
+            });
+            FrameLayout.LayoutParams zoomLayout=new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    Gravity.END|Gravity.CENTER_VERTICAL);
+            zoomLayout.rightMargin=dp(8);
+            layout.addView(blenderZoom,zoomLayout);
+            blenderZoom.setVisibility(View.GONE);
         } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
         AppLanguage.tree(layout);
         setContentView(layout);
@@ -645,6 +659,7 @@ public final class WineGuiActivity extends Activity {
                             if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
                             startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                             if(blenderKeys!=null)blenderKeys.setVisibility(View.VISIBLE);
+                            if(blenderZoom!=null)blenderZoom.setVisibility(View.VISIBLE);
                             if(performanceHud.isActive()) {
                                 performanceHud.setVisibility(View.VISIBLE);
                                 xserver.getScreen().setFpsCounterEnabled(true);
@@ -1426,7 +1441,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r57 Blender fullscreen bridge (versionCode 125)"+
+                "\nDiagnostic build: r58 viewport zoom slider (versionCode 126)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
