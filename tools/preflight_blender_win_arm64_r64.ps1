@@ -32,13 +32,14 @@ if ($null -eq $git) { throw "Cannot verify exact Blender source without git.exe"
 
 $tag = (& $git.Source -C $source rev-parse 'refs/tags/v4.5.14^{commit}' 2>$null | Select-Object -First 1)
 $head = (& $git.Source -C $source rev-parse HEAD 2>$null | Select-Object -First 1)
-Check-Result 'Blender upstream tag' ($LASTEXITCODE -eq 0 -and $tag -and $head -eq $tag) "HEAD=$head (tag=$tag)"
+Check-Result 'Blender upstream tag' (![string]::IsNullOrWhiteSpace($tag) -and $head -eq $tag) "HEAD=$head (tag=$tag)"
 $dirty = @(& $git.Source -C $source status --porcelain)
 Check-Result 'Clean source checkout' ($dirty.Count -eq 0) 'run preflight before applying patch; avoid untracked build files'
 Check-Result 'Source patch exists' (Test-Path -LiteralPath $patch -PathType Leaf) $patch
 if ((Test-Path -LiteralPath $patch) -and $head -eq $tag -and $dirty.Count -eq 0) {
   & $git.Source -C $source apply --check -- $patch
-  Check-Result 'git apply --check' ($LASTEXITCODE -eq 0) 'no files modified'
+  $patchApplied = $?
+  Check-Result 'git apply --check' $patchApplied 'no files modified'
 }
 
 # Only check a full VS2022 installation with native Windows ARM64 compiler assets.
