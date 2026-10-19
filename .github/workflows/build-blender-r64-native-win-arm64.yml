@@ -66,7 +66,10 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $src=$env:DRNAS_BLENDER_SRC
-          git -C $src submodule update --init --depth 1 -- lib/windows_arm64
+          # Blender's .gitmodules marks platform libraries with update=none.
+          # Override that setting for this *one* pinned ARM64 dependency, as in
+          # the verified x64-host checkout; otherwise Git silently 'Skipping submodule'.
+          git -C $src -c submodule.lib/windows_arm64.update=checkout submodule update --init --depth 1 -- lib/windows_arm64
           if ($LASTEXITCODE -ne 0) { throw 'ARM64 library submodule failed' }
           $lib=Join-Path $src 'lib/windows_arm64'
           if (!(Test-Path (Join-Path $lib '.git'))) { throw 'No ARM64 dependency metadata' }
