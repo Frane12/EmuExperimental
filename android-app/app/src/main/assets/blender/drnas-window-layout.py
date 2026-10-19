@@ -1,6 +1,9 @@
-"""Fit only Blender's primary window; keep auxiliary window frames accessible.
+"""Borderless fullscreen for the *first primary* Blender HWND only.
 
-Runs inside Windows ARM64 Blender. No hooks into rendering or scene data.
+Keep Wine's r50 native frames for Preferences, Render, file dialogs, menus and
+tooltips. Do not resize, restyle, raise, minimize or focus any auxiliary window.
+This is a lightweight guest-side Win32 policy, independent of Vulkan and X11
+pixel transport. A .blend reload can restore main geometry, so verify it again.
 """
 import os
 
@@ -18,27 +21,18 @@ def primary_title(title):
     return title == 'Blender' or ' - Blender' in title
 
 
-def auxiliary_rect(rect, desktop):
-    sw, sh = desktop
-    margin = max(4, min(16, sw // 40, sh // 40))
-    x, y, width, height = rect
-    # A full-size inherited render window needs space around its caption.
-    width = max(1, min(width, int(sw * .90), sw - margin * 2))
-    height = max(1, min(height, int(sh * .86), sh - margin * 2))
-    return (max(margin, min(x, sw - width - margin)),
-            max(margin, min(y, sh - height - margin)), width, height)
-
-
 class LayoutController:
     def __init__(self):
         self.main = None
         self.applied = set()
 
     def project_loaded(self):
-        # A .blend can restore the existing main window's saved geometry.
+        # A .blend may restore the already selected main HWND's geometry.
         self.applied.discard(self.main)
 
     def update(self, windows, desktop, apply):
+        if min(desktop) <= 0:
+            return
         live = {w['handle'] for w in windows}
         self.applied.intersection_update(live)
         if self.main not in live:
@@ -51,23 +45,17 @@ class LayoutController:
             if not candidates:
                 return
             self.main = max(candidates, key=lambda w: w['rect'][2] * w['rect'][3])['handle']
-        for w in visible:
-            handle = w['handle']
-            if handle in self.applied:
-                continue
-            if handle == self.main:
-                style = w['style'] & ~(FRAME | WINDOW_STATE | POPUP)
-                rect = (0, 0, desktop[0], desktop[1])
-                kind = 'primary'
-            else:
-                # Never restyle menu/tooltip windows or a nameless popup.
-                if not w['title'] or w['rect'][2] < 240 or w['rect'][3] < 140:
-                    continue
-                style = (w['style'] & ~(POPUP | WINDOW_STATE)) | FRAME
-                rect = auxiliary_rect(w['rect'], desktop)
-                kind = 'auxiliary'
-            if apply(handle, style, rect, kind):
-                self.applied.add(handle)
+        main_window = next((w for w in visible if w['handle'] == self.main), None)
+        if main_window is None:
+            return
+        rect = (0, 0, desktop[0], desktop[1])
+        style = main_window['style'] & ~(FRAME | WINDOW_STATE | POPUP)
+        # Reapply only after a geometry/style change or .blend reload.
+        if (self.main in self.applied and main_window['style'] == style and
+                main_window['rect'] == rect):
+            return
+        if apply(self.main, style, rect, 'primary'):
+            self.applied.add(self.main)
 
 
 def install():
@@ -140,7 +128,7 @@ def install():
         # Recalculate non-client borders without changing focus, owner or Z order.
         if not user.SetWindowPos(handle, None, *rect, 0x0234):
             raise ctypes.WinError(ctypes.get_last_error())
-        print('DRNAS_BLENDER_WINDOW_LAYOUT', kind, handle, rect, flush=True)
+        print('DRNAS_BLENDER_PRIMARY_FULLSCREEN', kind, handle, rect, flush=True)
         return True
 
     last_error = [None]
@@ -155,7 +143,7 @@ def install():
             if message != last_error[0]:
                 print('DRNAS_BLENDER_WINDOW_LAYOUT_FAILED', message, flush=True)
                 last_error[0] = message
-        return 0.5
+        return 2.0 if controller.main in controller.applied else 0.5
 
     @bpy.app.handlers.persistent
     def project_loaded(unused):
