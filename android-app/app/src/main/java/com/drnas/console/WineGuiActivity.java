@@ -692,7 +692,7 @@ public final class WineGuiActivity extends Activity {
                         performanceHud.setActive(enable);
                         xserver.getScreen().setFpsCounterEnabled(enable);
                         performanceHud.removeCallbacks(hudTicker);
-                        if(enable)performanceHud.post(hudTicker);
+                        if(enable||neuroflowShadow!=null)performanceHud.post(hudTicker);
                         AppLanguage.toast(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
                     }
                     else if(which==21) {
@@ -884,7 +884,7 @@ public final class WineGuiActivity extends Activity {
                         performanceHud.setActive(enable);
                         xserver.getScreen().setFpsCounterEnabled(enable);
                         performanceHud.removeCallbacks(hudTicker);
-                        if(enable)performanceHud.post(hudTicker);
+                        if(enable||neuroflowShadow!=null)performanceHud.post(hudTicker);
                     }
                     else if(which==9)new AppDialogBuilder(this).setTitle("Language")
                             .setItems(new String[]{"English","Hrvatski"},(languageDialog,index)->{
