@@ -65,8 +65,7 @@ jobs:
           cmake --version
           gcc-14 --version | head -n 1
           # Free unused GitHub runner image space for Blender dependencies.
-          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL \\
-            /usr/local/share/powershell /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/local/lib/android/sdk/ndk
           df -h .
 
       - name: Install Android SDK and available NDK r30 stable
