@@ -36,8 +36,13 @@ jobs:
           git --version
           git lfs version
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-          & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
-          if ($LASTEXITCODE -ne 0) { throw 'VS2022 ARM64 targeting component missing' }
+          $msvc = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$msvc) { throw 'VS2022 ARM64 targeting component missing' }
+          $llvmToolset = & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Llvm.ClangToolset -property installationPath
+          if ($LASTEXITCODE -ne 0 -or !$llvmToolset) {
+            throw 'VS2022 MSBuild ClangCl Toolset component missing; cannot configure -T ClangCl'
+          }
+          Write-Host "VS2022 ARM64 and MSBuild ClangCl components detected: $msvc"
 
       - name: Fetch exact upstream Blender v4.5.14 source and apply reviewed GPU patch
         shell: pwsh
@@ -50,7 +55,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Exact Blender v4.5.14 checkout failed' }
           python tools/check_blender_mali_patch.py $src
           if ($LASTEXITCODE -ne 0) { throw 'Pinned r64 patch mismatch' }
-          git -C $src apply -- patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch
+          $patch = Join-Path $PWD.Path 'patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch'
+          git -C $src apply -- $patch
           if ($LASTEXITCODE -ne 0) { throw 'Blender r64 patch apply failed' }
           git -C $src diff --check
           if ($LASTEXITCODE -ne 0) { throw 'Source whitespace/check errors' }
