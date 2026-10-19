@@ -185,8 +185,19 @@ final class WineGuiSession implements AutoCloseable {
         final boolean a142GpuRescue=blenderShell && BlenderGpuRescue.useOpenGl(
                 android.os.Build.MODEL,NativeHost.vulkanDeviceName(),
                 appProfile.graphicsApi,appProfile.launchArgs);
-        final boolean nativeOpenGl=appProfile.nativeOpenGl() || a142GpuRescue;
-        final String effectiveBlenderGraphicsApi=a142GpuRescue?"opengl":appProfile.graphicsApi;
+        // Separate Mali-G57 lab on one observed Xiaomi model only.
+        // Preserve Vulkan/default for every other device and all user overrides.
+        final boolean g57OpenGlLab=blenderShell && BlenderMaliG57Lab.useOpenGl(
+                android.os.Build.MODEL,NativeHost.vulkanDeviceName(),
+                appProfile.graphicsApi,appProfile.launchArgs);
+        final boolean nativeOpenGl=appProfile.nativeOpenGl() || a142GpuRescue || g57OpenGlLab;
+        final String effectiveBlenderGraphicsApi=(a142GpuRescue || g57OpenGlLab)?
+                "opengl":appProfile.graphicsApi;
+        if(g57OpenGlLab)log.accept(
+                "DRNAS_G57_OPENGL_LAB selected=EGL_ZINK_OPENGL model="+android.os.Build.MODEL+
+                " gpu="+NativeHost.vulkanDeviceName()+
+                " ; native Mali Vulkan ICD only, no Turnip/G52 PanVK injection; "+
+                "Wine EGL, actual desktop GL>=4.3 + required extensions, and first frame UNVERIFIED");
         if(a142GpuRescue)log.accept(
                 "DRNAS_A142_GPU_RESCUE selected=EGL_ZINK_OPENGL model="+android.os.Build.MODEL+
                 " gpu="+NativeHost.vulkanDeviceName()+
