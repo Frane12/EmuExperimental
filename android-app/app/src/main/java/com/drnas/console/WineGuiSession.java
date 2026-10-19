@@ -179,7 +179,19 @@ final class WineGuiSession implements AutoCloseable {
         // other Mali chips use their own system Vulkan driver. Driver loads
         // are accepted only after bounded native Vulkan preflight.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
-        final boolean nativeOpenGl=appProfile.nativeOpenGl();
+        // A142/Mali-G610: Blender rejects the exposed Vulkan device despite
+        // native Vulkan enumeration. Isolate a *test* EGL/Zink alternate route;
+        // every other device and any explicitly chosen backend stay unchanged.
+        final boolean a142GpuRescue=blenderShell && BlenderGpuRescue.useOpenGl(
+                android.os.Build.MODEL,NativeHost.vulkanDeviceName(),
+                appProfile.graphicsApi,appProfile.launchArgs);
+        final boolean nativeOpenGl=appProfile.nativeOpenGl() || a142GpuRescue;
+        final String effectiveBlenderGraphicsApi=a142GpuRescue?"opengl":appProfile.graphicsApi;
+        if(a142GpuRescue)log.accept(
+                "DRNAS_A142_GPU_RESCUE selected=EGL_ZINK_OPENGL model="+android.os.Build.MODEL+
+                " gpu="+NativeHost.vulkanDeviceName()+
+                " ; system Mali Vulkan through Mesa Zink, no PanVK/Turnip injection; "+
+                "Wine EGL/GL>=4.3 and Blender first frame remain UNVERIFIED");
         // Blender's default CLI explicitly requests --gpu-backend vulkan.
         // The normal default app profile is not marked Native Vulkan, which
         // previously skipped winevulkan.dll's bridge / override on Adreno.
@@ -205,14 +217,14 @@ final class WineGuiSession implements AutoCloseable {
         final String launchMode=linkViaHelper?
                 "execwin:C:\\DRNAS\\Tools\\DRNASLinkLaunch.exe":guestTarget;
         final List<String> launchArgs=blenderShell?
-                BlenderShellLaunch.arguments(appProfile.launchArgs,appProfile.graphicsApi):linkViaHelper?linkLaunchArgs:
+                BlenderShellLaunch.arguments(appProfile.launchArgs,effectiveBlenderGraphicsApi):linkViaHelper?linkLaunchArgs:
                 guestTarget.startsWith("execwin:")?
                 LaunchArguments.forApp(guestTarget.substring(8),appProfile.launchArgs,appProfile.graphicsApi):
                 Collections.emptyList();
         if(linkViaHelper)log.accept("DRNAS_LINK_ARGUMENT_FORWARDER selected: "+
                 "Wine IShellLinkW reads .lnk target, original args and working directory; "+
                 "requestedGraphics="+appProfile.graphicsApi+" extraArgc="+(launchArgs.size()-2));
-        log.accept("DRNAS_LAUNCH_PROFILE graphics="+appProfile.graphicsApi+
+        log.accept("DRNAS_LAUNCH_PROFILE graphics="+(blenderShell?effectiveBlenderGraphicsApi:appProfile.graphicsApi)+
                 " program="+(guestTarget.startsWith("execwin:")||guestTarget.startsWith("linkwin:")?
                     guestTarget.substring(8):app)+
                 " argc="+launchArgs.size()+
