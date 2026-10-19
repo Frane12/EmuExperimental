@@ -217,6 +217,9 @@ public class ScreenView extends View {
     private long _touchStartedAt;
     private boolean _touchTwoFingers, _touchDragging;
     private int _overlayButtons;
+    private int _hardwareMouseButtons;
+    private static final int[] HARDWARE_MOUSE_BUTTONS={MotionEvent.BUTTON_PRIMARY,
+            MotionEvent.BUTTON_TERTIARY,MotionEvent.BUTTON_SECONDARY};
     private boolean _touchUsedOverlay;
 
     /** Overlay presses are independent of tap-to-click touchpad gestures. */
@@ -228,7 +231,56 @@ public class ScreenView extends View {
                 _touchUsedOverlay=true;
                 if(button==1)_touchDragging=false;
             } else _overlayButtons&=~(1<<button);
-            updatePointerButtons(button,pressed);
+            updatePointerButtons(button,pressed || (_hardwareMouseButtons&(1<<button))!=0);
+        }
+    }
+
+    // A USB/Bluetooth mouse must bypass the relative touchpad recognizer:
+    // that recognizer generates tap clicks on UP, not held mouse strokes.
+    private boolean handleHardwareMouse(MotionEvent event) {
+        int action=event.getActionMasked();
+        updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
+        int state=event.getButtonState();
+        if(action==MotionEvent.ACTION_CANCEL || action==MotionEvent.ACTION_UP)state=0;
+        if(action==MotionEvent.ACTION_BUTTON_RELEASE)state&=~event.getActionButton();
+        if(action==MotionEvent.ACTION_BUTTON_PRESS)state|=event.getActionButton();
+        if(action==MotionEvent.ACTION_DOWN && state==0)state=MotionEvent.BUTTON_PRIMARY;
+        for(int button=1;button<=3;button++) {
+            int bit=1<<button;
+            boolean pressed=(state&HARDWARE_MOUSE_BUTTONS[button-1])!=0;
+            if(pressed==((_hardwareMouseButtons&bit)!=0))continue;
+            if(pressed)_hardwareMouseButtons|=bit;
+            else _hardwareMouseButtons&=~bit;
+            updatePointerButtons(button,pressed || (_overlayButtons&bit)!=0);
+        }
+        if(action==MotionEvent.ACTION_SCROLL) {
+            float scroll=event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            int button=scroll>0?4:5;
+            int clicks=Math.min(20,Math.round(Math.abs(scroll)));
+            for(int i=0;i<clicks;i++) {
+                updatePointerButtons(button,true);updatePointerButtons(button,false);
+            }
+        }
+        return true;
+    }
+
+    @Override public boolean onGenericMotionEvent(MotionEvent event) {
+        if(event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) {
+            synchronized(_xServer) {
+                if(_rootWindow==null)return false;
+                blank(false);
+                return handleHardwareMouse(event);
+            }
+        }
+        return super.onGenericMotionEvent(event);
+    }
+
+    public void cancelPointerGestures() {
+        synchronized(_xServer) {
+            _overlayButtons=_hardwareMouseButtons=0;
+            _touchDragging=false;_touchUsedOverlay=true;
+            if(_rootWindow!=null)for(int button=1;button<=3;button++)
+                updatePointerButtons(button,false);
         }
     }
 
@@ -247,7 +299,7 @@ public class ScreenView extends View {
             _touchRemainderX=_touchRemainderY=0f;
             _touchTwoFingers=false;
             _touchDragging=false;
-            _touchUsedOverlay=_overlayButtons!=0;
+            _touchUsedOverlay=(_overlayButtons|_hardwareMouseButtons)!=0;
             return true;
         case MotionEvent.ACTION_POINTER_DOWN:
             _touchTwoFingers=true;
@@ -423,6 +475,8 @@ public class ScreenView extends View {
                     if (_rootWindow == null) return false;
         
                     blank(false);    // Reset the screen saver.
+                    if(event.isFromSource(android.view.InputDevice.SOURCE_MOUSE))
+                        return handleHardwareMouse(event);
                     if (_relativeTouchMode) return handleRelativeTouch(event);
                     updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
         

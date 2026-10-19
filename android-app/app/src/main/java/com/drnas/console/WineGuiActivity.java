@@ -1421,6 +1421,7 @@ public final class WineGuiActivity extends Activity {
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
         if(!focused && blenderKeys!=null)blenderKeys.releaseAll();
+        if(!focused && xserver!=null)xserver.getScreen().cancelPointerGestures();
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
     }
 
@@ -1434,6 +1435,7 @@ public final class WineGuiActivity extends Activity {
     }
     @Override protected void onPause() {
         if(blenderKeys!=null)blenderKeys.releaseAll();
+        if(xserver!=null)xserver.getScreen().cancelPointerGestures();
         if(virtualStick!=null)virtualStick.releaseAll();
         if(gamepadLayer!=null)gamepadLayer.release();
         if(xinputState!=null){xinputState.releaseTouch();xinputState.disconnectPhysical();}
