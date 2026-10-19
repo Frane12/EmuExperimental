@@ -1,0 +1,56 @@
+name: "r66 Mesa OpenGL/XCB ELF closure - NO APK BUILD"
+
+on:
+  push:
+    branches:
+      - experiment/blender-g57-opengl-depclosure-r66
+    paths:
+      - "tools/mesa_bionic_closure.py"
+      - "tools/package_opengl_runtime.py"
+      - "tools/package_gui_runtime.py"
+      - "tests/test_mesa_bionic_closure.py"
+      - ".github/workflows/preflight-r66-mesa-xcb.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pure closure regression and Python syntax (no compiler)
+        run: |
+          python3 -m py_compile tools/mesa_bionic_closure.py tools/package_opengl_runtime.py
+          python3 -m unittest discover -s tests -p 'test_mesa_bionic_closure.py' -v
+      - name: Restore SHA-pinned source rootfs from known GameNative mirror
+        run: |
+          python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" "$RUNNER_TEMP/unused-gui-runtime.zip"
+          unzip -t "$RUNNER_TEMP/unused-gui-runtime.zip"
+      - name: Resolve entire Mesa/EGL and GL/XCB ARM64 dependency closure
+        run: |
+          python3 tools/package_opengl_runtime.py "$RUNNER_TEMP/opengl-runtime-v2.zip" "$RUNNER_TEMP/imagefs_bionic.txz"
+          unzip -t "$RUNNER_TEMP/opengl-runtime-v2.zip"
+          python3 - <<'PY'
+          import hashlib,json,os,zipfile
+          archive=os.path.join(os.environ["RUNNER_TEMP"],"opengl-runtime-v2.zip")
+          with zipfile.ZipFile(archive) as z:
+              m=json.loads(z.read("manifest.json"))
+              assert m["version"]==2 and m["elf_dependency_closure"]
+              files=m["files"]
+              names=set(files)
+              assert {"libxcb-xfixes.so","libxcb-glx.so","libX11-xcb.so"}.issubset(names)
+              system={"libc.so","libm.so","libdl.so","liblog.so","libandroid.so","libnativewindow.so"}
+              for name,meta in files.items():
+                  data=z.read("lib/"+name)
+                  assert hashlib.sha256(data).hexdigest()==meta["sha256"],name
+                  assert len(data)==meta["size"],name
+                  assert set(meta["needed"]).issubset(names | system),name
+              print("R66_MESA_XCB_CLOSURE_PREFLIGHT_PASSED libs=",len(names))
+              print("NO APK build, no signing, no release, no Android runtime/render validation")
+          PY
+      - name: State preflight-only scope
+        if: always()
+        run: echo "NO Gradle, NDK, APK, signing, artifact upload or release."
