@@ -156,15 +156,16 @@ final class BlenderKeyPanel extends LinearLayout {
         place(x,y);
     }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
+    // Hotfix 1.1: background alpha reduced by 10%; labels remain fully opaque.
     private GradientDrawable panelGlass() {
         GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xb51c3042,0x99101825});
+                new int[]{0xa31c3042,0x8a101825});
         d.setCornerRadius(dp(18));d.setStroke(dp(1),0x7095c5db);return d;
     }
     private GradientDrawable keyGlass(boolean active) {
         GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                active?new int[]{0xe33b8295,0xcd265d73}:
-                        new int[]{0xa3445d72,0x80233247});
+                active?new int[]{0xcc3b8295,0xb9265d73}:
+                        new int[]{0x93445d72,0x73233247});
         d.setCornerRadius(dp(10));d.setStroke(dp(1),active?0xd39eeaf1:0x759bbace);
         return d;
     }

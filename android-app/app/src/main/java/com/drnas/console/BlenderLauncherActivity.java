@@ -8,7 +8,7 @@ import android.view.View;
 import android.widget.*;
 import java.io.File;
 
-/** Private Blender presentation build; reuses the persistent DRNAS runtime. */
+/** Blender launcher; reuses the persistent DRNAS runtime. */
 public final class BlenderLauncherActivity extends Activity {
     private TextView status;
     private boolean opened;
@@ -41,10 +41,34 @@ public final class BlenderLauncherActivity extends Activity {
             // The external picker/settings activity will return its result to us.
             if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
         }
+        checkStartupAccess();
+    }
+    private boolean waitingExternal;
+    private boolean hasStorageAccess() {
+        if(android.os.Build.VERSION.SDK_INT>=30)
+            return android.os.Environment.isExternalStorageManager();
+        return checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                ==android.content.pm.PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                ==android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+    private void checkStartupAccess() {
+        if(hasStorageAccess())continueProjectSelection();
+        else requestStorageAccess();
+    }
+    private void continueProjectSelection() {
+        if(destroyed||opened||preparing||checking)return;
         if(getIntent().getBooleanExtra("choose_project_folder",false))chooseFolder();
         else checkFolder();
     }
-    private boolean waitingExternal;
+    private void storageAccessReturned() {
+        if(destroyed)return;
+        if(hasStorageAccess())continueProjectSelection();
+        else new AppDialogBuilder(this).setTitle("Dozvola za datoteke")
+                .setMessage("Pristup datotekama nije odobren. U Android postavkama uključi pristup svim datotekama za Blender kako bi otvaranje i spremanje projekata radilo.")
+                .setPositiveButton("Otvori postavke",(d,w)->requestStorageAccess())
+                .setNegativeButton("Zatvori",(d,w)->finish()).setCancelable(false).show();
+    }
     private void checkFolder() {
         if(destroyed||opened||preparing||checking)return;
         if(!BlenderProjectDrive.hasGrant(this,BlenderProjectDrive.selected(this))) {
@@ -76,8 +100,9 @@ public final class BlenderLauncherActivity extends Activity {
         catch(android.content.ActivityNotFoundException e){waitingExternal=false;folderError("Androidov odabir mape nije dostupan.");}
     }
     private void requestStorageAccess() {
+        status.setText(AppLanguage.t(this,"Dozvola za datoteke"));
         if(android.os.Build.VERSION.SDK_INT>=30) {
-            if(android.os.Environment.isExternalStorageManager()) {checkFolder();return;}
+            if(hasStorageAccess()) {continueProjectSelection();return;}
             new AppDialogBuilder(this).setTitle("Izravno spremanje iz Blendera")
                     .setMessage("Wine treba pristup stvarnim datotekama kako bi Blenderov Save/Open radio na disku D:. Android za to traži širu dozvolu ‘Pristup svim datotekama’. D: će pokazivati samo odabranu mapu. Dozvolu možeš naknadno ukinuti u Android postavkama.")
                     .setPositiveButton("Otvori postavke",(d,w)->{
@@ -88,8 +113,9 @@ public final class BlenderLauncherActivity extends Activity {
                             try {startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION),STORAGE_ACCESS);}
                             catch(android.content.ActivityNotFoundException unavailable){waitingExternal=false;folderError("Postavka pristupa datotekama nije dostupna.");}
                         }
-                    }).setNegativeButton("Odustani",(d,w)->folderError("Disk D: nije spreman. Možeš pokušati s drugom mapom.")).show();
+                    }).setNegativeButton("Odustani",(d,w)->finish()).setCancelable(false).show();
         } else {
+            waitingExternal=true;
             requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE,
                     android.Manifest.permission.WRITE_EXTERNAL_STORAGE},LEGACY_STORAGE);
         }
@@ -107,13 +133,13 @@ public final class BlenderLauncherActivity extends Activity {
             pickedTree=data.getData();
             try {BlenderProjectDrive.remember(this,pickedTree,data.getFlags());}
             catch(Exception e){folderError(e.getMessage());return;}
-            // Try actual access first: never request broad permission if unnecessary.
+            // Startup has checked file permission; now validate the selected local folder.
             checkFolder();
-        } else if(request==STORAGE_ACCESS)checkFolder();
+        } else if(request==STORAGE_ACCESS)storageAccessReturned();
     }
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] grants) {
         super.onRequestPermissionsResult(request,permissions,grants);
-        if(request==LEGACY_STORAGE)checkFolder();
+        if(request==LEGACY_STORAGE) {waitingExternal=false;storageAccessReturned();}
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         if(pickedTree!=null)out.putString("pickedTree",pickedTree.toString());

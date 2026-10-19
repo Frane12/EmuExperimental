@@ -9,6 +9,7 @@ import android.widget.Toast;
 /** App-owned labels only. Never translates paths, user input, guest programs or logs. */
 final class AppLanguage {
     private static final String[][] LABELS={
+        {"File access was not granted. Enable All files access for Blender in Android settings so opening and saving projects can work.","Pristup datotekama nije odobren. U Android postavkama uključi pristup svim datotekama za Blender kako bi otvaranje i spremanje projekata radilo."},
         {"Resolution","Rezolucija"},
         {"Automatic","Automatski"},
         {"Resolution saved","Rezolucija je spremljena"},
