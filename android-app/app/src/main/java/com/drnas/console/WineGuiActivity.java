@@ -1046,7 +1046,9 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=line.startsWith("DRNAS_BLENDER_ANDROID_") ||
+        boolean critical=line.startsWith("DRNAS_DRIVER_AUTO") ||
+                line.startsWith("DRNAS_TURNIP_AUTOPICK_") ||
+                line.startsWith("DRNAS_BLENDER_ANDROID_") ||
                 line.startsWith("DRNAS_BLENDER_CURSOR") ||
                 line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
