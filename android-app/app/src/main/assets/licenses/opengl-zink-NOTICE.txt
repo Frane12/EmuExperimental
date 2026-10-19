@@ -1,4 +1,4 @@
-DRNAS EMU experimental OpenGL / Zink bundle (r25)
+DRNAS EMU experimental OpenGL / Zink bundle (r25 / r66 ELF closure)
 ================================================
 
 This experiment carries separate, opt-in Android/Bionic graphics libraries
@@ -13,7 +13,16 @@ Banners-Turnip exp/egl-x11-platform ab76cba3, run 36862058991
 Files: libEGL.so.1, libGL.so.1, libGLESv2.so.2,
 libgallium-26.3.0-devel.so, libwayland-client.so, libarchive.so.
 Each file is pinned to a Git object ID, verified at build time; individual
-SHA-256 hashes are embedded in opengl-runtime-v1.zip/manifest.json.
+SHA-256 hashes are embedded in the runtime archive manifest. r66 uses
+opengl-runtime-v2.zip and records each ELF DT_NEEDED and pinned origin.
+r66 additionally redistributes transitively required Bionic/X11/DRM/XCB
+libraries from the independently SHA-pinned GameNative imagefs_bionic.txz:
+https://downloads.gamenative.app/imagefs_bionic.txz
+SHA-256: 368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b
+All actual files and their hashes are enumerated in the v2 manifest. Upstream
+copyright and MIT-style terms for libxcb/X11 and the remaining components
+remain with their original authors; the existing gui runtime/X11 notices
+remain included in the APK.
 No Wine/Turnip driver is replaced; this is a selectable alternative
 application-side OpenGL path.
 
