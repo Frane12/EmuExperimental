@@ -64,13 +64,18 @@ jobs:
           git lfs install --skip-repo
           cmake --version
           gcc-14 --version | head -n 1
+          # Free unused GitHub runner image space for Blender dependencies.
+          sudo rm -rf /usr/share/dotnet /opt/hostedtoolcache/CodeQL \\
+            /usr/local/share/powershell /usr/local/lib/android/sdk/ndk
           df -h .
 
-      - name: Install *upstream-required* Android SDK and NDK r30 beta1
+      - name: Install Android SDK and available NDK r30 stable
         env:
           ANDROID_SDK_ROOT_ORIGINAL: ${{ env.ANDROID_HOME }}
         run: |
           set -euo pipefail
+          # Upstream's pinned r30 beta1 is not published by current SDK Manager.
+          # Try published r30 final; validate the runtime ABI before releasing.
           # Upstream build_apk.sh unsets ANDROID_HOME deliberately; it then
           # resolves the SDK at $HOME/android-sdk. Install it THERE.
           BOOTSTRAP_SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
@@ -81,11 +86,11 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --licenses > /dev/null || true
           "$SDKMANAGER" --sdk_root="$ANDROID_HOME" --channel=3 \
-            "ndk;30.0.14904198-beta1" \
+            "ndk;30.0.16248370" \
             "platform-tools" \
             "build-tools;35.0.1" \
             "platforms;android-35"
-          test -f "$ANDROID_HOME/ndk/30.0.14904198-beta1/build/cmake/android.toolchain.cmake"
+          test -f "$ANDROID_HOME/ndk/30.0.16248370/build/cmake/android.toolchain.cmake"
           test -x "$ANDROID_HOME/build-tools/35.0.1/aapt2"
           df -h .
 
@@ -124,6 +129,8 @@ jobs:
           ANDROID_HOST_CC: gcc-14
           ANDROID_HOST_CXX: g++-14
           BUILD_BASE: ${{ github.workspace }}/blender_build_android
+          # Upstream's beta NDK is absent from sdkmanager; final r30 uses Clang 21.
+          ANDROID_NDK_VERSION: "30.0.16248370"
         run: |
           set -euo pipefail
           # No Wine, FEX, DXVK or custom Turnip injection in this initial build.
