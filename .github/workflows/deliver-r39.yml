@@ -4,7 +4,7 @@ on:
     branches: [feat/r34-blender-direct-d-drive]
     paths: [.github/workflows/deliver-r39.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
   deliver:
     runs-on: ubuntu-24.04
