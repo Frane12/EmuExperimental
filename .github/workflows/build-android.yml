@@ -112,8 +112,11 @@ jobs:
       - name: Bundle separately pinned Mesa EGL / Zink native libraries for OpenGL apps
         run: |
           python3 -m py_compile tools/package_opengl_runtime.py
-          python3 tools/package_opengl_runtime.py android-app/app/src/main/assets/opengl-runtime-v1.zip
-          unzip -t android-app/app/src/main/assets/opengl-runtime-v1.zip
+          # The exact pinned Bionic imagefs was previously verified by package_gui_runtime.py.
+          # Refuse to bundle Mesa unless all non-platform ELF DT_NEEDED libs are present.
+          python3 -m unittest discover -s tests -p 'test_mesa_bionic_closure.py' -v
+          python3 tools/package_opengl_runtime.py android-app/app/src/main/assets/opengl-runtime-v2.zip "$RUNNER_TEMP/imagefs_bionic.txz"
+          unzip -t android-app/app/src/main/assets/opengl-runtime-v2.zip
       - name: Bundle independently SHA-pinned Mali-G52 PanVK Kbase r4 driver
         run: |
           set -euo pipefail
