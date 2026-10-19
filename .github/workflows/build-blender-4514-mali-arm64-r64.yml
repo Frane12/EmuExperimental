@@ -1,0 +1,173 @@
+name: Blender r64 Mali Vulkan - Windows ARM64 experimental compile
+# This workflow is intentionally limited to the private r64 source branch.
+# It NEVER modifies the public Android Blender APK/release or Git history.
+on:
+  push:
+    branches:
+      - experiment/blender-4514-mali-vulkan-native-r64
+    paths:
+      - ".github/workflows/build-blender-4514-mali-arm64-r64.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: blender-r64-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-blender-arm64:
+    name: Compile patched Blender 4.5.14 for Windows ARM64 (NOT an APK)
+    runs-on: windows-2022
+    timeout-minutes: 325
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+      GIT_LFS_SKIP_SMUDGE: "1"
+    steps:
+      - name: Checkout private DRNAS r64 patch and scripts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Print host/toolchain and free disk before source checkout
+        shell: pwsh
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name, Free, Used | Format-Table
+          clang-cl --version | Select-Object -First 1
+          cmake --version | Select-Object -First 1
+          git --version
+          git lfs version
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          & $vswhere -latest -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          if ($LASTEXITCODE -ne 0) { throw 'VS2022 ARM64 targeting component missing' }
+
+      - name: Fetch exact upstream Blender v4.5.14 source and apply reviewed GPU patch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = Join-Path $env:RUNNER_TEMP 'drnas-blender-4514-src'
+          git clone -c core.longpaths=true --filter=blob:none --depth=1 --branch v4.5.14 --single-branch https://github.com/blender/blender.git $src
+          if ($LASTEXITCODE -ne 0) { throw 'Blender source clone failed' }
+          git -C $src checkout --detach v4.5.14
+          if ($LASTEXITCODE -ne 0) { throw 'Exact Blender v4.5.14 checkout failed' }
+          python tools/check_blender_mali_patch.py $src
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned r64 patch mismatch' }
+          git -C $src apply -- patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch
+          if ($LASTEXITCODE -ne 0) { throw 'Blender r64 patch apply failed' }
+          git -C $src diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Source whitespace/check errors' }
+          git -C $src diff --stat
+          "BLENDER_SOURCE=$src" >> $env:GITHUB_ENV
+          "BLENDER_SOURCE_COMMIT=$(git -C $src rev-parse HEAD)" >> $env:GITHUB_ENV
+
+      - name: Fetch exact 4.5.14 Windows ARM64 library submodule and Git LFS payloads
+        shell: pwsh
+        timeout-minutes: 105
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $src = $env:BLENDER_SOURCE
+          $root = (Get-Item $src).PSDrive.Root
+          $driveName = [System.IO.Path]::GetPathRoot($src).Substring(0,1)
+          $drive = Get-PSDrive -Name $driveName
+          $freeGiB = [Math]::Round($drive.Free / 1GB, 1)
+          Write-Host "Before libraries: $freeGiB GiB free on $driveName"
+          if ($freeGiB -lt 15) {
+            throw "Insufficient free disk for multi-GB Blender library download and ARM64 build (<15 GiB); host needs a larger runner."
+          }
+          git -C $src -c submodule.lib/windows_arm64.update=checkout submodule update --init --depth=1 -- lib/windows_arm64
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Blender lib/windows_arm64 submodule checkout failed' }
+          $lib = Join-Path $src 'lib/windows_arm64'
+          if (!(Test-Path (Join-Path $lib '.git'))) { throw 'Pinned Windows ARM64 dependency submodule absent' }
+          $env:GIT_LFS_SKIP_SMUDGE='0'
+          git -C $lib lfs pull
+          if ($LASTEXITCODE -ne 0) { throw 'Upstream ARM64 dependency LFS download failed' }
+          $env:GIT_LFS_SKIP_SMUDGE='1'
+          git -C $src submodule status -- lib/windows_arm64
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name, Free, Used | Format-Table
+          if ((Get-PSDrive -Name $driveName).Free -lt 6GB) {
+            throw 'Less than 6GiB free after library install; stop before CMake/build.'
+          }
+
+      - name: Configure Windows ARM64 ClangCl Blender full release
+        shell: pwsh
+        timeout-minutes: 45
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location $env:BLENDER_SOURCE
+          try {
+            & cmd.exe /d /c 'make.bat arm64 2022 clang full nobuild'
+            if ($LASTEXITCODE -ne 0) { throw "Windows ARM64 ClangCl CMake configure failed: $LASTEXITCODE" }
+          } finally { Pop-Location }
+          $build = Join-Path (Split-Path $env:BLENDER_SOURCE -Parent) 'build_windows_Full_arm64_vc17_Release'
+          if (!(Test-Path (Join-Path $build 'Blender.sln'))) {
+            throw "ARM64 Visual Studio Blender.sln missing under $build"
+          }
+          "BLENDER_BUILD=$build" >> $env:GITHUB_ENV
+          Write-Host "Configured Blender Windows ARM64: $build"
+
+      - name: Compile and INSTALL actual Windows ARM64 Blender executable
+        shell: pwsh
+        timeout-minutes: 160
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location $env:BLENDER_SOURCE
+          try {
+            & cmd.exe /d /c 'make.bat arm64 2022 clang full'
+            if ($LASTEXITCODE -ne 0) { throw "Native Blender Windows ARM64 build/INSTALL failed: $LASTEXITCODE" }
+          } finally { Pop-Location }
+
+      - name: Verify actual built Windows ARM64 blender.exe machine type and prepare private ZIP
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:BLENDER_BUILD 'bin/Release'
+          $exe = Join-Path $root 'blender.exe'
+          if (!(Test-Path $exe)) { throw "Build succeeded but installed blender.exe missing: $exe" }
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          if ($bytes.Length -lt 4096 -or $bytes[0] -ne 77 -or $bytes[1] -ne 90) {
+            throw 'Invalid Windows PE (DOS header)'
+          }
+          $pe = [BitConverter]::ToInt32($bytes,60)
+          if ($pe -lt 64 -or $pe+6 -ge $bytes.Length -or [BitConverter]::ToUInt32($bytes,$pe) -ne 0x4550) {
+            throw 'Invalid Windows PE signature'
+          }
+          $machine = [BitConverter]::ToUInt16($bytes,$pe+4)
+          if ($machine -ne 0xAA64) { throw ('Not Windows ARM64 PE, machine=0x{0:X4}' -f $machine) }
+          $out = Join-Path $env:RUNNER_TEMP 'drnas-blender-r64-distribution'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $exeHash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest = @(
+            'DRNAS Blender 4.5.14 Mali GPU native Vulkan patch r64'
+            "Upstream source tag: v4.5.14 / $env:BLENDER_SOURCE_COMMIT"
+            'Source patch: patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch'
+            'Target PE machine: IMAGE_FILE_MACHINE_ARM64 0xAA64'
+            "blender.exe SHA256: $exeHash"
+            'TESTING-ONLY. Windows ARM64 binary, NOT an Android APK.'
+            'Not GPU-validated on Mali-G68, Mali-G610 or any physical Android device.'
+            'Needs GPL source + attribution when distributed outside private review.'
+          )
+          $manifest | Set-Content -Encoding utf8 -Path (Join-Path $out 'README.txt')
+          $zip = Join-Path $out 'Blender-4.5.14-MaliVulkan-r64-WindowsARM64-PRIVATE.zip'
+          Compress-Archive -Path (Join-Path $root '*') -DestinationPath $zip -CompressionLevel Optimal
+          if (!(Test-Path $zip)) { throw 'Full Blender distribution ZIP missing' }
+          if ((Get-Item $zip).Length -ge 1900MB) { throw 'ZIP >1.9GiB, exceeds safe GitHub asset limit' }
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$zipHash  $(Split-Path $zip -Leaf)" | Set-Content -Encoding ascii -Path (Join-Path $out 'SHA256SUMS.txt')
+          "DRNAS_OUTPUT=$out" >> $env:GITHUB_ENV
+          Write-Host "Verified actual Windows ARM64 blender.exe PE machine: 0xAA64"
+          Write-Host "Full installation ZIP bytes: $((Get-Item $zip).Length)"
+
+      - name: Store completed Windows ARM64 Blender binary in PRIVATE DRAFT only
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:GITHUB_REPOSITORY -ne 'Frane12/EmuExperimental') { throw 'Wrong repo' }
+          $private = gh api "repos/$env:GITHUB_REPOSITORY" --jq '.private'
+          if ($LASTEXITCODE -ne 0 -or $private.Trim() -ne 'true') { throw 'Refusing binary upload: repository not private' }
+          $tag = "blender-mali-native-r64-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $folder = $env:DRNAS_OUTPUT
+          $zip = Join-Path $folder 'Blender-4.5.14-MaliVulkan-r64-WindowsARM64-PRIVATE.zip'
+          gh release create $tag $zip (Join-Path $folder 'README.txt') (Join-Path $folder 'SHA256SUMS.txt') --draft --target $env:GITHUB_SHA --title 'Blender Windows ARM64 Mali Vulkan r64 (COMPILED PRIVATE, DEVICE UNTESTED)' --notes-file (Join-Path $folder 'README.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Private build succeeded but draft release asset upload failed' }
