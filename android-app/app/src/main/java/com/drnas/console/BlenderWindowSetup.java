@@ -14,7 +14,10 @@ final class BlenderWindowSetup {
         Path root=prefix.getCanonicalFile().toPath();
         Path marker=root.resolve(".drnas-blender-window-unmanaged-decorated-r50");
         if(Files.isSymbolicLink(marker))throw new IOException("Unsafe Blender frame marker");
-        if(Files.isRegularFile(marker,LinkOption.NOFOLLOW_LINKS))return;
+        if(Files.isRegularFile(marker,LinkOption.NOFOLLOW_LINKS)) {
+            log.accept("DRNAS_BLENDER_FRAME_POLICY_CACHED: r50 Managed=N Decorated=Y; no registry import needed");
+            return;
+        }
         Path setup=root.resolve("drive_c/DRNAS-Setup");
         if(Files.isSymbolicLink(setup))throw new IOException("Unsafe Blender registry folder");
         Files.createDirectories(setup);
