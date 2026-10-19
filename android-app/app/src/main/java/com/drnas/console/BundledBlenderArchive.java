@@ -55,7 +55,40 @@ final class BundledBlenderArchive {
             "    bpy.context.preferences.inputs.use_mouse_emulate_3_button = True\n"+
             "    bpy.ops.wm.save_userpref()\n"+
             "# r55: restore r50 startup; no Win32 window mutation on Blender UI thread.\n"+
-            "print('DRNAS_BLENDER_LAYOUT_DISABLED r55 r50-window-policy', flush=True)\n";
+            "print('DRNAS_BLENDER_LAYOUT_DISABLED r56 r50-window-policy', flush=True)\n"+
+            "# r56: replace the dangerous native fullscreen menu entry, NOT the guest HWND.\n"+
+            "# Android already crops the title strip using a matched compositor/input transform.\n"+
+            "try:\n"+
+            "    import bl_ui.space_topbar as drnas_topbar\n"+
+            "    class DRNAS_OT_safe_fullscreen(bpy.types.Operator):\n"+
+            "        bl_idname = \"drnas.safe_fullscreen\"\n"+
+            "        bl_label = \"Fullscreen (Android safe)\"\n"+
+            "        bl_description = \"DRNAS Android already fills the display; skip native Wine fullscreen\"\n"+
+            "        def execute(self, context):\n"+
+            "            self.report({'INFO'}, \"DRNAS Android fullscreen active: Wine window unchanged\")\n"+
+            "            return {'FINISHED'}\n"+
+            "    if not hasattr(bpy.types, 'DRNAS_OT_safe_fullscreen'):\n"+
+            "        bpy.utils.register_class(DRNAS_OT_safe_fullscreen)\n"+
+            "    def drnas_window_menu(self, context):\n"+
+            "        layout = self.layout\n"+
+            "        layout.operator(\"wm.window_new\", text=\"New Window\")\n"+
+            "        layout.operator(\"wm.window_new_main\", text=\"New Main Window\")\n"+
+            "        layout.separator()\n"+
+            "        layout.operator(\"drnas.safe_fullscreen\", text=\"Fullscreen (Android safe)\", icon='FULLSCREEN_ENTER')\n"+
+            "        layout.separator()\n"+
+            "        layout.operator(\"screen.workspace_cycle\", text=\"Next Workspace\").direction = 'NEXT'\n"+
+            "        layout.operator(\"screen.workspace_cycle\", text=\"Previous Workspace\").direction = 'PREV'\n"+
+            "        layout.separator()\n"+
+            "        layout.prop(context.screen, \"show_statusbar\", text=\"Show Status Bar\")\n"+
+            "        layout.separator()\n"+
+            "        layout.operator(\"screen.screenshot\", text=\"Save Screenshot\")\n"+
+            "        layout.operator(\"screen.screenshot_area\", text=\"Save Screenshot (Editor)\")\n"+
+            "        layout.separator()\n"+
+            "        layout.operator(\"wm.console_toggle\", text=\"Toggle System Console\")\n"+
+            "    drnas_topbar.TOPBAR_MT_window.draw = drnas_window_menu\n"+
+            "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=true r56\", flush=True)\n"+
+            "except Exception as exc:\n"+
+            "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=false\", repr(exc), flush=True)\n";
 
     static boolean ready(Path target) throws IOException {
         Path marker=target.resolve(".drnas-bundle-sha256");

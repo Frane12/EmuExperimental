@@ -34,6 +34,9 @@ public class BundledBlenderArchiveTest {
         assertFalse(startup.contains("drnas-window-layout.py"));
         assertFalse(startup.contains("runpy.run_path"));
         assertTrue(startup.contains("DRNAS_BLENDER_LAYOUT_DISABLED"));
+        assertTrue(startup.contains("DRNAS_BLENDER_SAFE_FULLSCREEN_MENU"));
+        assertTrue(startup.contains("drnas.safe_fullscreen"));
+        assertFalse(startup.contains("layout.operator(\"wm.window_fullscreen_toggle\""));
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
     }
     @Test public void badHashRollsBackAllFiles() throws Exception {
