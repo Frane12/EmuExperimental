@@ -16,8 +16,8 @@ import org.json.JSONObject;
  * Nothing touches the Wine prefix or other applications' environment.
  */
 final class WineOpenGlRuntime {
-    static final String ASSET = "opengl-runtime-v1.zip";
-    private static final String VERSION = "v1";
+    static final String ASSET = "opengl-runtime-v2.zip";
+    private static final String VERSION = "v2";
 
     static File install(Context context, Consumer<String> log) throws Exception {
         File root = new File(context.getFilesDir(), "opengl-runtime/" + VERSION);
@@ -33,14 +33,14 @@ final class WineOpenGlRuntime {
                 String name=e.getName();
                 if(e.isDirectory() ||
                    (!"manifest.json".equals(name) &&
-                   !name.matches("lib/lib[A-Za-z0-9_.+-]+\\.so(?:\\.[0-9]+)?")) ||
-                   entries.size()>=12)
+                   !name.matches("lib/lib[A-Za-z0-9_.+-]+\\.so(?:\\.[0-9]+)*")) ||
+                   entries.size()>=74)
                     throw new IOException("Unsafe Mesa bundle entry: "+name);
                 ByteArrayOutputStream output = new ByteArrayOutputStream();
                 int n;
                 while ((n=zip.read(buf))!=-1) {
                     unpacked+=n;
-                    if(unpacked>48L*1024*1024)throw new IOException("OpenGL bundle too large");
+                    if(unpacked>112L*1024*1024)throw new IOException("OpenGL bundle too large");
                     output.write(buf,0,n);
                 }
                 if(entries.put(name,output.toByteArray())!=null)
@@ -52,6 +52,29 @@ final class WineOpenGlRuntime {
         if(meta==null)throw new IOException("Mesa manifest missing");
         JSONObject manifest=new JSONObject(new String(meta,StandardCharsets.UTF_8));
         JSONObject indexed=manifest.getJSONObject("files");
+        if(manifest.optInt("version",0)!=2 ||
+           !manifest.optBoolean("elf_dependency_closure",false) ||
+           !"368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b"
+                   .equals(manifest.optString("bionic_imagefs_sha256","")))
+            throw new IOException("Incomplete/unpinned Mesa v2 dependency manifest");
+        for(String required:new String[]{"libxcb-xfixes.so","libxcb-glx.so","libX11-xcb.so"}) {
+            if(!entries.containsKey("lib/"+required))
+                throw new IOException("Mesa dependency missing from package: "+required);
+        }
+        // Closure coverage is validated in the build, then checked again
+        // against the actual on-device archive before staging anything.
+        final Set<String> systemLibraries=new HashSet<>(Arrays.asList(
+                "libc.so","libdl.so","libm.so","liblog.so","libandroid.so","libnativewindow.so"));
+        for(Iterator<String> keys=indexed.keys();keys.hasNext();) {
+            String file=keys.next();
+            if(!entries.containsKey("lib/"+file))throw new IOException("Missing Mesa ELF: "+file);
+            org.json.JSONArray deps=indexed.getJSONObject(file).getJSONArray("needed");
+            for(int i=0;i<deps.length();i++) {
+                String needed=deps.getString(i);
+                if(!systemLibraries.contains(needed) && !entries.containsKey("lib/"+needed))
+                    throw new IOException("Unresolved Mesa ELF dependency "+file+" -> "+needed);
+            }
+        }
         if(indexed.length()!=entries.size() ||
            !entries.containsKey("lib/libEGL.so.1") ||
            !entries.containsKey("lib/libgallium-26.3.0-devel.so"))
@@ -89,6 +112,7 @@ final class WineOpenGlRuntime {
         log.accept("DRNAS_OPENGL_MESA_BUNDLE_VERIFIED version="+VERSION+
                 " sources="+manifest.optString("commit","?")+
                 " aarch64_libraries="+entries.size()+" repaired="+repaired+
+                " xcb-glx=packaged xcb-xfixes=packaged closure=verified"+
                 " (EGL context creation/PRESENT NOT yet verified)");
         return lib;
     }
@@ -98,7 +122,7 @@ final class WineOpenGlRuntime {
            !new File(lib,"libgallium-26.3.0-devel.so").isFile())
             throw new IOException("Mesa EGL/Zink runtime incomplete");
         // Wine 11 ARM64 winex11 uses its EGL path instead of the unsupported
-        // GLX path in our Java X server. Use the selected Turnip Vulkan ICD.
+        // GLX path in our Java X server. The selected Vulkan ICD is GPU-specific.
         env.put("LD_LIBRARY_PATH",lib.getAbsolutePath()+":"+
                 env.getOrDefault("LD_LIBRARY_PATH",""));
         env.put("WINE_USE_EGL","1");
