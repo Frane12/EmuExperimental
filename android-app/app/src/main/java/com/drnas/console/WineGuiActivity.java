@@ -94,6 +94,7 @@ public final class WineGuiActivity extends Activity {
     private int guestWidth=WineGuiSession.DESKTOP_WIDTH,guestHeight=WineGuiSession.DESKTOP_HEIGHT;
     private BlenderKeyPanel blenderKeys;
     private BlenderZoomPanel blenderZoom;
+    private BlenderSmoothZoomBridge blenderSmoothZoom;
     private BlenderAndroidExport.Project pendingBlenderAndroidProject;
     private static final int BLENDER_ANDROID_EXPORT_REQUEST=602;
     private boolean relativeCameraEnabled;
@@ -571,9 +572,15 @@ public final class WineGuiActivity extends Activity {
             blenderKeys.setVisibility(View.GONE);
             // Independent, collapsible viewport zoom control; does not alter
             // keyboard size or force native Wine fullscreen/3D window reflow.
+            blenderSmoothZoom=new BlenderSmoothZoomBridge(
+                    BlenderSmoothZoomSignal.path(WineShortcuts.prefix(this)),this::log);
+            blenderSmoothZoom.start();
             blenderZoom=new BlenderZoomPanel(this,(button,pressed)->{
                 if(destroyed||xserver==null)return;
                 xserver.getScreen().setOverlayPointerButton(button,pressed);
+            },delta->{
+                if(destroyed||blenderSmoothZoom==null)return;
+                blenderSmoothZoom.offerDelta(delta);
             });
             FrameLayout.LayoutParams zoomLayout=new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -1441,7 +1448,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r58 viewport zoom slider (versionCode 126)"+
+                "\nDiagnostic build: r60 smooth Blender viewport zoom (versionCode 128)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
@@ -1621,6 +1628,7 @@ public final class WineGuiActivity extends Activity {
         destroyed=true;
         if(diagnosticThread!=null)diagnosticThread.quitSafely();
         if(blenderFullscreenBridgeThread!=null)blenderFullscreenBridgeThread.quitSafely();
+        if(blenderSmoothZoom!=null)blenderSmoothZoom.stop();
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
         if(xserver!=null)xserver.getScreen().setNonBlockingInputEnabled(false);
         if(xinputState!=null)xinputState.close();

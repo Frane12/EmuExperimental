@@ -12,13 +12,17 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 
-/** Compact Blender viewport zoom via ordinary X11 mouse wheel buttons.
- * No Blender Python frame callback, Wine fullscreen or native GPU calls.
- * Touching the slider does not move the 3D viewport pointer location.
+/** Blender viewport zoom. Smooth mode drives Blender's view_distance through a
+ * tiny async app-private bridge; long-press ZOOM for the original wheel mode.
+ * Never adjusts Wine HWND style or touches the Vulkan renderer.
  */
 final class BlenderZoomPanel extends LinearLayout {
     interface WheelSink { void send(int button,boolean pressed); }
+    interface SmoothSink { void sendDelta(int delta); }
     private final WheelSink wheel;
+    private final SmoothSink smooth;
+    private boolean wheelFallback;
+    private int wheelRemainder;
     private final SharedPreferences prefs;
     private final BlenderZoomSteps zoomSteps=new BlenderZoomSteps();
     private final SeekBar slider;
@@ -26,10 +30,14 @@ final class BlenderZoomPanel extends LinearLayout {
     private final View minus,plus;
     private boolean expanded;
 
-    BlenderZoomPanel(Context context,WheelSink sink) {
+    BlenderZoomPanel(Context context,WheelSink wheelSink,SmoothSink smoothSink) {
         super(context);
-        wheel=sink;
+        wheel=wheelSink;
+        smooth=smoothSink;
         prefs=context.getSharedPreferences("blender-zoom",Context.MODE_PRIVATE);
+        // Smooth is always the default for a new version; allow explicit
+        // long-press fallback when Blender's Python startup is unavailable.
+        wheelFallback=prefs.getBoolean("wheel_fallback",false);
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(4),dp(3),dp(4),dp(3));
@@ -61,16 +69,25 @@ final class BlenderZoomPanel extends LinearLayout {
         ((Button)plus).setContentDescription("Zoom in Blender 3D viewport");
         addView(plus,new LayoutParams(dp(38),dp(40)));
         expandButton.setOnClickListener(v->setExpanded(!expanded));
-        minus.setOnClickListener(v->pulseWheel(5,2));
-        plus.setOnClickListener(v->pulseWheel(4,2));
+        expandButton.setOnLongClickListener(v->{
+            wheelFallback=!wheelFallback;
+            wheelRemainder=0;
+            prefs.edit().putBoolean("wheel_fallback",wheelFallback).apply();
+            updateModeLabel();
+            android.widget.Toast.makeText(getContext(),wheelFallback?
+                    "ZOOM: wheel fallback":"ZOOM: smooth",android.widget.Toast.LENGTH_SHORT).show();
+            return true;
+        });
+        minus.setOnClickListener(v->zoomDelta(-12));
+        plus.setOnClickListener(v->zoomDelta(12));
         slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onStartTrackingTouch(SeekBar bar) {
                 zoomSteps.reset(bar.getProgress());
             }
             @Override public void onProgressChanged(SeekBar bar,int progress,boolean fromUser) {
                 if(!fromUser)return;
-                int steps=zoomSteps.update(progress);
-                if(steps!=0)pulseWheel(steps>0?4:5,Math.abs(steps));
+                int delta=zoomSteps.update(progress);
+                if(delta!=0)zoomDelta(delta);
             }
             @Override public void onStopTrackingTouch(SeekBar bar) {
                 // Spring-loaded center. Reset without an opposite wheel event.
@@ -79,6 +96,7 @@ final class BlenderZoomPanel extends LinearLayout {
             }
         });
         setExpanded(prefs.getBoolean("expanded",true));
+        updateModeLabel();
     }
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private Button button(String title,int width) {
@@ -98,6 +116,25 @@ final class BlenderZoomPanel extends LinearLayout {
         bg.setCornerRadius(dp(9));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x5078dce8),bg,null));
         return b;
+    }
+    private void updateModeLabel() {
+        expandButton.setText(wheelFallback?"WHEEL":"ZOOM");
+        expandButton.setContentDescription(wheelFallback?
+                "Wheel zoom fallback. Long press for smooth zoom.":
+                "Smooth Blender viewport zoom. Long press for wheel fallback.");
+    }
+    private void zoomDelta(int delta) {
+        if(delta==0)return;
+        if(!wheelFallback) {
+            smooth.sendDelta(delta);
+            return;
+        }
+        // Preserve r59's verified wheel path for compatibility, only
+        // coalescing movement in multiples of five slider units.
+        wheelRemainder+=delta;
+        int clicks=wheelRemainder/5;
+        wheelRemainder-=clicks*5;
+        if(clicks!=0)pulseWheel(clicks>0?4:5,Math.abs(clicks));
     }
     private void pulseWheel(int button,int clicks) {
         // X11 wheel buttons 4=in, 5=out are now actually mapped by Pointer.

@@ -1,32 +1,31 @@
 package com.drnas.console;
-
-import static org.junit.Assert.*;
 import org.junit.Test;
+import static org.junit.Assert.*;
 
 public class BlenderZoomStepsTest {
-    @Test public void dragRightSendsUpWheelStepsAndPreservesRemainder(){
+    @Test public void fineDragFollowsEverySliderPoint() {
         BlenderZoomSteps steps=new BlenderZoomSteps();
-        assertEquals(0,steps.update(54));
+        assertEquals(4,steps.update(54));
         assertEquals(1,steps.update(55));
-        assertEquals(0,steps.update(59));
+        assertEquals(4,steps.update(59));
         assertEquals(1,steps.update(60));
-        assertEquals(8,steps.update(100));
+        assertEquals(40,steps.update(100));
         assertEquals(0,steps.update(100));
     }
-    @Test public void dragLeftSendsDownWheelAndRecenterIsSilent(){
+    @Test public void dragLeftAndSilentRecenter() {
         BlenderZoomSteps steps=new BlenderZoomSteps();
-        assertEquals(-1,steps.update(45));
-        assertEquals(-9,steps.update(0));
+        assertEquals(-5,steps.update(45));
+        assertEquals(-45,steps.update(0));
         steps.reset(50);
         assertEquals(0,steps.update(50));
-        assertEquals(1,steps.update(55));
+        assertEquals(5,steps.update(55));
     }
-    @Test public void extremeJumpsRemainBounded(){
+    @Test public void positionsClampedWithoutOverflows() {
         BlenderZoomSteps steps=new BlenderZoomSteps();
         steps.reset(100);
-        assertEquals(-10,steps.update(-999));
-        assertEquals(-10,steps.update(0));
+        assertEquals(-100,steps.update(-999));
+        assertEquals(0,steps.update(0));
         steps.reset(-30);
-        assertEquals(10,steps.update(300));
+        assertEquals(100,steps.update(300));
     }
 }
