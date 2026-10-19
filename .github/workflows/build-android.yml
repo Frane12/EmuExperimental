@@ -311,8 +311,10 @@ jobs:
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
           ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-PrefixFix-LAB-r61-private.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
           unzip -t "$RUNNER_TEMP/Blender-PrefixFix-LAB-r61-private.zip"
+      # This branch intentionally skips Actions artifact upload (account quota full).
+      # Its APK is preserved only as an unlisted private draft release below.
       - uses: actions/upload-artifact@v4
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.ref != 'refs/heads/experiment/blender-prefix-recovery-isolated-r61'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review') }}
         with:
@@ -321,12 +323,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review')
+        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive' || github.ref == 'refs/heads/experiment/blender-window-r38-ab-r48' || github.ref == 'refs/heads/experiment/blender-window-unforced-r49' || github.ref == 'refs/heads/experiment/blender-window-frames-r50' || github.ref == 'refs/heads/release/blender-v1.1-review' || github.ref == 'refs/heads/experiment/blender-prefix-recovery-isolated-r61')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="blender-v1.1-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-v1.1-ARM64-Android-Preview-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender v1.1 - ARM64 Android Preview (DRAFT)" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          if [[ "$GITHUB_REF" == "refs/heads/experiment/blender-prefix-recovery-isolated-r61" ]]; then
+            tag="blender-prefixfix-lab-r61-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            gh release create "$tag" \
+              "$RUNNER_TEMP/drnas-distribution/Blender-PrefixFix-LAB-r61-ARM64-STABLE-SIGNED.apk" \
+              "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" \
+              "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt" \
+              --draft --target "$GITHUB_SHA" \
+              --title "Blender PrefixFix LAB r61 (ISOLATED PRIVATE DRAFT)" \
+              --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          else
+            tag="blender-v1.1-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-v1.1-ARM64-Android-Preview-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender v1.1 - ARM64 Android Preview (DRAFT)" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
+          fi
 
 
 
