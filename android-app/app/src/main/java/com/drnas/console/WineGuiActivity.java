@@ -85,6 +85,7 @@ public final class WineGuiActivity extends Activity {
     private boolean keyboardPending;
     private int keyboardAttempts;
     private DrnasPerformanceHud performanceHud;
+    private NeuroFlowShadow neuroflowShadow;
     private int chosenFrameCap;
     private String launchProfileId;
     private boolean renderCaptureRunning;
@@ -96,9 +97,14 @@ public final class WineGuiActivity extends Activity {
     private boolean relativeCameraEnabled;
     private final Runnable hudTicker=new Runnable() {
         @Override public void run() {
-            if(destroyed||performanceHud==null||!performanceHud.isActive())return;
-            performanceHud.sample(xserver.getScreen().getDisplayedFps(),
-                    xserver.getScreen().getDisplayedFrameMs());
+            if(destroyed||xserver==null||performanceHud==null)return;
+            boolean hudActive=performanceHud.isActive();
+            if(!hudActive && neuroflowShadow==null)return;
+            float displayedFps=xserver.getScreen().getDisplayedFps();
+            float displayedMs=xserver.getScreen().getDisplayedFrameMs();
+            if(hudActive)performanceHud.sample(displayedFps,displayedMs);
+            // O(1) pointer exchange; NEVER run inference on the UI/X11 thread.
+            if(neuroflowShadow!=null)neuroflowShadow.offer(displayedFps,displayedMs);
             performanceHud.postDelayed(this,650);
         }
     };
@@ -495,6 +501,13 @@ public final class WineGuiActivity extends Activity {
             return;
         }
 
+        // Private r47 NPU experiment. Shadow observer is read-only and Blender-only.
+        // Override with neuroflow_npu_shadow=false in preferences for an A/B test.
+        if(blenderShell && getPreferences(MODE_PRIVATE).getBoolean("neuroflow_npu_shadow",true)) {
+            neuroflowShadow=new NeuroFlowShadow(getApplicationContext(),this::log);
+            performanceHud.removeCallbacks(hudTicker);
+            performanceHud.postDelayed(hudTicker,650);
+        }
         session=new WineGuiSession();
         session.setDiagnosticsEnabled(verboseLogs);
         session.setDxvkVariant(appProfile.dxvk(DxvkVariants.selected(this)));
@@ -556,6 +569,7 @@ public final class WineGuiActivity extends Activity {
                             if(performanceHud.isActive()) {
                                 performanceHud.setVisibility(View.VISIBLE);
                                 xserver.getScreen().setFpsCounterEnabled(true);
+                                performanceHud.removeCallbacks(hudTicker);
                                 performanceHud.post(hudTicker);
                             }
                         },250);
@@ -1048,6 +1062,7 @@ public final class WineGuiActivity extends Activity {
         // In quiet mode do not block the rendering or X11 event paths on disk.
         boolean critical=line.startsWith("DRNAS_BLENDER_WINDOW_") || line.startsWith("DRNAS_DRIVER_AUTO") ||
                 line.startsWith("DRNAS_TURNIP_AUTOPICK_") ||
+                line.startsWith("DRNAS_NPU_SHADOW_") ||
                 line.startsWith("DRNAS_BLENDER_ANDROID_") ||
                 line.startsWith("DRNAS_BLENDER_CURSOR") ||
                 line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
@@ -1489,6 +1504,7 @@ public final class WineGuiActivity extends Activity {
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
+        if(neuroflowShadow!=null)neuroflowShadow.close();
         if(xinputState!=null)xinputState.close();
         AutomaticCrashLog.end(this);
         if(session!=null)new Thread(()->{session.close();if(xserver!=null)xserver.stop();},"drnas-desktop-stop").start();
