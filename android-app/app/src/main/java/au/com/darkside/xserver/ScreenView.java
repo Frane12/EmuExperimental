@@ -994,6 +994,7 @@ public class ScreenView extends View {
             _focusRevertTo = 0;
             Window.focusInOutNotify(w, _focusWindow, pw, _rootWindow, _grabKeyboardWindow == null ? 0 : 3);
         }
+        traceInputState("revert_focus_done");
     }
 
     /**
@@ -1423,6 +1424,7 @@ public class ScreenView extends View {
                 updatePointer(2);
             }
         }
+        traceInputState("button_done");
     }
 
     /**
@@ -1881,6 +1883,8 @@ public class ScreenView extends View {
                 }
                 break;
         }
+        if(((opcode & 255)>=26 && (opcode & 255)<=35) || opcode==RequestCode.SetInputFocus)
+            traceInputState("request_done_"+(opcode & 255));
     }
 
     private void processAllowEvents(Client client, byte opcode, InputOutput io, int bytesRemaining, byte mode) throws IOException {
