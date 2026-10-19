@@ -103,6 +103,41 @@ public final class WineGuiActivity extends Activity {
         }
     };
 
+    private android.os.HandlerThread diagnosticThread;
+    private volatile long diagnosticUiBeat;
+    private int diagnosticSamples, diagnosticStackSamples;
+    private void startInputDiagnostics() {
+        diagnosticUiBeat=android.os.SystemClock.uptimeMillis();
+        diagnosticThread=new android.os.HandlerThread("drnas-input-watchdog");
+        diagnosticThread.start();
+        android.os.Handler worker=new android.os.Handler(diagnosticThread.getLooper());
+        android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
+        java.util.concurrent.atomic.AtomicBoolean uiPingPending=new java.util.concurrent.atomic.AtomicBoolean();
+        log("DRNAS_X11_CRITICAL_DIAGNOSTICS r54 enabled=true verboseIndependent=true intervalMs=2000 maxSamples=180");
+        worker.post(new Runnable() {
+            @Override public void run() {
+                if(destroyed || diagnosticSamples++>=180)return;
+                long now=android.os.SystemClock.uptimeMillis();
+                long uiAge=now-diagnosticUiBeat;
+                if(uiPingPending.compareAndSet(false,true))ui.post(()->{
+                    diagnosticUiBeat=android.os.SystemClock.uptimeMillis();
+                    uiPingPending.set(false);
+                });
+                log("DRNAS_X11_CRITICAL_PROGRESS timeMs="+now+" uiAgeMs="+uiAge+" "+
+                        xserver.getScreen().diagnosticInputSnapshot()+" "+xserver.diagnosticProgressSnapshot());
+                if(uiAge>5000 && diagnosticStackSamples++<3) {
+                    StringBuilder stack=new StringBuilder();
+                    for(StackTraceElement e:android.os.Looper.getMainLooper().getThread().getStackTrace()) {
+                        if(stack.length()>2200)break;
+                        stack.append(" | ").append(e);
+                    }
+                    log("DRNAS_X11_CRITICAL_UI_STALL stack="+stack);
+                }
+                worker.postDelayed(this,2000);
+            }
+        });
+    }
+
     // The percentage is a conservative, monotonic *boot milestone*, not a
     // guessed countdown or timed animation. 100% means Blender itself mapped.
     private void updateBlenderBootProgress(int milestone) {
@@ -509,6 +544,7 @@ public final class WineGuiActivity extends Activity {
                 "config".equals(requested) ? "config":
                 WineShortcuts.isLaunchRequest(requested) ? requested:"desktop";
         xserver.setDiagnosticListener(this::log);
+        if(blenderShell)startInputDiagnostics();
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
             @Override public void onStart() {
                 if(started || destroyed)return;
@@ -1051,7 +1087,7 @@ public final class WineGuiActivity extends Activity {
     private synchronized void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
-        boolean critical=line.startsWith("DRNAS_BLENDER_WINDOW_") || line.startsWith("DRNAS_DRIVER_AUTO") ||
+        boolean critical=InputDiagnosticPolicy.keep(line) || line.startsWith("DRNAS_BLENDER_WINDOW_") || line.startsWith("DRNAS_DRIVER_AUTO") ||
                 line.startsWith("DRNAS_TURNIP_AUTOPICK_") ||
                 line.startsWith("DRNAS_BLENDER_ANDROID_") ||
                 line.startsWith("DRNAS_BLENDER_CURSOR") ||
@@ -1326,12 +1362,19 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
+                "\nDiagnostic build: r54 input-focus-progress (versionCode 122)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
                 "\nDesktop failed: "+desktopFailed+
                 "\nVerbose logging: "+verboseLogs+" (Wine/DXVK native verbosity set at desktop launch)\n\n";
         out.write(header.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        if(blenderShell && xserver!=null) {
+            String snapshot="\n===== EXPORT-TIME LOCK-FREE SNAPSHOT =====\n"+
+                    xserver.getScreen().diagnosticInputSnapshot()+"\n"+
+                    xserver.diagnosticProgressSnapshot()+"\n";
+            out.write(snapshot.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
         AndroidCrashDiagnostics.appendExitHistory(this,out);
         DiagnosticLogBundle.write(getFilesDir(),raw,out);
     }
@@ -1460,6 +1503,8 @@ public final class WineGuiActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
+        if(blenderShell)log("DRNAS_X11_CRITICAL_ANDROID_FOCUS focused="+focused+
+                " timeMs="+android.os.SystemClock.uptimeMillis());
         if(!focused && blenderKeys!=null)blenderKeys.releaseAll();
         if(!focused && xserver!=null)xserver.getScreen().cancelPointerGestures();
         if(focused) {immersive();if(keyboardPending)xserver.getScreen().post(this::showKeyboard);}
@@ -1495,6 +1540,7 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations()+
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
+        if(diagnosticThread!=null)diagnosticThread.quitSafely();
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
         if(xserver!=null)xserver.getScreen().setNonBlockingInputEnabled(false);
         if(xinputState!=null)xinputState.close();
@@ -1504,6 +1550,7 @@ public final class WineGuiActivity extends Activity {
         super.onDestroy();
     }
 }
+
 
 
 

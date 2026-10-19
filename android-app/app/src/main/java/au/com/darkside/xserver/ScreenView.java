@@ -267,12 +267,15 @@ public class ScreenView extends View {
         final long queuedAt=android.os.SystemClock.uptimeMillis();
         try {
             executor.execute(()->{
+                inputStarted=serial;
+                inputStartedAt=android.os.SystemClock.uptimeMillis();
                 try {
                     action.run();
                 } catch(RuntimeException error) {
                     _xServer.diagnostic("DRNAS_X11_INPUT_EXCEPTION seq="+serial+" "+
                             error.getClass().getSimpleName()+": "+error.getMessage());
                 } finally {
+                    inputCompleted=serial;
                     finished.set(true);
                     long delay=android.os.SystemClock.uptimeMillis()-queuedAt;
                     if(delay>600 && (serial<=4 || delay>2500))
@@ -967,6 +970,7 @@ public class ScreenView extends View {
      * @param w
      */
     public void revertFocus(Window w) {
+        traceInputState("revert_focus_window_"+w.getId());
         if (w == _grabKeyboardWindow) {
             Window pw = _rootWindow.windowAtPoint(_motionX, _motionY);
 
@@ -1293,6 +1297,31 @@ public class ScreenView extends View {
      * @param pressed True if the button was pressed.
      */
     private int buttonTraceCount;
+    private int stateTraceCount;
+    private volatile String inputStateSnapshot="not-observed";
+    private volatile long inputStarted, inputCompleted, inputStartedAt;
+    public String diagnosticInputSnapshot() {
+        java.util.concurrent.ThreadPoolExecutor executor=inputExecutor;
+        Thread worker=inputWorker;
+        return "queuedTotal="+inputEventSerial.get()+" started="+inputStarted+
+                " completed="+inputCompleted+" activeSinceMs="+inputStartedAt+
+                " queue="+(executor==null?0:executor.getQueue().size())+
+                " worker="+(worker==null?"none":worker.getState())+" "+inputStateSnapshot;
+    }
+    // Called only on the existing X11/input path; watchdog reads the immutable
+    // snapshot without taking the XServer monitor or touching Window objects.
+    private void traceInputState(String cause) {
+        if(!nonBlockingInputEnabled)return;
+        Window hit=_rootWindow==null?null:_rootWindow.windowAtPoint(_motionX,_motionY);
+        inputStateSnapshot="focus="+(_focusWindow==null?0:_focusWindow.getId())+
+                " hit="+(hit==null?0:hit.getId())+" xy="+_motionX+","+_motionY+
+                " buttons="+_buttons+" grab="+(_grabPointerWindow==null?0:_grabPointerWindow.getId())+
+                " ownerEvents="+_grabPointerOwnerEvents+" pointerSync="+_grabPointerSynchronous+
+                " keyboardSync="+_grabKeyboardSynchronous+
+                " pendingPointer="+mPendingPointerEvents.mQueue.size();
+        if(stateTraceCount++<160)_xServer.diagnostic("DRNAS_X11_CRITICAL_INPUT_STATE cause="+
+                cause+" timeMs="+android.os.SystemClock.uptimeMillis()+" "+inputStateSnapshot);
+    }
     public void updatePointerButtons(int button, boolean pressed) {
         Pointer p = _xServer.getPointer();
 
@@ -1311,7 +1340,8 @@ public class ScreenView extends View {
             _buttons &= ~mask;
         }
 
-        if (nonBlockingInputEnabled && buttonTraceCount++ < 32)
+        traceInputState("button_"+button+(pressed?"_down":"_up"));
+        if (nonBlockingInputEnabled && buttonTraceCount++ < 96)
             _xServer.diagnostic("DRNAS_X11_BUTTON button="+button+" pressed="+pressed+
                     " before="+X11ButtonState.beforeTransition(_buttons,button)+
                     " after="+_buttons+" grab="+(_grabPointerWindow==null?0:_grabPointerWindow.getId())+
@@ -1345,6 +1375,9 @@ public class ScreenView extends View {
             } else {
                 int timestamp = _xServer.getTimestamp();
                 Window ew = w.buttonNotify(pressed, _motionX, _motionY, button, timestamp, null);
+                if(nonBlockingInputEnabled && buttonTraceCount<=96)
+                    _xServer.diagnostic("DRNAS_X11_CRITICAL_BUTTON_ROUTE pressed="+pressed+
+                            " hit="+w.getId()+" deliveredWindow="+(ew==null?0:ew.getId()));
                 reflectPointerFreezeNextEvent();
                 Client c = null;
 
@@ -1663,6 +1696,8 @@ public class ScreenView extends View {
      */
     public void processRequest(XServer xServer, Client client, byte opcode, byte arg, int bytesRemaining) throws IOException {
         InputOutput io = client.getInputOutput();
+        if((opcode & 255)>=26 && (opcode & 255)<=35 || opcode==RequestCode.SetInputFocus)
+            traceInputState("request_"+(opcode & 255)+"_arg_"+(arg & 255)+"_client_"+client.resourceIdBase());
 
         switch (opcode) {
             case RequestCode.SendEvent:
@@ -2258,6 +2293,7 @@ public class ScreenView extends View {
         InputOutput io = client.getInputOutput();
         int wid = io.readInt();    // Focus window.
         int time = io.readInt();    // Time.
+        traceInputState("focus_request_target_"+wid+"_client_"+client.resourceIdBase()+"_time_"+time);
         Window w;
 
         if (wid == 0) {
@@ -2288,6 +2324,7 @@ public class ScreenView extends View {
         _focusWindow = w;
         _focusRevertTo = revertTo;
         _focusLastChangeTime = time;
+        traceInputState("focus_applied");
     }
 
     private void reflectPointerFreezeNextEvent() {
@@ -2305,6 +2342,7 @@ public class ScreenView extends View {
 
     private void callGrabButtonNotify(Window w, boolean pressed, int motionX, int motionY, int button,
             int grabEventMask, Client grabPointerClient, boolean grabPointerOwnerEvents, int eventState) {
+        traceInputState("grab_delivery_window_"+w.getId()+"_pressed_"+pressed+"_mask_"+grabEventMask);
         w.grabButtonNotify(pressed, motionX, motionY, button, grabEventMask,
                 grabPointerClient, grabPointerOwnerEvents, eventState);
         reflectPointerFreezeNextEvent();
@@ -2348,6 +2386,7 @@ public class ScreenView extends View {
         return _sharedClipboardWindow;
     }
 }
+
 
 
 

@@ -286,9 +286,11 @@ public class Client extends Thread {
 
             _lastOpcode=opcode&255;_lastRequestBytes=bytesRemaining;
             synchronized (_xServer) {
+                _xServer.diagnosticRequestStart(opcode & 255,resourceIdBase());
                 try {
                     processRequest(opcode, arg, bytesRemaining);
                 } finally {
+                    _xServer.diagnosticRequestEnd();
                     int unread = _inputOutput.endRequest();
                     if (unread != 0) _xServer.diagnostic("X11 handler left " + unread +
                             " body bytes, opcode=" + (opcode & 255) + "; next request remains aligned");
@@ -837,6 +839,7 @@ public class Client extends Thread {
             _xServer.destroyClientResources(client);
     }
 }
+
 
 
 

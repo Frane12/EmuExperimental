@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 121
-        versionName = "1.1-r53-x11-button-state"
+        versionCode = 122
+        versionName = "1.1-r54-input-focus-diagnostics"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -79,6 +79,7 @@ dependencies {
     // Real org.json on the JVM for FEXCore WCP manifest validation regression tests.
     testImplementation("org.json:json:20240303")
 }
+
 
 
 

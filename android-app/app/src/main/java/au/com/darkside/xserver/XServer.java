@@ -82,7 +82,25 @@ public class XServer {
     // Track LIVE mapped window IDs, not lifetime map operations. A destroyed
     // Direct3D window must not count as an active on-screen render target.
     private final HashSet<Integer> liveMappedWindows = new HashSet<>();
-    private long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
+    private volatile long putImageRequests,putImageAccepted,windowImageInvalidations,canvasDrawCalls;
+    private volatile long lastPutImageMs, lastCanvasMs, requestStartedMs, requestCount;
+    private volatile int requestOpcode, requestClient;
+    private volatile boolean requestActive;
+    public void diagnosticRequestStart(int opcode,int client) {
+        if(!frameDiagnosticsEnabled)return;
+        requestOpcode=opcode;requestClient=client;
+        requestStartedMs=android.os.SystemClock.uptimeMillis();requestCount++;requestActive=true;
+    }
+    public void diagnosticRequestEnd(){requestActive=false;}
+    // Approximate volatile counters: no global lock, no forced repaint and
+    // no claim that a Canvas draw is a newly rendered Vulkan frame.
+    public String diagnosticProgressSnapshot() {
+        return "putImage="+putImageAccepted+"/"+putImageRequests+
+                " invalidations="+windowImageInvalidations+" canvasDraw="+canvasDrawCalls+
+                " lastPutMs="+lastPutImageMs+" lastCanvasMs="+lastCanvasMs+
+                " requestCount="+requestCount+" requestActive="+requestActive+
+                " opcode="+requestOpcode+" client="+requestClient+" requestSinceMs="+requestStartedMs;
+    }
     private boolean canvasReported;
     private volatile boolean frameDiagnosticsEnabled;
     private volatile boolean experimentalBulkDecode;
@@ -152,6 +170,7 @@ public class XServer {
         if(!frameDiagnosticsEnabled)return;
         synchronized(this) {
         putImageRequests++;
+        lastPutImageMs=android.os.SystemClock.uptimeMillis();
         if(accepted)putImageAccepted++;
         if(putImageRequests<=3 || putImageRequests%120==0 || !accepted && putImageRequests<=12)
             diagnostic("X11 PutImage drawable="+drawableId+" accepted="+accepted+
@@ -172,6 +191,7 @@ public class XServer {
         if(!frameDiagnosticsEnabled)return;
         synchronized(this) {
         canvasDrawCalls++;
+        lastCanvasMs=android.os.SystemClock.uptimeMillis();
         if(!canvasReported && !liveMappedWindows.isEmpty()) {
             canvasReported=true;
             diagnostic("X11 Canvas drew root with live mapped window; D3D pixels NOT yet verified; "
@@ -1077,5 +1097,6 @@ public class XServer {
         }
     }
 }
+
 
 
