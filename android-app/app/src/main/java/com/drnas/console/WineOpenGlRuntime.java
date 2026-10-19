@@ -108,7 +108,7 @@ final class WineOpenGlRuntime {
         env.put("LIBGL_KOPPER_DRI2","1");
         // Avoid Wine TLS assumptions in Mesa background context threads.
         env.put("GALLIUM_THREAD","0");
-        log.accept("DRNAS_OPENGL_EGL_ROUTE_REQUESTED Wine11+Mesa Zink+selected Turnip; "+
+        log.accept("DRNAS_OPENGL_EGL_ROUTE_REQUESTED Wine11+Mesa Zink+selected native Vulkan ICD; "+
                 "WINE_USE_EGL=1 EGL_PLATFORM=x11 GALLIUM_DRIVER=zink; "+
                 "requires successful eglInitialize / GL>=4.3 / first Present. "+
                 "No GLX or DRI3 server implementation is claimed.");
