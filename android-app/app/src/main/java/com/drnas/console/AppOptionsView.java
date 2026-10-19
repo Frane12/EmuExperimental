@@ -17,7 +17,7 @@ final class AppOptionsView extends LinearLayout {
         super(activity);a=activity;prefs=desktop(a);setOrientation(VERTICAL);
         title("JEZIK APLIKACIJE");
         LinearLayout languages=new LinearLayout(a);
-        for(String language:new String[]{"hr","en"}){
+        for(String language:new String[]{"en","hr"}){
             Button b=button("hr".equals(language)?"Hrvatski":"English",()->{
                 AppLanguage.set(a,language);languageChanged.run();
             });

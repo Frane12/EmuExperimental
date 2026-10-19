@@ -2,6 +2,12 @@ package com.drnas.console;
 import org.junit.Test;
 import static org.junit.Assert.*;
 public class AppLanguageTest {
+    @Test public void blenderFirstRunAndMenuLabelsHaveEnglishTranslations(){
+        assertEquals("Full keyboard",AppLanguage.translate("en","Puna tipkovnica"));
+        assertEquals("File access permission",AppLanguage.translate("en","Dozvola za datoteke"));
+        assertEquals("Preparing Blender…",AppLanguage.translate("en","Pripremam Blender…"));
+        assertEquals("Rotate",AppLanguage.translate("en","Rotiraj"));
+    }
     @Test public void changesAppLabelsInBothDirections(){
         assertEquals("Početna",AppLanguage.translate("hr","Console"));
         assertEquals("Console",AppLanguage.translate("en","Početna"));
@@ -17,9 +23,11 @@ public class AppLanguageTest {
         assertEquals("Moja igra",AppLanguage.translate("en","Moja igra"));
         assertEquals("DRNAS_X11 error=3",AppLanguage.translate("hr","DRNAS_X11 error=3"));
     }
-    @Test public void unknownPreferenceFallsBackToCroatian(){
-        assertEquals("hr",AppLanguage.normalize(null));
-        assertEquals("hr",AppLanguage.normalize("de"));
+    @Test public void unknownPreferenceFallsBackToEnglish(){
+        assertEquals("en",AppLanguage.normalize(null));
+        assertEquals("en",AppLanguage.normalize("de"));
         assertEquals("en",AppLanguage.normalize("en"));
+        assertEquals("hr",AppLanguage.normalize("hr"));
     }
 }
+

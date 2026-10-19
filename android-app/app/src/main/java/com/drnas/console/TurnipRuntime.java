@@ -118,7 +118,7 @@ final class TurnipRuntime {
                 rememberDriver(context,"system");return;
             }
         }
-        throw new IOException("Nijedan kompatibilan Vulkan driver nije prošao automatsku provjeru. Pošalji log za ovaj uređaj.");
+        throw new IOException("No compatible Vulkan backend passed the automatic startup check. Please share the log for this device.");
     }
 
     private static boolean selectPinned(Context context,JSONObject plan,Consumer<String> log,

@@ -31,7 +31,7 @@ public final class BlenderLauncherActivity extends Activity {
         TextView name=new TextView(this);name.setText("Blender");
         name.setTextSize(25);name.setTextColor(0xffeeeeee);
         panel.addView(name);
-        status=new TextView(this);status.setText("Pripremam Blender…");
+        status=new TextView(this);status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Pripremam Blender…"));
         status.setTextSize(13);status.setTextColor(0xffaaaab2);status.setPadding(16,20,16,20);
         status.setGravity(Gravity.CENTER);panel.addView(status);
         setContentView(panel);
@@ -51,7 +51,7 @@ public final class BlenderLauncherActivity extends Activity {
             chooseFolder();return;
         }
         checking=true;
-        status.setText("Provjeravam disk D:…");
+        status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Provjeravam disk D:…"));
         new Thread(()->{
             boolean usable=BlenderProjectDrive.ready(this);
             runOnUiThread(()->{
@@ -66,7 +66,7 @@ public final class BlenderLauncherActivity extends Activity {
         },"blender-d-check").start();
     }
     private void chooseFolder() {
-        status.setText("Odaberi Android mapu za Blenderov disk D:");
+        status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Odaberi Android mapu za Blenderov disk D:"));
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|
                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
@@ -126,7 +126,7 @@ public final class BlenderLauncherActivity extends Activity {
         else new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
             public void onLog(String line) {
                 android.util.Log.i("DRNAS-Blender",line);
-                runOnUiThread(()->{if(!destroyed)status.setText("Prva priprema Blender okruženja…");});
+                runOnUiThread(()->{if(!destroyed)status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Prva priprema Blender okruženja…"));});
             }
             public void onComplete(boolean started,String result) {
                 runOnUiThread(()->{

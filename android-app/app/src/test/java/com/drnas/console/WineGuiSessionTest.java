@@ -7,6 +7,12 @@ import java.util.*;
 public class WineGuiSessionTest {
     private static final File LINKER=new File("/system/bin/linker64");
     private static final File WINE=new File("/data/app/wine");
+    @Test public void directBlenderLaunchStartsTheWindowMappingWatchdog() {
+        assertTrue(WineGuiSession.isLaunchMarker("Launching Blender directly without Explorer desktop/taskbar"));
+        assertTrue(WineGuiSession.isLaunchMarker("Launching Wine explorer.exe virtual desktop"));
+        assertFalse(WineGuiSession.isLaunchMarker("Blender archive staged"));
+        assertFalse(WineGuiSession.isLaunchMarker(null));
+    }
     @Test public void blenderStartsDirectlyWithoutExplorerDesktop() {
         List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,
                 List.of("--gpu-backend","vulkan","--window-fullscreen"));

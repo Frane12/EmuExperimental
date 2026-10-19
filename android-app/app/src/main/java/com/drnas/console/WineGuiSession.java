@@ -40,6 +40,10 @@ final class WineGuiSession implements AutoCloseable {
 
     static final int DESKTOP_WIDTH=1280;
     static final int DESKTOP_HEIGHT=720;
+    static boolean isLaunchMarker(String line) {
+        return line!=null && (line.startsWith("Launching Wine explorer") ||
+                line.startsWith("Launching Blender directly"));
+    }
     static List<String> blenderCommand(File linker,File wine,List<String> launchArguments) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         args.set(args.size()-1,BundledBlenderArchive.WINDOWS_EXE);

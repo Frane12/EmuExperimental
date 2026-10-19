@@ -596,7 +596,7 @@ public final class WineGuiActivity extends Activity {
         chosenFrameCap=DxvkFrameCap.clamp(cap);
         if(launchProfileId==null)saveFrameCap(this,chosenFrameCap);
         else saveLaunchProfile(AppLaunchSettings.load(this,launchProfileId).withFps(chosenFrameCap));
-        Toast.makeText(this,"DXVK "+(chosenFrameCap==0?"bez limita":chosenFrameCap+" FPS")+
+        AppLanguage.toast(this,"DXVK "+(chosenFrameCap==0?"bez limita":chosenFrameCap+" FPS")+
                 (beforeStartup?"":" (primijenit će se nakon Reset Wine)"),
                 Toast.LENGTH_SHORT).show();
     }
@@ -646,7 +646,7 @@ public final class WineGuiActivity extends Activity {
                         log("Android X11 desktop Canvas mode: "+(cpuCanvasFallback?
                                 "SOFTWARE fallback":"HWUI hardware-accelerated candidate")+
                                 " (Wine Vulkan DRI3/Present still unimplemented)");
-                        Toast.makeText(this,cpuCanvasFallback?
+                        AppLanguage.toast(this,cpuCanvasFallback?
                                 "CPU Canvas fallback":"GPU Canvas enabled",Toast.LENGTH_SHORT).show();
                     }
                     else if(which==2) {
@@ -657,7 +657,7 @@ public final class WineGuiActivity extends Activity {
                                 WineGuiSession.stopActive();
                                 if(xserver!=null)xserver.stop();
                                 runOnUiThread(()->{if(!destroyed){finish();startActivity(restart);}});
-                            } catch(Exception e){runOnUiThread(()->Toast.makeText(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
+                            } catch(Exception e){runOnUiThread(()->AppLanguage.toast(this,"Wine is still stopping",Toast.LENGTH_LONG).show());}
                         },"drnas-desktop-reset").start();
                     } else if(which==3)exitConfirmation.confirm(this);
                     else if(which==4)shareGuiLog();
@@ -672,13 +672,13 @@ public final class WineGuiActivity extends Activity {
                         xserver.getScreen().setFpsCounterEnabled(enable);
                         performanceHud.removeCallbacks(hudTicker);
                         if(enable)performanceHud.post(hudTicker);
-                        Toast.makeText(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
+                        AppLanguage.toast(this,enable?"HUD ON":"HUD OFF",Toast.LENGTH_SHORT).show();
                     }
                     else if(which==21) {
                         relativeCameraEnabled=!relativeCameraEnabled;
                         getPreferences(MODE_PRIVATE).edit().putBoolean("relative_camera",relativeCameraEnabled).apply();
                         syncVirtualPadConnection();
-                        Toast.makeText(this,relativeCameraEnabled?
+                        AppLanguage.toast(this,relativeCameraEnabled?
                                 "Kamera bilo gdje: XInput analog ON":"Kamera bilo gdje OFF (normalni dodir)",
                                 Toast.LENGTH_SHORT).show();
                     }
@@ -686,7 +686,7 @@ public final class WineGuiActivity extends Activity {
                         boolean enabled=!getPreferences(MODE_PRIVATE).getBoolean("x11_presentation_mask",false);
                         getPreferences(MODE_PRIVATE).edit().putBoolean("x11_presentation_mask",enabled).apply();
                         if(xserver!=null)xserver.setPresentationMaskEnabled(enabled);
-                        Toast.makeText(this,enabled?"Maska prezentacije ON":"Maska prezentacije OFF (A/B test)",
+                        AppLanguage.toast(this,enabled?"Maska prezentacije ON":"Maska prezentacije OFF (A/B test)",
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==23) {
@@ -706,7 +706,7 @@ public final class WineGuiActivity extends Activity {
                         xserver.setExperimentalBulkDecode(fast);
                         getPreferences(MODE_PRIVATE).edit()
                             .putBoolean("x11_bulk_decoder",fast).apply();
-                        Toast.makeText(this,fast?
+                        AppLanguage.toast(this,fast?
                                 "Brzi BGRX dekoder ON — usporedi 5s uzorke":
                                 "Brzi BGRX dekoder OFF — stabilni baseline",
                                 Toast.LENGTH_LONG).show();
@@ -721,7 +721,7 @@ public final class WineGuiActivity extends Activity {
                             saveLaunchProfile(profile.withDxvk(variant));
                         }
                         log("DRNAS_DXVK_SELECTED_FOR_NEXT_START="+variant);
-                        Toast.makeText(this,"DXVK 1.10.3 "+variant+
+                        AppLanguage.toast(this,"DXVK 1.10.3 "+variant+
                                 " — za promjenu u igri koristi Reset Wine",
                                 Toast.LENGTH_LONG).show();
                     }
@@ -739,14 +739,14 @@ public final class WineGuiActivity extends Activity {
                             desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
                         log("DRNAS_DISPLAY_MODE "+(stretchFullscreen?"FILL":"FIT")+
                                 " fixed guest 1280x720, Android-only transform");
-                        Toast.makeText(this,stretchFullscreen?
+                        AppLanguage.toast(this,stretchFullscreen?
                                 "Puni zaslon ON — 1280x720 rastegnut do rubova":
                                 "Puni zaslon OFF — izvorni omjer slike",
                                 Toast.LENGTH_SHORT).show();
                     }
                     else if(which==19) {
                         if(xinputState==null) {
-                            Toast.makeText(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
+                            AppLanguage.toast(this,"XInput mapiranje nije dostupno.",Toast.LENGTH_LONG).show();
                         } else {
                             virtualPadEnabled=!virtualPadEnabled;
                             getPreferences(MODE_PRIVATE).edit().putString("control_mode",virtualPadEnabled?"xinput":"off").apply();
@@ -757,7 +757,7 @@ public final class WineGuiActivity extends Activity {
                             if(!virtualPadEnabled && gamepadLayer!=null)gamepadLayer.release();
                             syncVirtualPadConnection();
                             log("DRNAS_XINPUT "+(virtualPadEnabled?"VIRTUAL_CONNECTED":"VIRTUAL_DISCONNECTED"));
-                            Toast.makeText(this,virtualPadEnabled?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
+                            AppLanguage.toast(this,virtualPadEnabled?"XInput Xbox controller ON":"XInput Xbox controller OFF",Toast.LENGTH_SHORT).show();
                         }
                     }
                     else if(which==18) {
@@ -769,7 +769,7 @@ public final class WineGuiActivity extends Activity {
                         if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
                         log("DRNAS_DIAGNOSTICS_TOGGLE "+(verboseLogs?"ON":"OFF")+
                                 " | X11/raw logging changes live. Wine/DXVK verbose env applies after Reset Wine.");
-                        Toast.makeText(this,verboseLogs?
+                        AppLanguage.toast(this,verboseLogs?
                                 "Logovi ON. Puni Wine/DXVK trace nakon Reset Wine.":
                                 "Logovi OFF: prikaz bez dijagnostičkog opterećenja.",
                                 Toast.LENGTH_LONG).show();
@@ -786,7 +786,7 @@ public final class WineGuiActivity extends Activity {
                         getPreferences(MODE_PRIVATE).edit().putString("control_mode",show?"wasd":"off").apply();
                         log("DRNAS_VIRTUAL_STICK "+(show?"ON":"OFF")+
                                 " input=Wine X11 WASD (XInput controller NOT emulated)");
-                        Toast.makeText(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
+                        AppLanguage.toast(this,show?"WASD stick ON":"WASD stick OFF",Toast.LENGTH_SHORT).show();
                     }
                     else if(which>=14 && which<=16)
                         testVulkanPresentation(which==14?"x11-only":which==15?"create-checkpoints":"present-checkpoints");
@@ -798,7 +798,7 @@ public final class WineGuiActivity extends Activity {
 
     private void saveLaunchProfile(AppLaunchSettings.Profile profile){
         try{AppLaunchSettings.save(this,launchProfileId,profile);}
-        catch(Exception error){Toast.makeText(this,"Postavke nisu spremljene: "+error.getMessage(),Toast.LENGTH_LONG).show();}
+        catch(Exception error){AppLanguage.toast(this,"Postavke nisu spremljene: "+error.getMessage(),Toast.LENGTH_LONG).show();}
     }
     private void restoreCameraSensitivity(float value){
         cameraSensitivity=value;
@@ -847,7 +847,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -865,6 +865,13 @@ public final class WineGuiActivity extends Activity {
                         performanceHud.removeCallbacks(hudTicker);
                         if(enable)performanceHud.post(hudTicker);
                     }
+                    else if(which==9)new AppDialogBuilder(this).setTitle("Language")
+                            .setItems(new String[]{"English","Hrvatski"},(languageDialog,index)->{
+                                AppLanguage.set(this,index==0?"en":"hr");
+                                new AppDialogBuilder(this).setTitle("Language")
+                                        .setMessage("Language saved. The full interface updates the next time you open Blender.")
+                                        .setPositiveButton("OK",null).show();
+                            }).show();
                     else exitConfirmation.confirm(this);
                 }).show();
     }
@@ -874,7 +881,7 @@ public final class WineGuiActivity extends Activity {
         try {path=BlenderProjectDrive.folder(this,BlenderProjectDrive.selected(this)).getAbsolutePath();}
         catch(Exception e){path="Mapa nije dostupna";}
         new AppDialogBuilder(this).setTitle("D:\\ · Android mapa")
-                .setMessage(path+"\n\nU Blenderovu Save/Open dijalogu odaberi D:\\. Datoteke se spremaju izravno u ovu Android mapu.\n\nPrije promjene mape spremi projekt; Blender će se zatvoriti i ponovno pokrenuti.")
+                .setMessage(path+"\n\nIn Blender Save/Open, select D:\\. Files are saved directly to this Android folder.\n\nSave your project before changing the folder; Blender will close and restart.")
                 .setPositiveButton("OK",null)
                 .setNeutralButton("Promijeni mapu",(d,w)->{
                     if(session!=null)session.close();
@@ -894,10 +901,10 @@ public final class WineGuiActivity extends Activity {
                     if(destroyed)return;
                     if(projects.isEmpty()) {
                         new AppDialogBuilder(this).setTitle("Spremi Blender na Android")
-                                .setMessage("Najprije spremi projekt u Blenderu (Save As) u:\n"+
+                                .setMessage("First save your project in Blender (Save As) to:\n"+
                                         "C:\\users\\xuser\\Documents\\Blender\\\n\n"+
-                                        "Zatim dodirni '⇩ Android' i odaberi Android mapu. "+
-                                        "Wine C: i Android Documents nisu ista pohrana.")
+                                        "Then tap '⇩ Android' and choose an Android folder. "+
+                                        "Wine C: and Android Documents are separate storage locations.")
                                 .setPositiveButton("U redu",null).show();
                         return;
                     }
@@ -914,7 +921,7 @@ public final class WineGuiActivity extends Activity {
             }catch(Exception e){
                 log("DRNAS_BLENDER_ANDROID_SCAN_ERROR: "+e.getMessage());
                 runOnUiThread(()->{
-                    if(!destroyed)Toast.makeText(this,
+                    if(!destroyed)AppLanguage.toast(this,
                             "Ne mogu pronaći Wine Blender projekt: "+e.getMessage(),
                             Toast.LENGTH_LONG).show();
                 });
@@ -933,7 +940,7 @@ public final class WineGuiActivity extends Activity {
         } catch(Exception error) {
             pendingBlenderAndroidProject=null;
             log("DRNAS_BLENDER_ANDROID_PICKER_ERROR: "+error.getMessage());
-            Toast.makeText(this,"Android upravitelj datoteka nije dostupan",
+            AppLanguage.toast(this,"Android upravitelj datoteka nije dostupan",
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -946,8 +953,8 @@ public final class WineGuiActivity extends Activity {
                 log("DRNAS_BLENDER_ANDROID_EXPORT_OK: source="+
                         project.guestRelativePath+" bytes="+bytes+" uri="+destination.getScheme());
                 runOnUiThread(()->{
-                    if(!destroyed)Toast.makeText(this,
-                            "Spremljeno u Android mapu: "+project.file.getName(),
+                    if(!destroyed)AppLanguage.toast(this,
+                            "Saved to Android folder: "+project.file.getName(),
                             Toast.LENGTH_LONG).show();
                 });
             } catch(Exception error) {
@@ -957,7 +964,7 @@ public final class WineGuiActivity extends Activity {
                     if(!destroyed)new AppDialogBuilder(this)
                             .setTitle("Spremanje na Android nije uspjelo")
                             .setMessage(error.getMessage()+
-                                    "\nOriginalni Blender projekt u Wineu nije obrisan.")
+                                    "\nYour original Blender project in Wine has not been deleted.")
                             .setPositiveButton("U redu",null).show();
                 });
             }
@@ -967,7 +974,7 @@ public final class WineGuiActivity extends Activity {
     private void captureRenderSample(long durationMs,boolean blenderBenchmark) {
         if(xserver==null || destroyed)return;
         if(renderCaptureRunning || !xserver.startRenderCapture()) {
-            Toast.makeText(this,"Uzorak već traje",Toast.LENGTH_SHORT).show();
+            AppLanguage.toast(this,"Uzorak već traje",Toast.LENGTH_SHORT).show();
             return;
         }
         renderCaptureRunning=true;
@@ -977,7 +984,7 @@ public final class WineGuiActivity extends Activity {
                 "\nBlender shell: "+blenderShell+"; guest 1280x720; stretch="+stretchFullscreen+
                 "; viewport="+xserver.getScreen().getWidth()+"x"+xserver.getScreen().getHeight()+
                 "\nCursor: compact 16–28 physical pixels (large brush cursors preserved)\n";
-        Toast.makeText(this,blenderBenchmark?"Snimam 20 s — okreći i pomiči isti model":"Snimam 5 sekundi — bez kontinuiranog loga",
+        AppLanguage.toast(this,blenderBenchmark?"Snimam 20 s — okreći i pomiči isti model":"Snimam 5 sekundi — bez kontinuiranog loga",
                 Toast.LENGTH_SHORT).show();
         // X11 worker accumulates bounded in-RAM frame timings. No disk IO
         // or giant Strings in PutImage/Canvas hot paths.
@@ -994,14 +1001,14 @@ public final class WineGuiActivity extends Activity {
                     final String path=blenderBenchmark?GuiLogExport.saveBlenderSample(this,writer):
                             GuiLogExport.saveRenderSample(this,writer);
                     runOnUiThread(()->{
-                        if(!destroyed)Toast.makeText(this,
-                                "Spremljeno: Downloads/DRNAS/"+path,
+                        if(!destroyed)AppLanguage.toast(this,
+                                "Saved: Downloads/DRNAS/"+path,
                                 Toast.LENGTH_LONG).show();
                     });
                 } catch(Exception error) {
                     log("Five-second render capture export failed: "+error.getMessage());
                     runOnUiThread(()->{
-                        if(!destroyed)Toast.makeText(this,"Spremanje uzorka nije uspjelo",
+                        if(!destroyed)AppLanguage.toast(this,"Spremanje uzorka nije uspjelo",
                                 Toast.LENGTH_LONG).show();
                     });
                 }
@@ -1036,7 +1043,7 @@ public final class WineGuiActivity extends Activity {
             try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
             AutomaticCrashLog.request(this,line);
         }
-        if(line.startsWith("Launching Wine explorer")){
+        if(WineGuiSession.isLaunchMarker(line)){
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
         }
         if(blenderShell) {
@@ -1150,7 +1157,7 @@ public final class WineGuiActivity extends Activity {
         new Thread(()->{
             try {if(session==null)throw new IOException("Windows još nije spreman");session.openTaskManager();}
             catch(Exception e){log("Task Manager: "+e.getMessage());runOnUiThread(()->{
-                if(!destroyed)Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
+                if(!destroyed)AppLanguage.toast(this,e.getMessage(),Toast.LENGTH_LONG).show();
             });}
         },"drnas-task-manager").start();
     }
@@ -1160,9 +1167,9 @@ public final class WineGuiActivity extends Activity {
             try {
                 if(session==null)throw new IOException("Windows još nije spreman");
                 session.testVulkanPresentation(WineGuiActivity.this,mode);
-                runOnUiThread(()->{if(!destroyed)Toast.makeText(this,"Vulkan test završen — rezultat je u logu",Toast.LENGTH_LONG).show();});
+                runOnUiThread(()->{if(!destroyed)AppLanguage.toast(this,"Vulkan test završen — rezultat je u logu",Toast.LENGTH_LONG).show();});
             } catch(Exception e){log("Vulkan test: "+e.getMessage());runOnUiThread(()->{
-                if(!destroyed)Toast.makeText(this,e.getMessage(),Toast.LENGTH_LONG).show();
+                if(!destroyed)AppLanguage.toast(this,e.getMessage(),Toast.LENGTH_LONG).show();
             });}
         },"drnas-vulkan-present-"+mode).start();
     }
@@ -1206,7 +1213,7 @@ public final class WineGuiActivity extends Activity {
             } else {
                 keyboardPending=false;
                 keyboardAttempts=0;
-                Toast.makeText(this,"Tipkovnica nije otvorena. Probaj ⋮ → Tekst → Wine.",
+                AppLanguage.toast(this,"Tipkovnica nije otvorena. Probaj ⋮ → Tekst → Wine.",
                         Toast.LENGTH_LONG).show();
             }
         });
@@ -1236,14 +1243,14 @@ public final class WineGuiActivity extends Activity {
 
     private void sendTextToWine(String value) {
         if(destroyed || value.isEmpty() || xserver.mappedWindowCount()==0) {
-            if(!value.isEmpty())Toast.makeText(this,"Wine prozor nije spreman.",
+            if(!value.isEmpty())AppLanguage.toast(this,"Wine prozor nije spreman.",
                     Toast.LENGTH_SHORT).show();
             return;
         }
         KeyEvent[] events=KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD)
                 .getEvents(value.toCharArray());
         if(events==null) {
-            Toast.makeText(this,"Neki znakovi nisu podržani u Android → X11 rasporedu.",
+            AppLanguage.toast(this,"Neki znakovi nisu podržani u Android → X11 rasporedu.",
                     Toast.LENGTH_LONG).show();
             return;
         }
@@ -1261,7 +1268,7 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void shareGuiLog() {
-        if(raw==null){Toast.makeText(this,"Log se još priprema",Toast.LENGTH_SHORT).show();return;}
+        if(raw==null){AppLanguage.toast(this,"Log se još priprema",Toast.LENGTH_SHORT).show();return;}
         if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
         if(!shareLog.isEnabled())return;
         shareLog.setEnabled(false);shareLog.setText("Pripremam…");
@@ -1272,7 +1279,7 @@ public final class WineGuiActivity extends Activity {
                     if(destroyed)return;
                     shareLog.setEnabled(true);shareLog.setText("Pošalji log");
                     try {startActivity(Intent.createChooser(intent,"Pošalji DRNAS log"));}
-                    catch(Exception e){Toast.makeText(this,"Log je spremljen u Downloads/DRNAS. Dijeljenje nije dostupno.",Toast.LENGTH_LONG).show();}
+                    catch(Exception e){AppLanguage.toast(this,"Log je spremljen u Downloads/DRNAS. Dijeljenje nije dostupno.",Toast.LENGTH_LONG).show();}
                 });
             } catch(Exception e) {
                 log("Log share failed: "+e.getMessage());
@@ -1298,14 +1305,14 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void saveGuiLog() {
-        if(raw==null){Toast.makeText(this,"No GUI log yet",Toast.LENGTH_SHORT).show();return;}
+        if(raw==null){AppLanguage.toast(this,"No GUI log yet",Toast.LENGTH_SHORT).show();return;}
         if(android.os.Build.VERSION.SDK_INT<29){openSaveAs();return;}
-        Toast.makeText(this,"Saving GUI TXT to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
+        AppLanguage.toast(this,"Saving GUI TXT to Downloads/DRNAS…",Toast.LENGTH_SHORT).show();
         new Thread(()->{
             try {
                 String name=GuiLogExport.save(this,this::writeDiagnosticLog);
                 runOnUiThread(()->{
-                    if(!destroyed)Toast.makeText(this,"Saved: Downloads/DRNAS/"+name,
+                    if(!destroyed)AppLanguage.toast(this,"Saved: Downloads/DRNAS/"+name,
                             Toast.LENGTH_LONG).show();
                 });
             } catch(Exception e) {
@@ -1323,7 +1330,7 @@ public final class WineGuiActivity extends Activity {
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.putExtra(Intent.EXTRA_TITLE,"DRNAS-Wine-GUI.txt");
         try {startActivityForResult(i,601);}
-        catch(Exception e){Toast.makeText(this,
+        catch(Exception e){AppLanguage.toast(this,
                 "Could not export session log.",Toast.LENGTH_LONG).show();}
     }
 
@@ -1334,7 +1341,7 @@ public final class WineGuiActivity extends Activity {
             pendingBlenderAndroidProject=null;
             if(result==RESULT_OK && data!=null && data.getData()!=null) {
                 if(project!=null)finishAndroidBlenderExport(data.getData(),project);
-                else Toast.makeText(this,"Ponovi izvoz; projekt nije ostao odabran",
+                else AppLanguage.toast(this,"Ponovi izvoz; projekt nije ostao odabran",
                         Toast.LENGTH_LONG).show();
             }
             return;

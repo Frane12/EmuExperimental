@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 108
-        versionName = "preAlpha-0.1-r42-auto-drivers-glass-controls"
+        versionCode = 109
+        versionName = "preAlpha-0.1-r43-english-auto-controls"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

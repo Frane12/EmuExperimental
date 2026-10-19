@@ -9,6 +9,61 @@ import android.widget.Toast;
 /** App-owned labels only. Never translates paths, user input, guest programs or logs. */
 final class AppLanguage {
     private static final String[][] LABELS={
+        {"Language","Jezik"},
+        {"Language saved. The full interface updates the next time you open Blender.","Jezik je spremljen. Cijelo sučelje osvježit će se pri sljedećem pokretanju Blendera."},
+        {"Preparing Blender…","Pripremam Blender…"},
+        {"Checking drive D:…","Provjeravam disk D:…"},
+        {"Choose an Android folder for Blender drive D:","Odaberi Android mapu za Blenderov disk D:"},
+        {"Android folder picker is unavailable.","Androidov odabir mape nije dostupan."},
+        {"The selected folder cannot be read or written directly. Check file access permission or choose another local folder.","Odabrana mapa nije dostupna za izravno čitanje i spremanje. Provjeri dozvolu ili odaberi drugu lokalnu mapu."},
+        {"File access permission","Dozvola za datoteke"},
+        {"Choose folder","Odaberi mapu"},
+        {"Direct saving from Blender","Izravno spremanje iz Blendera"},
+        {"Wine needs access to real files for Blender Save/Open on drive D:. Android may require All files access. Drive D: points only to your selected folder. You can revoke the permission in Android settings.","Wine treba pristup stvarnim datotekama kako bi Blenderov Save/Open radio na disku D:. Android za to traži širu dozvolu ‘Pristup svim datotekama’. D: će pokazivati samo odabranu mapu. Dozvolu možeš naknadno ukinuti u Android postavkama."},
+        {"Open settings","Otvori postavke"},
+        {"File access settings are unavailable.","Postavka pristupa datotekama nije dostupna."},
+        {"Drive D: is not ready. You can try another folder.","Disk D: nije spreman. Možeš pokušati s drugom mapom."},
+        {"Select a project folder before starting.","Odaberi mapu za projekte prije pokretanja."},
+        {"Setting up Blender for the first time…","Prva priprema Blender okruženja…"},
+        {"Blender setup failed","Blender se nije pripremio"},
+        {"Diagnostics","Dijagnostika"},
+        {"Full keyboard","Puna tipkovnica"},
+        {"Export .blend from Wine C:","Izvezi .blend iz Wine C:"},
+        {"Performance test · 20 seconds","Test performansi · 20 sekundi"},
+        {"Settings and diagnostics","Postavke i dijagnostika"},
+        {"About this build","O ovom izdanju"},
+        {"Close Blender","Zatvori Blender"},
+        {"Android folder · drive D:","Android mapa · disk D:"},
+        {"FPS counter ON/OFF","FPS brojač ON/OFF"},
+        {"Blender 4.5.14 Windows ARM64 through the DRNAS Wine environment.\nExperimental community build; not an official Blender Android port.","Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port."},
+        {"Folder unavailable","Mapa nije dostupna"},
+        {"Change folder","Promijeni mapu"},
+        {"OK","U redu"},
+        {"Save Blender to Android","Spremi Blender na Android"},
+        {"Choose a .blend project to save to Android","Odaberi .blend za spremanje na Android"},
+        {"Android file manager is unavailable","Android upravitelj datoteka nije dostupan"},
+        {"Saving to Android failed","Spremanje na Android nije uspjelo"},
+        {"A sample is already running","Uzorak već traje"},
+        {"Recording 20 s — rotate and move the same model","Snimam 20 s — okreći i pomiči isti model"},
+        {"Recording 5 seconds — continuous logging is disabled","Snimam 5 sekundi — bez kontinuiranog loga"},
+        {"Could not save the sample","Spremanje uzorka nije uspjelo"},
+        {"Move","Pomakni"},
+        {"Rotate","Rotiraj"},
+        {"Scale","Skaliraj"},
+        {"Edit Mode","Uređivanje"},
+        {"Extrude","Izvuci"},
+        {"Box Select","Okvirni odabir"},
+        {"Select All","Odaberi sve"},
+        {"Search","Pretraži"},
+        {"Play/Pause","Pokreni/Pauza"},
+        {"Confirm","Potvrdi"},
+        {"Delete","Izbriši"},
+        {"Drag to move the shortcut panel","Povuci za pomicanje prečaca"},
+        {"Left mouse button","Lijevi klik miša"},
+        {"Right mouse button","Desni klik miša"},
+        {"Show or hide Blender shortcuts","Sakrij ili prikaži Blender prečace"},
+        {"Menu, keyboard and performance test","Izbornik, tipkovnica i test performansi"},
+
         {"Bora-blown pollen on the dashboard","Pelud na sučelju · bura"},
         {"Live desktop wallpaper","Živa pozadina desktopa"},
         {"Larger Wine taskbar","Veći Wine taskbar"},
@@ -136,8 +191,8 @@ final class AppLanguage {
         {"Virtual stick (WASD) ON/OFF","Virtual stick (WASD) ON/OFF"},
         {"Xbox XInput (virtual pad) ON/OFF","Xbox XInput (virtual pad) ON/OFF"}
     };
-    static String normalize(String code){return "en".equals(code)?"en":"hr";}
-    static String selected(Context c){return normalize(c.getSharedPreferences("drnas-ui",Context.MODE_PRIVATE).getString("language","hr"));}
+    static String normalize(String code){return "hr".equals(code)?"hr":"en";}
+    static String selected(Context c){return normalize(c.getSharedPreferences("drnas-ui",Context.MODE_PRIVATE).getString("language","en"));}
     static void set(Context c,String code){c.getSharedPreferences("drnas-ui",Context.MODE_PRIVATE).edit().putString("language",normalize(code)).apply();}
     static String translate(String code,String text){
         if(text==null)return "";
@@ -155,6 +210,7 @@ final class AppLanguage {
         String[] out=new String[labels.length];for(int i=0;i<labels.length;i++)out[i]=t(c,labels[i]);return out;
     }
     static void tree(View root){
+        if(root.getContentDescription()!=null)root.setContentDescription(t(root.getContext(),root.getContentDescription()));
         if(root instanceof TextView && !(root instanceof EditText) && !(root instanceof android.widget.TextClock)){
             TextView label=(TextView)root;
             if(!"user-text".equals(label.getTag()))label.setText(t(root.getContext(),label.getText()));

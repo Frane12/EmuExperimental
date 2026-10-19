@@ -42,7 +42,7 @@ final class BlenderKeyPanel extends LinearLayout {
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(7),dp(7),dp(7),dp(7));
         setBackground(panelGlass());setElevation(dp(7));
-        Button grip=button("⠿","Povuci za pomicanje prečaca");
+        Button grip=button("⠿","Drag to move the shortcut panel");
         dock(grip,32,48);
         grip.setOnTouchListener((v,e)->{
             switch(e.getActionMasked()) {
@@ -91,12 +91,12 @@ final class BlenderKeyPanel extends LinearLayout {
         // X11 button numbers 1=left, 3=right. Keep these buttons visible
         // even when the shortcut strip is collapsed and leave ordinary
         // touchscreen taps on ScreenView untouched.
-        mouseButton("LMB","Lijevi klik miša",1);
-        mouseButton("RMB","Desni klik miša",3);
-        toggle=button("⌄","Sakrij ili prikaži Blender prečace");
+        mouseButton("LMB","Left mouse button",1);
+        mouseButton("RMB","Right mouse button",3);
+        toggle=button("⌄","Show or hide Blender shortcuts");
         toggle.setTextSize(19);dock(toggle,36,48);
         toggle.setOnClickListener(v->{releaseAll();setExpanded(!expanded);});
-        Button menu=button("⋮","Izbornik, tipkovnica i test performansi");
+        Button menu=button("⋮","Menu, keyboard and performance test");
         menu.setTextSize(21);dock(menu,36,48);
         menu.setOnClickListener(v->{releaseAll();options.run();});
         setExpanded(prefs.getBoolean("expanded",true));
