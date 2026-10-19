@@ -86,7 +86,10 @@ def verified_imagefs(path):
                     raise ValueError("Duplicate rootfs member: " + name)
                 if entry.isfile():
                     if not (0 < entry.size <= MAX_INPUT_LIB):
-                        raise ValueError("Rootfs ELF too large: " + name)
+                        # Unrelated giant imagefs libraries (e.g. librsvg)
+                        # are not needed by Mesa. Never stage them; if one
+                        # is needed, fetch() fails rather than bypassing cap.
+                        continue
                     target = root / name
                     with archive.extractfile(entry) as reader, target.open("wb") as writer:
                         shutil.copyfileobj(reader, writer, 65536)
