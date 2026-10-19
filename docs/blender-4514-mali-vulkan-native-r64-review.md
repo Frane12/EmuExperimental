@@ -91,3 +91,80 @@ error codes) and check for `VK_ERROR_FEATURE_NOT_PRESENT`, validation
 errors, geometry/overlay corruption or a stalled swapchain.
 
 **Do not say the GPU is fixed based on a successful patch application.**
+
+## Windows ARM64 toolchain preparation (review-only)
+
+The actual build is **Blender for Windows ARM64**, not Android ARM64.
+The official Blender 4.5 Windows build scripts recognize `arm64` and
+default to Clang when ARM64 is selected. `build_files/windows/configure_msbuild.cmd`
+uses the Visual Studio 2022 generator with `-A ARM64 -T ClangCl` and installs
+through the `INSTALL` target. The checked 4.5.14 CMake configuration sets
+the minimum Visual Studio ARM64 developer-shell version to 17.12.3.
+Our desired compiler baseline is LLVM/ClangCl 20.1+ per Blender's documented
+Windows Clang support guidance. Modern Blender documentation may demand a
+newer VS minor version than the 4.5.14 branch: prefer the newer toolchain.
+
+Prerequisites for an eventual build host (not installed by this PR):
+
+- **Windows 11 x64** or compatible Windows x64 build machine/VM.
+- Visual Studio **2022** with Desktop development with C++, **MSVC
+  ARM64/ARM64EC target tools**, Windows SDK ARM64 library components.
+- LLVM **ClangCl 20.1+**, CMake, Git/Git LFS, Python, adequate free disk and RAM.
+- Official `lib/windows_arm64` Blender dependency submodule. This is
+  several gigabytes; the *read-only* CI preflight intentionally omits it.
+
+**Prepared, not executed:** `tools/preflight_blender_win_arm64_r64.ps1`
+checks the VS2022 / Clang / Windows SDK / CMake / Git / source-tag and
+patch application read-only. Run on a Windows ARM64-capable build host:
+
+```powershell
+# Clean upstream v4.5.14 (before applying anything).
+git clone https://github.com/blender/blender.git C:\blender-r64-src
+git -C C:\blender-r64-src checkout v4.5.14
+
+# From this DRNAS repo clone, with source path above.
+powershell -ExecutionPolicy Bypass -File tools\preflight_blender_win_arm64_r64.ps1 -BlenderSource C:\blender-r64-src
+```
+
+Automated no-build inventory:
+`.github/workflows/preflight-blender-4514-arm64.yml` on
+`windows-2022` verifies the *upstream 4.5.14 tag* using a sparse source
+checkout, calls `tools/check_blender_mali_patch.py` and inventories
+preinstalled VS/Clang/SDK tools. It is not a Blender build and produces
+no executable or APK. It can fail on GitHub-hosted Windows if Clang 20.1+
+or ARM64 workloads are missing; this is a useful readiness finding,
+not proof the patch is invalid.
+
+**For a future explicitly approved build only:**
+
+```cmd
+REM Run from VS2022 x64 developer command prompt, after prerequisites
+REM and verified windows_arm64 dependencies. This is a FUTURE procedure.
+cd C:\blender-r64-src
+git apply C:\path\to\EmuExperimental\patches\blender-4.5.14-mali-vulkan-optional-features-r64.patch
+make.bat arm64 2022 clang full nobuild
+make.bat arm64 2022 clang full
+```
+
+The first `nobuild` only configures CMake; the second performs a full
+Windows ARM64 Blender **compile and install**. Both remain outside the
+current work and require confirmation first. Official build docs:
+https://developer.blender.org/docs/handbook/building_blender/windows/
+
+### Why we are not patching the APK yet
+
+The Android workflow still downloads the signed-and-hashed official
+Blender `4.5.14` Windows ARM64 ZIP. Modifying only the Android
+launcher or an external GPU driver does **not** modify Vulkan feature
+requirements compiled into `blender.exe`. The new r64 C++ patch is
+source-only and will have no effect until a properly built Windows ARM64
+Blender distribution replaces the *LAB-only* pinned payload.
+
+**Review blockers before compiler work:** confirm Vulkan surface /
+swapchain and `vkCreateDevice` feature bits on A35 & A142; determine
+how Vulkan's first-vertex default impacts Blender's flat shading,
+multiple viewports and shader clipping; never disable missing core
+features such as `timelineSemaphore` or `bufferDeviceAddress` simply
+to get a window.
+
+**No release/compilation/installation has been authorized by this step.**
