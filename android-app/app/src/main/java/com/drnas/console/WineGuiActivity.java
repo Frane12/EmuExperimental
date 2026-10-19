@@ -89,6 +89,8 @@ public final class WineGuiActivity extends Activity {
     private String launchProfileId;
     private boolean renderCaptureRunning;
     private boolean blenderShell;
+    private static final int BLENDER_HOST_TITLE_CROP=23;
+    private boolean blenderHostFullscreen=true;
     private int guestWidth=WineGuiSession.DESKTOP_WIDTH,guestHeight=WineGuiSession.DESKTOP_HEIGHT;
     private BlenderKeyPanel blenderKeys;
     private BlenderAndroidExport.Project pendingBlenderAndroidProject;
@@ -277,6 +279,8 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setGuestResolution(
                 guestWidth,guestHeight);
         xserver.getScreen().setStretchFullscreen(stretchFullscreen);
+        if(blenderShell)xserver.getScreen().setHostCropTopGuestPx(
+                blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0);
         xserver.getScreen().setRelativeTouchMode(true);
         // r52 Blender input hotfix: Android must never wait for Wine/X11
         // under the global XServer lock when a touch, click or key arrives.
@@ -298,6 +302,8 @@ public final class WineGuiActivity extends Activity {
         desktopCursorOverlay=new CursorOverlayView(this,
                 guestWidth,guestHeight);
         desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
+        if(blenderShell)desktopCursorOverlay.setHostCropTopGuestPx(
+                blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0);
         desktopCursorOverlay.setBlenderVisibleCursor(blenderShell);
         desktopCursorOverlay.setDiagnosticSink(this::log);
         xserver.getScreen().setCursorOverlayListener(desktopCursorOverlay::setCursor);
@@ -503,6 +509,9 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive()&&!blenderShell);
         if(blenderShell)performanceHud.setVisibility(View.GONE);
         if(blenderShell) {
+            log("DRNAS_BLENDER_HOST_FULLSCREEN r56 enabled="+blenderHostFullscreen+
+                    " cropGuestTop="+(blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0)+
+                    " nativeWineFullscreen=false");
             blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
                 if(destroyed||xserver==null)return;
                 xserver.getScreen().requestFocus();
@@ -895,7 +904,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution","Android Fullscreen ON/OFF"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -921,8 +930,21 @@ public final class WineGuiActivity extends Activity {
                                         .setPositiveButton("OK",null).show();
                             }).show();
                     else if(which==10)showBlenderResolution();
+                    else if(which==11)toggleBlenderHostFullscreen();
                     else exitConfirmation.confirm(this);
                 }).show();
+    }
+
+    private void toggleBlenderHostFullscreen() {
+        if(!blenderShell || xserver==null || desktopCursorOverlay==null)return;
+        blenderHostFullscreen=!blenderHostFullscreen;
+        int crop=blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0;
+        xserver.getScreen().setHostCropTopGuestPx(crop);
+        desktopCursorOverlay.setHostCropTopGuestPx(crop);
+        log("DRNAS_BLENDER_HOST_FULLSCREEN r56 enabled="+blenderHostFullscreen+
+                " cropGuestTop="+crop+" nativeWineFullscreen=false");
+        AppLanguage.toast(this,blenderHostFullscreen?
+                "Android fullscreen ON":"Android fullscreen OFF",Toast.LENGTH_LONG).show();
     }
 
     private void showBlenderResolution() {
@@ -1362,7 +1384,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r55 input-focus-progress (versionCode 123)"+
+                "\nDiagnostic build: r56 Android-host-fullscreen (versionCode 124)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
