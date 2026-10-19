@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 105
-        versionName = "preAlpha-0.1-r39-mouse-hold-named-controls"
+        versionCode = 106
+        versionName = "preAlpha-0.1-r40-glass-controls"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

@@ -40,10 +40,10 @@ final class BlenderKeyPanel extends LinearLayout {
         this.exportToAndroid=exportToAndroid;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
-        setPadding(dp(3),dp(3),dp(3),dp(3));
-        setBackground(glass(0x55202429));
+        setPadding(dp(7),dp(7),dp(7),dp(7));
+        setBackground(panelGlass());setElevation(dp(7));
         Button grip=button("⠿","Povuci za pomicanje prečaca");
-        addView(grip,new LayoutParams(dp(24),dp(34)));
+        dock(grip,32,48);
         grip.setOnTouchListener((v,e)->{
             switch(e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
@@ -75,7 +75,7 @@ final class BlenderKeyPanel extends LinearLayout {
         // Export is explicitly separate from Blender Ctrl+S: it opens the
         // Android system document picker only AFTER a project exists in Wine.
         action(bottom,"⇩ Android",exportToAndroid);
-        action(bottom,"⌨",keyboard);
+        action(bottom,"Keyboard",keyboard);
         // The top row is intentionally wide on a phone. Limit the panel to
         // the visible viewport and scroll the *keys*, not the grip/menu.
         // This keeps every shortcut usable without pushing the panel offscreen.
@@ -84,6 +84,7 @@ final class BlenderKeyPanel extends LinearLayout {
         keyStrip.setHorizontalScrollBarEnabled(false);
         keyStrip.setOverScrollMode(View.OVER_SCROLL_NEVER);
         keyStrip.setClipToPadding(true);
+        keyStrip.setPadding(dp(3),0,dp(3),0);
         keyStrip.addView(rows,new HorizontalScrollView.LayoutParams(
                 LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
         addView(keyStrip,new LayoutParams(LayoutParams.WRAP_CONTENT,LayoutParams.WRAP_CONTENT));
@@ -93,10 +94,10 @@ final class BlenderKeyPanel extends LinearLayout {
         mouseButton("LMB","Lijevi klik miša",1);
         mouseButton("RMB","Desni klik miša",3);
         toggle=button("⌄","Sakrij ili prikaži Blender prečace");
-        addView(toggle,new LayoutParams(dp(30),dp(34)));
+        toggle.setTextSize(19);dock(toggle,36,48);
         toggle.setOnClickListener(v->{releaseAll();setExpanded(!expanded);});
         Button menu=button("⋮","Izbornik, tipkovnica i test performansi");
-        addView(menu,new LayoutParams(dp(26),dp(34)));
+        menu.setTextSize(21);dock(menu,36,48);
         menu.setOnClickListener(v->{releaseAll();options.run();});
         setExpanded(prefs.getBoolean("expanded",true));
         // Do not restore here: r30 hides the panel with GONE until the Blender
@@ -128,9 +129,16 @@ final class BlenderKeyPanel extends LinearLayout {
         int mode=MeasureSpec.getMode(widthMeasureSpec);
         if(mode!=MeasureSpec.UNSPECIFIED) {
             int available=MeasureSpec.getSize(widthMeasureSpec);
-            // grip 24 + 2 mouse buttons 2*42 + collapse 30 + menu 26 +
-            // panel padding/margins ~= 184dp. Scroll only keyboard keys.
-            int scrollWidth=Math.max(dp(36),Math.min(dp(650),available-dp(184)));
+            // Reserve the actual fixed controls and their margins. Bigger
+            // labels scroll within the remaining width on small screens.
+            int reserved=getPaddingLeft()+getPaddingRight();
+            for(int i=0;i<getChildCount();i++) {
+                View child=getChildAt(i);
+                if(child==keyStrip || child.getVisibility()==GONE)continue;
+                LayoutParams p=(LayoutParams)child.getLayoutParams();
+                reserved+=Math.max(0,p.width)+p.leftMargin+p.rightMargin;
+            }
+            int scrollWidth=Math.max(0,Math.min(dp(760),available-reserved));
             ViewGroup.LayoutParams strip=keyStrip.getLayoutParams();
             if(strip!=null)strip.width=scrollWidth;
         }
@@ -148,23 +156,50 @@ final class BlenderKeyPanel extends LinearLayout {
         place(x,y);
     }
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
-    private GradientDrawable glass(int color) {
-        GradientDrawable d=new GradientDrawable();d.setColor(color);
-        d.setCornerRadius(dp(7));d.setStroke(dp(1),0x306e7a88);return d;
+    private GradientDrawable panelGlass() {
+        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                new int[]{0xb51c3042,0x99101825});
+        d.setCornerRadius(dp(18));d.setStroke(dp(1),0x7095c5db);return d;
+    }
+    private GradientDrawable keyGlass(boolean active) {
+        GradientDrawable d=new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                active?new int[]{0xe33b8295,0xcd265d73}:
+                        new int[]{0xa3445d72,0x80233247});
+        d.setCornerRadius(dp(10));d.setStroke(dp(1),active?0xd39eeaf1:0x759bbace);
+        return d;
+    }
+    private android.graphics.drawable.Drawable keyBackground() {
+        android.graphics.drawable.StateListDrawable states=new android.graphics.drawable.StateListDrawable();
+        states.addState(new int[]{android.R.attr.state_activated},keyGlass(true));
+        states.addState(new int[]{},keyGlass(false));
+        return new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x5078dce8),states,null);
+    }
+    private void dock(Button button,int width,int height) {
+        LayoutParams p=new LayoutParams(dp(width),dp(height));
+        p.setMargins(dp(2),dp(2),dp(2),dp(2));addView(button,p);
     }
     private Button button(String text,String description) {
         Button b=new Button(getContext());b.setText(text);b.setContentDescription(description);
-        b.setTextSize(11);b.setTextColor(0xddeef2f7);b.setAllCaps(false);
+        b.setTextSize(13);b.setTextColor(0xfff2f8ff);b.setAllCaps(false);
+        b.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        b.setSingleLine(true);b.setIncludeFontPadding(false);b.setGravity(Gravity.CENTER);
         b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(0);b.setMinimumHeight(0);
-        b.setPadding(dp(4),0,dp(4),0);b.setBackground(glass(0x60303740));
+        b.setPadding(dp(10),0,dp(10),0);b.setBackground(keyBackground());b.setElevation(dp(2));
+        android.animation.StateListAnimator feedback=new android.animation.StateListAnimator();
+        android.animation.AnimatorSet down=new android.animation.AnimatorSet();
+        down.playTogether(android.animation.ObjectAnimator.ofFloat(b,"scaleX",.96f),
+                android.animation.ObjectAnimator.ofFloat(b,"scaleY",.96f));down.setDuration(90);
+        android.animation.AnimatorSet up=new android.animation.AnimatorSet();
+        up.playTogether(android.animation.ObjectAnimator.ofFloat(b,"scaleX",1f),
+                android.animation.ObjectAnimator.ofFloat(b,"scaleY",1f));up.setDuration(140);
+        feedback.addState(new int[]{android.R.attr.state_pressed},down);
+        feedback.addState(new int[]{},up);b.setStateListAnimator(feedback);
         b.setFocusable(false);return b;
     }
     private void mouseButton(String title,String description,int x11Button) {
         Button b=button(title,description);
-        b.setTextSize(10);
-        LayoutParams params=new LayoutParams(dp(42),dp(34));
-        params.leftMargin=dp(1);
-        addView(b,params);
+        b.setTextSize(13);dock(b,56,48);
         heldMouse.put(x11Button,b);
         b.setContentDescription(description+" — hold while moving another finger to drag");
         // Preserve DOWN/MOVE/UP instead of synthesizing a full click on UP.
@@ -176,12 +211,12 @@ final class BlenderKeyPanel extends LinearLayout {
             case MotionEvent.ACTION_DOWN:
                 v.getParent().requestDisallowInterceptTouchEvent(true);
                 mouseHold.press(x11Button);
-                b.setPressed(true);b.setBackground(glass(0xb0b97830));
+                b.setPressed(true);b.setActivated(true);
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 mouseHold.release(x11Button);
-                b.setPressed(false);b.setBackground(glass(0x60303740));
+                b.setPressed(false);b.setActivated(false);
                 v.getParent().requestDisallowInterceptTouchEvent(false);
                 return true;
             default:return true;
@@ -196,13 +231,13 @@ final class BlenderKeyPanel extends LinearLayout {
     }
     private LinearLayout row() {
         LinearLayout r=new LinearLayout(getContext());r.setOrientation(HORIZONTAL);
-        rows.addView(r,new LayoutParams(LayoutParams.WRAP_CONTENT,dp(29)));return r;
+        rows.addView(r,new LayoutParams(LayoutParams.WRAP_CONTENT,dp(44)));return r;
     }
-    private void gap(LinearLayout r){r.addView(new View(getContext()),new LayoutParams(dp(5),1));}
+    private void gap(LinearLayout r){r.addView(new View(getContext()),new LayoutParams(dp(9),1));}
     private Button action(LinearLayout r,String label,Runnable run) {
-        Button b=button(label,label);LayoutParams p=new LayoutParams(dp(label.contains("Android")?74:
-                label.length()>3?Math.max(44,label.length()*7+12):32),dp(27));
-        p.setMargins(dp(1),dp(1),dp(1),dp(1));r.addView(b,p);b.setOnClickListener(v->run.run());return b;
+        Button b=button(label,label);b.setMinimumWidth(dp(52));
+        LayoutParams p=new LayoutParams(LayoutParams.WRAP_CONTENT,dp(40));
+        p.setMargins(dp(3),dp(2),dp(3),dp(2));r.addView(b,p);b.setOnClickListener(v->run.run());return b;
     }
     private void key(LinearLayout r,String label,int code){action(r,label,()->{
         sink.send(code,true);sink.send(code,false);releaseAll();
@@ -210,8 +245,8 @@ final class BlenderKeyPanel extends LinearLayout {
     private void modifier(LinearLayout r,String label,int code) {
         Button b=action(r,label,()->{});
         b.setOnClickListener(v->{
-            if(held.remove(code)!=null){sink.send(code,false);b.setBackground(glass(0x60303740));}
-            else {held.put(code,b);sink.send(code,true);b.setBackground(glass(0xb0b97830));}
+            if(held.remove(code)!=null){sink.send(code,false);b.setActivated(false);}
+            else {held.put(code,b);sink.send(code,true);b.setActivated(true);}
         });
     }
     private void chord(int modifier,int key) {
@@ -221,15 +256,15 @@ final class BlenderKeyPanel extends LinearLayout {
     void releaseAll() {
         mouseHold.releaseAll();
         for(Button b:heldMouse.values()) {
-            b.setPressed(false);b.setBackground(glass(0x60303740));
+            b.setPressed(false);b.setActivated(false);
         }
         for(Map.Entry<Integer,Button> e:held.entrySet()) {
-            sink.send(e.getKey(),false);e.getValue().setBackground(glass(0x60303740));
+            sink.send(e.getKey(),false);e.getValue().setActivated(false);
         }
         held.clear();
     }
     private void setExpanded(boolean value) {
-        expanded=value;rows.setVisibility(value?VISIBLE:GONE);toggle.setText(value?"⌄":"⌨");
+        expanded=value;keyStrip.setVisibility(value?VISIBLE:GONE);toggle.setText(value?"⌄":"⌨");
         prefs.edit().putBoolean("expanded",value).apply();
         post(this::restoreWhenMeasured);
     }

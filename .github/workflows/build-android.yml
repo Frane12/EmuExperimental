@@ -1,4 +1,4 @@
-name: Blender DRNAS r39 - mouse hold and named controls
+name: Blender DRNAS r40 - larger glass controls
 on:
   push:
     branches:
@@ -273,26 +273,26 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r39-Mouse-Hold-Named-Controls-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r40-Glass-Controls-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          Blender DRNAS r39 - mouse hold and named controls
+          Blender DRNAS r40 - larger glass controls
           Package: com.drnas.console
-          versionCode: 105
+          versionCode: 106
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: LMB and RMB now remain pressed from touch-down until release or cancellation. A second finger moves the pointer while the first holds the mouse button, enabling continuous brush strokes and dragging. Touchpad gestures do not synthesize clicks or release overlay-held buttons. Mouse buttons release on focus loss, pause, detach and menu actions. Named controls include Move, Rotate, Scale, Edit Mode, Extrude, Box Select, Select All, Search, Play/Pause, Cancel, Confirm and Delete. Preserves r38 rendering, FPS HUD, direct Android D drive and drivers. Same stable certificate, versionCode 105. Requires on-device brush testing.
+          Changed: Larger 40dp shortcut keys and 48dp mouse/dock buttons, 13sp medium-weight high-contrast labels, wider spacing, rounded translucent gradients, soft touch ripple and press feedback, cyan held-button indicators. Command widths fit their actual text and the scroll area reserves the actual fixed control widths. Collapsing fully hides the shortcut strip. Preserves r39 continuous mouse dragging, named commands, rendering, drivers and Android D drive. Same stable certificate, versionCode 106. Visual layout requires on-device review before public hotfix publication.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r39-Mouse-Hold-Named-Controls-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r39-Mouse-Hold-Named-Controls-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r40-Glass-Controls-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r40-Glass-Controls-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
         with:
-          name: Blender-DRNAS-r39-Mouse-Hold-Named-Controls-test-ZIP
+          name: Blender-DRNAS-r40-Glass-Controls-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -301,8 +301,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r39-mouse-hold-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r39-Mouse-Hold-Named-Controls-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r39 - continuous mouse drag and named controls" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="emudrnas-prealpha-0.1-r40-glass-controls-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r40-Glass-Controls-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r40 - larger translucent controls" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
