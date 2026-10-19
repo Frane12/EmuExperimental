@@ -31,9 +31,9 @@ public class BundledBlenderArchiveTest {
         assertEquals(hash(zip),new String(Files.readAllBytes(target.resolve(".drnas-bundle-sha256")),java.nio.charset.StandardCharsets.US_ASCII));
         String startup=new String(Files.readAllBytes(target.resolve("drnas-startup.py")),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(startup.contains("userpref.blend"));
-        assertTrue(startup.contains("drnas-window-layout.py"));
-        assertTrue(startup.contains("runpy.run_path"));
-        assertTrue(startup.contains("DRNAS_BLENDER_PRIMARY_FULLSCREEN_SETUP_FAILED"));
+        assertFalse(startup.contains("drnas-window-layout.py"));
+        assertFalse(startup.contains("runpy.run_path"));
+        assertTrue(startup.contains("DRNAS_BLENDER_LAYOUT_DISABLED"));
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
     }
     @Test public void badHashRollsBackAllFiles() throws Exception {

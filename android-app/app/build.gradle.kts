@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 122
-        versionName = "1.1-r54-input-focus-diagnostics"
+        versionCode = 123
+        versionName = "1.1-r55-window-timer-rollback"
     }
     packaging {
         jniLibs.useLegacyPackaging = true

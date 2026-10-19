@@ -113,7 +113,7 @@ public final class WineGuiActivity extends Activity {
         android.os.Handler worker=new android.os.Handler(diagnosticThread.getLooper());
         android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
         java.util.concurrent.atomic.AtomicBoolean uiPingPending=new java.util.concurrent.atomic.AtomicBoolean();
-        log("DRNAS_X11_CRITICAL_DIAGNOSTICS r54 enabled=true verboseIndependent=true intervalMs=2000 maxSamples=180");
+        log("DRNAS_X11_CRITICAL_DIAGNOSTICS r55 enabled=true verboseIndependent=true intervalMs=2000 maxSamples=180");
         worker.post(new Runnable() {
             @Override public void run() {
                 if(destroyed || diagnosticSamples++>=180)return;
@@ -603,7 +603,7 @@ public final class WineGuiActivity extends Activity {
                     } else {
                         startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                     }
-                    log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; Android immersive active; primary-only Win32 fullscreen requested (verify DRNAS_BLENDER_PRIMARY_FULLSCREEN)":"mapped X11 window after Explorer launch"));
+                    log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; Android immersive active; r50 guest window policy restored; Win32 fullscreen timer disabled":"mapped X11 window after Explorer launch"));
                 }
                 else {
                     if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
@@ -1362,7 +1362,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r54 input-focus-progress (versionCode 122)"+
+                "\nDiagnostic build: r55 input-focus-progress (versionCode 123)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
