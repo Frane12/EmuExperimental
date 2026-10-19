@@ -9,6 +9,10 @@ import android.widget.Toast;
 /** App-owned labels only. Never translates paths, user input, guest programs or logs. */
 final class AppLanguage {
     private static final String[][] LABELS={
+        {"Resolution","Rezolucija"},
+        {"Automatic","Automatski"},
+        {"Resolution saved","Rezolucija je spremljena"},
+        {"Save your project, close Blender and reopen it to apply the new display resolution. Your project's render output resolution is unchanged.","Spremi projekt, zatvori Blender i ponovno ga otvori kako bi se primijenila nova rezolucija prikaza. Izlazna rezolucija renderiranja projekta ostaje ista."},
         {"Language","Jezik"},
         {"Language saved. The full interface updates the next time you open Blender.","Jezik je spremljen. Cijelo sučelje osvježit će se pri sljedećem pokretanju Blendera."},
         {"Preparing Blender…","Pripremam Blender…"},

@@ -344,7 +344,10 @@ final class WineGuiSession implements AutoCloseable {
                     ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
                     : "DRNAS_GLX_UNAVAILABLE: pinned Bionic runtime lacks libGL.so.1; "+
                       "GLX fallback disabled. This does not affect Vulkan/DXVK.");
-        log.accept("X11 guest root is fixed at 1280x720; RandR mode switching unavailable. Crysis uses windowed compatibility config.");
+        BlenderDisplayProfile.Resolution display=blenderShell?BlenderDisplayProfile.choose(
+                NativeHost.vulkanDeviceName(),context.getSharedPreferences("blender-display",Context.MODE_PRIVATE)
+                        .getString("resolution","auto")):BlenderDisplayProfile.HD;
+        log.accept("X11 guest root is fixed for this session at "+display.id()+"; display changes apply after restart.");
         // H2.9 is embedded in APK but must also be *selected* for the actual
         // Wine loader process. This refreshes old H2.8 boot plans in-memory
         // after an APK upgrade, without rewriting the Wine prefix.

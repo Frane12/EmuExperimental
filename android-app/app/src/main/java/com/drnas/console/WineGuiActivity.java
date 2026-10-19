@@ -89,6 +89,7 @@ public final class WineGuiActivity extends Activity {
     private String launchProfileId;
     private boolean renderCaptureRunning;
     private boolean blenderShell;
+    private int guestWidth=WineGuiSession.DESKTOP_WIDTH,guestHeight=WineGuiSession.DESKTOP_HEIGHT;
     private BlenderKeyPanel blenderKeys;
     private BlenderAndroidExport.Project pendingBlenderAndroidProject;
     private static final int BLENDER_ANDROID_EXPORT_REQUEST=602;
@@ -192,6 +193,12 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
         blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
+        if(blenderShell) {
+            BlenderDisplayProfile.Resolution resolution=BlenderDisplayProfile.choose(
+                    NativeHost.vulkanDeviceName(),getSharedPreferences("blender-display",MODE_PRIVATE)
+                            .getString("resolution","auto"));
+            guestWidth=resolution.width;guestHeight=resolution.height;
+        }
         // A saved debugging session must not add verbose Wine/X11 I/O to the
         // app preview or the performance baseline. Essential crash logs stay on.
         if(blenderShell)verboseLogs=false;
@@ -231,7 +238,7 @@ public final class WineGuiActivity extends Activity {
         xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
-                WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+                guestWidth,guestHeight);
         xserver.getScreen().setStretchFullscreen(stretchFullscreen);
         xserver.getScreen().setRelativeTouchMode(true);
         xserver.getScreen().setCameraTouchMode(false);
@@ -249,7 +256,7 @@ public final class WineGuiActivity extends Activity {
         // Cursor is a separate accelerated Android layer. Dragging the pointer
         // no longer requests a redraw of every mapped Wine window bitmap.
         desktopCursorOverlay=new CursorOverlayView(this,
-                WineGuiSession.DESKTOP_WIDTH,WineGuiSession.DESKTOP_HEIGHT);
+                guestWidth,guestHeight);
         desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
         desktopCursorOverlay.setBlenderVisibleCursor(blenderShell);
         desktopCursorOverlay.setDiagnosticSink(this::log);
@@ -738,9 +745,9 @@ public final class WineGuiActivity extends Activity {
                         if(desktopCursorOverlay!=null)
                             desktopCursorOverlay.setStretchFullscreen(stretchFullscreen);
                         log("DRNAS_DISPLAY_MODE "+(stretchFullscreen?"FILL":"FIT")+
-                                " fixed guest 1280x720, Android-only transform");
+                                " fixed guest "+guestWidth+"x"+guestHeight+", Android-only transform");
                         AppLanguage.toast(this,stretchFullscreen?
-                                "Puni zaslon ON — 1280x720 rastegnut do rubova":
+                                "Fullscreen ON — "+guestWidth+"×"+guestHeight+" stretched to screen edges":
                                 "Puni zaslon OFF — izvorni omjer slike",
                                 Toast.LENGTH_SHORT).show();
                     }
@@ -847,7 +854,7 @@ public final class WineGuiActivity extends Activity {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -872,8 +879,24 @@ public final class WineGuiActivity extends Activity {
                                         .setMessage("Language saved. The full interface updates the next time you open Blender.")
                                         .setPositiveButton("OK",null).show();
                             }).show();
+                    else if(which==10)showBlenderResolution();
                     else exitConfirmation.confirm(this);
                 }).show();
+    }
+
+    private void showBlenderResolution() {
+        String[] ids={"auto","960x544","1280x720"};
+        BlenderDisplayProfile.Resolution automatic=BlenderDisplayProfile.choose(NativeHost.vulkanDeviceName(),"auto");
+        String[] labels={AppLanguage.t(this,"Automatic")+" · "+automatic.id(),"960 × 544","1280 × 720"};
+        String selected=getSharedPreferences("blender-display",MODE_PRIVATE).getString("resolution","auto");
+        for(int i=0;i<ids.length;i++)if(ids[i].equals(selected))labels[i]="✓ "+labels[i];
+        new AppDialogBuilder(this).setTitle(AppLanguage.t(this,"Resolution")+" · "+guestWidth+"×"+guestHeight)
+                .setItems(labels,(dialog,index)->{
+                    getSharedPreferences("blender-display",MODE_PRIVATE).edit().putString("resolution",ids[index]).apply();
+                    new AppDialogBuilder(this).setTitle("Resolution saved")
+                            .setMessage("Save your project, close Blender and reopen it to apply the new display resolution. Your project's render output resolution is unchanged.")
+                            .setPositiveButton("OK",null).show();
+                }).setNegativeButton("Cancel",null).show();
     }
 
     private void showBlenderProjectFolder() {
@@ -981,7 +1004,7 @@ public final class WineGuiActivity extends Activity {
         final long javaHeapStart=Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory();
         final String metadata="Device: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
-                "\nBlender shell: "+blenderShell+"; guest 1280x720; stretch="+stretchFullscreen+
+                "\nBlender shell: "+blenderShell+"; guest "+guestWidth+"x"+guestHeight+"; stretch="+stretchFullscreen+
                 "; viewport="+xserver.getScreen().getWidth()+"x"+xserver.getScreen().getHeight()+
                 "\nCursor: compact 16–28 physical pixels (large brush cursors preserved)\n";
         AppLanguage.toast(this,blenderBenchmark?"Snimam 20 s — okreći i pomiči isti model":"Snimam 5 sekundi — bez kontinuiranog loga",
@@ -1110,8 +1133,8 @@ public final class WineGuiActivity extends Activity {
     private void positionDesktopKeys(){
         if(desktopKeyRow==null)return;
         android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
-        float scale=stretchFullscreen?metrics.heightPixels/720f:Math.min(metrics.widthPixels/1280f,metrics.heightPixels/720f);
-        float gap=stretchFullscreen?0:(metrics.heightPixels-720*scale)/2f;
+        float scale=stretchFullscreen?metrics.heightPixels/(float)guestHeight:Math.min(metrics.widthPixels/(float)guestWidth,metrics.heightPixels/(float)guestHeight);
+        float gap=stretchFullscreen?0:(metrics.heightPixels-guestHeight*scale)/2f;
         int bar=getPreferences(MODE_PRIVATE).getBoolean("desktop_taskbar_large",true)?44:24;
         FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)desktopKeyRow.getLayoutParams();
         p.bottomMargin=Math.round(gap+bar*scale)+dp(DesktopKeysSettings.lift(this));
