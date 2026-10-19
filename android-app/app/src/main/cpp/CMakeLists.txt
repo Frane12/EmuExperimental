@@ -19,6 +19,13 @@ target_compile_options(drnas_wine_child_exec PRIVATE -Wall -Wextra -Werror -fsta
 target_link_libraries(drnas_wine_child_exec PRIVATE dl)
 
 
+# Experimental diagnostic: dynamic NNAPI accelerator enumeration only.
+# No neural inference, proprietary QNN binary, or runtime GPU intervention.
+add_library(drnas_npu_probe SHARED neuroflow_npu_probe.c)
+target_compile_features(drnas_npu_probe PRIVATE c_std_11)
+target_compile_options(drnas_npu_probe PRIVATE -Wall -Wextra -Werror)
+target_link_libraries(drnas_npu_probe PRIVATE dl)
+
 # Only suppress unavailable Present subscriptions for the PutImage WSI path.
 add_library(drnas_xcb_present_guard SHARED xcb_present_guard.c)
 target_compile_features(drnas_xcb_present_guard PRIVATE c_std_11)
