@@ -44,11 +44,13 @@ class PrimaryOnlyFullscreenTests(unittest.TestCase):
         send = lambda *args: calls.append(args) or True
         primary = window(1)
         state.update([primary], (1280,720), send)
+        primary['style'] = 0
+        primary['rect'] = (0,0,1280,720)
         # New Render Window can have the generic title 'Blender' and be huge.
         state.update([primary, window(10, 'Blender', (0,0,1800,1200))],
                      (1280,720), send)
         self.assertEqual(state.main, 1)
-        self.assertEqual([c[0] for c in calls], [1,1])
+        self.assertEqual([c[0] for c in calls], [1])
 
     def test_already_fitted_main_requires_no_second_win32_call(self):
         state=layout.LayoutController()
@@ -77,7 +79,9 @@ class PrimaryOnlyFullscreenTests(unittest.TestCase):
         calls=[]
         state=layout.LayoutController()
         state.update([window(2,'Preferences'), window(3,'Default IME',(0,0,1,1)),
-                      window(4,'Blender',(0,0,100,40))],
+                      window(4,'Blender',(0,0,100,40)),
+                      window(5,'Blender',(0,0,668,547)),
+                      window(6,'Render Result - Blender 4.5 LTS',(0,0,968,552))],
                       (960,544),lambda *args:calls.append(args) or True)
         self.assertEqual(calls,[])
         self.assertIsNone(state.main)
