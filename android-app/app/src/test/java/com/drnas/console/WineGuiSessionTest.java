@@ -7,6 +7,14 @@ import java.util.*;
 public class WineGuiSessionTest {
     private static final File LINKER=new File("/system/bin/linker64");
     private static final File WINE=new File("/data/app/wine");
+    @Test public void blenderStartsDirectlyWithoutExplorerDesktop() {
+        List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,
+                List.of("--gpu-backend","vulkan","--window-fullscreen"));
+        assertEquals(List.of("/system/bin/linker64","/data/app/wine",
+                BundledBlenderArchive.WINDOWS_EXE,"--gpu-backend","vulkan","--window-fullscreen"),args);
+        assertFalse(args.contains("explorer.exe"));
+        assertFalse(args.stream().anyMatch(a->a.startsWith("/desktop=")));
+    }
 
     @Test public void startsExplorerDesktopAt1280x720ByDefault() {
         assertEquals(1280,WineGuiSession.DESKTOP_WIDTH);

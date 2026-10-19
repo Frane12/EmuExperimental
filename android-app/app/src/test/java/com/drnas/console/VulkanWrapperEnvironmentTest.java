@@ -19,6 +19,9 @@ public final class VulkanWrapperEnvironmentTest {
             env.put("VK_DRIVER_FILES","old-raw-turnip.json");
             env.put("ADRENOTOOLS_DRIVER_PATH","old-driver");
             env.put("ADRENOTOOLS_DRIVER_NAME","old.so");
+            env.put("DRNAS_TURNIP_EXPECTED_SO","old-h29.so");
+            env.put("DRNAS_TURNIP_BUILD_ID","A840-H2.9");
+            env.put("TU_FRANE_A840_AGGRESSIVE","1");
             TurnipRuntime.configureWrapper(lib,env);
             JSONObject icd=new JSONObject(new String(Files.readAllBytes(new File(env.get("VK_DRIVER_FILES")).toPath()),java.nio.charset.StandardCharsets.UTF_8));
             assertEquals(new File(lib,"libvulkan_wrapper.so").getAbsolutePath(),
@@ -29,6 +32,14 @@ public final class VulkanWrapperEnvironmentTest {
             assertFalse(env.containsKey("ADRENOTOOLS_DRIVER_PATH"));
             assertFalse(env.containsKey("ADRENOTOOLS_DRIVER_NAME"));
             assertEquals("0",env.get("WRAPPER_EMULATE_BCN"));
+            assertFalse(env.containsKey("DRNAS_TURNIP_EXPECTED_SO"));
+            assertFalse(env.containsKey("DRNAS_TURNIP_BUILD_ID"));
+            assertFalse(env.containsKey("TU_FRANE_A840_AGGRESSIVE"));
+            java.nio.file.Path descriptor=new File(env.get("VK_DRIVER_FILES")).toPath();
+            java.nio.file.attribute.FileTime before=java.nio.file.attribute.FileTime.fromMillis(123456789L);
+            Files.setLastModifiedTime(descriptor,before);
+            TurnipRuntime.configureWrapper(lib,env);
+            assertEquals(before,Files.getLastModifiedTime(descriptor));
         } finally {
             try(java.util.stream.Stream<java.nio.file.Path> paths=Files.walk(root.toPath())){
                 paths.sorted(java.util.Comparator.reverseOrder()).forEach(p->{try{Files.delete(p);}catch(Exception ignored){}});

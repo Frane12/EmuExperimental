@@ -40,6 +40,12 @@ final class WineGuiSession implements AutoCloseable {
 
     static final int DESKTOP_WIDTH=1280;
     static final int DESKTOP_HEIGHT=720;
+    static List<String> blenderCommand(File linker,File wine,List<String> launchArguments) {
+        List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        args.set(args.size()-1,BundledBlenderArchive.WINDOWS_EXE);
+        args.addAll(launchArguments);
+        return args;
+    }
     static List<String> command(File linker,File wine) {
         return command(linker,wine,"desktop");
     }
@@ -347,7 +353,7 @@ final class WineGuiSession implements AutoCloseable {
         log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
         TurnipRuntime.configureWine(context,plan,env,log);
-        if(maliBlender) {
+        if(maliBlender && !"system".equals(TurnipRuntime.driverChoice(context))) {
             boolean panvkSelected=MaliPanvkRuntime.select(context,env,log);
             log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
                     "STAGED_NOT_DEVICE_VERIFIED":"UNAVAILABLE_SYSTEM_VULKAN_ONLY"));
@@ -412,7 +418,8 @@ final class WineGuiSession implements AutoCloseable {
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
                     "user-shortcut":app)+" target="+launchMode);
-            log.accept("Launching Wine explorer.exe virtual desktop "+
+            log.accept(blenderShell?"Launching Blender directly without Explorer desktop/taskbar":
+                    "Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
                      "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
@@ -420,10 +427,12 @@ final class WineGuiSession implements AutoCloseable {
             Map<String,String> dxvkSeen=new HashMap<>();
             DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
-            ProcessBuilder pb=new ProcessBuilder(command(linker,wine,launchMode,launchArgs))
+            ProcessBuilder pb=new ProcessBuilder(blenderShell?
+                    blenderCommand(linker,wine,launchArgs):command(linker,wine,launchMode,launchArgs))
                     .directory(blenderShell?blenderFolder:proton).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
-            log.accept("[Startup] Pokretanje Explorera · čekam Windows prozor");
+            log.accept(blenderShell?"[Startup] Pokretanje Blendera · čekam Windows prozor":
+                    "[Startup] Pokretanje Explorera · čekam Windows prozor");
             if(nativeVulkan)log.accept("DRNAS_WINEVULKAN_LAUNCH_ARGUMENTS "+launchArgs+
                     " | WineVulkan files checked, actual Windows Vulkan device unverified.");
             launcher=pb.start();

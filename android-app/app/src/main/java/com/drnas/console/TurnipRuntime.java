@@ -17,6 +17,20 @@ import java.util.regex.Pattern;
  * a working AdrenoTools injection path. We log this distinction explicitly.
  */
 final class TurnipRuntime {
+    static String driverChoice(Context context) {
+        return context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE)
+                .getString("graphics-driver-choice","auto");
+    }
+    static void setDriverChoice(Context context,String id) {
+        if(!"auto".equals(id)&&!"system".equals(id)&&GraphicsDriverCatalog.find(id)==null)
+            throw new IllegalArgumentException("Unknown driver choice");
+        context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE).edit()
+                .putString("graphics-driver-choice",id).apply();
+    }
+    private static void clearSelection(JSONObject plan) {
+        for(String key:new String[]{"turnipIcd","turnipAutoSelected","turnipArchive","turnipPreferenceRequested"})
+            plan.remove(key);
+    }
     /** Exact published A840 NeuroFlow H2.9 archive already embedded in APK. */
     static final String A840_H29_SHA256=
             "6b67ba723b2a4881214591055c637e2e513363c44874559d16e2a13b1019bb3d";
@@ -56,6 +70,18 @@ final class TurnipRuntime {
     static boolean selectBundledA840H29(Context context,JSONObject plan,
                                         Consumer<String> log) {
         String target=gpuTarget(NativeHost.vulkanDeviceName());
+        String choice=driverChoice(context);
+        if("system".equals(choice)) {
+            clearSelection(plan);log.accept("DRNAS_DRIVER_SYSTEM requested explicitly");return false;
+        }
+        if(!"auto".equals(choice)) {
+            GraphicsDriverCatalog.Entry entry=GraphicsDriverCatalog.find(choice);
+            clearSelection(plan);
+            if(entry==null||!entry.supports(target,android.os.Build.VERSION.SDK_INT)) {
+                log.accept("DRNAS_DRIVER_REJECTED incompatible choice="+choice+" gpu="+target+"; system fallback");return false;
+            }
+            return selectPinned(context,plan,log,entry.target,entry.asset,entry.source,entry.sha,entry.id);
+        }
         if(TurnipDevicePolicy.legacy(target)) {
             if(android.os.Build.VERSION.SDK_INT<28) {
                 log.accept("Turnip R6 requires Android API 28+; preserving system driver");return false;
@@ -65,6 +91,9 @@ final class TurnipRuntime {
                     "5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81","A6XX_A7XX_R6");
         }
         if(!"A840".equals(target)) {
+            GraphicsDriverCatalog.Entry entry=GraphicsDriverCatalog.find(
+                    "A810".equals(target)?"A810_ULTIMATE":"A830".equals(target)?"A830_SMART":"");
+            if(entry!=null)return selectPinned(context,plan,log,entry.target,entry.asset,entry.source,entry.sha,entry.id);
             log.accept("DRNAS_A840_H29_SKIP gpu="+
                     target+
                     " (never force H2.9 onto another Adreno)");
@@ -207,6 +236,8 @@ final class TurnipRuntime {
         env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParentFile().getAbsolutePath()+"/");
         env.put("ADRENOTOOLS_DRIVER_NAME",driver.getName());
         env.put("DRNAS_TURNIP_PREFERRED","1");
+        env.put("DRNAS_TURNIP_EXPECTED_SO",driver.getAbsolutePath());
+        env.put("DRNAS_TURNIP_BUILD_ID",plan.optString("turnipAutoSelected","custom"));
         if("A840_H2.9".equals(plan.optString("turnipAutoSelected"))) {
             env.put("DRNAS_TURNIP_EXPECTED_SO",driver.getAbsolutePath());
             env.put("DRNAS_TURNIP_BUILD_ID","A840-H2.9");
@@ -238,11 +269,21 @@ final class TurnipRuntime {
         JSONObject icd=new JSONObject().put("file_format_version","1.0.0")
                 .put("ICD",new JSONObject().put("library_path",wrapper.getAbsolutePath()).put("api_version","1.3.0"));
         File descriptor=new File(lib.getParentFile(),"drnas-wrapper-icd.json");
-        Files.write(descriptor.toPath(),icd.toString(2).getBytes(StandardCharsets.UTF_8));
+        byte[] bytes=icd.toString(2).getBytes(StandardCharsets.UTF_8);
+        if(!descriptor.isFile() || !java.util.Arrays.equals(Files.readAllBytes(descriptor.toPath()),bytes)) {
+            Path tmp=Files.createTempFile(descriptor.getParentFile().toPath(),".wrapper-icd-",".tmp");
+            try {
+                Files.write(tmp,bytes);
+                try {Files.move(tmp,descriptor.toPath(),StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}
+                catch(AtomicMoveNotSupportedException unsupported){Files.move(tmp,descriptor.toPath(),StandardCopyOption.REPLACE_EXISTING);}
+            } finally {Files.deleteIfExists(tmp);}
+        }
         env.put("VK_DRIVER_FILES",descriptor.getAbsolutePath());
         env.put("VK_ICD_FILENAMES",descriptor.getAbsolutePath());
         env.put("ADRENOTOOLS_HOOKS_PATH",lib.getAbsolutePath()+"/");
         env.remove("ADRENOTOOLS_DRIVER_PATH");env.remove("ADRENOTOOLS_DRIVER_NAME");
+        env.remove("DRNAS_TURNIP_EXPECTED_SO");env.remove("DRNAS_TURNIP_BUILD_ID");
+        env.remove("TU_FRANE_A840_AGGRESSIVE");
         env.put("DRNAS_TURNIP_PREFERRED","0");
         // sw selects CPU *presentation*, not software shader execution. The
         // real driver still renders; Mesa copies its image to X11 PutImage.

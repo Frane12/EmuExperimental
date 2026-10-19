@@ -76,6 +76,16 @@ def drnas_turnip_assets():
             "url":"https://github.com/StevenMXZ/Adreno-Tools-Drivers/releases/download/v37/Turnip_v26.3.0-R6.zip",
             "sha256":"5fa2305eb9eff64d9347a670e6ca5ef7c518f60e9e782a4db7ee5588c9852d81",
             "gpuTarget":"A6XX_A7XX", "releaseAssetName":"Turnip_v26.3.0-R6.zip"}
+    alternatives = [
+        ("A810", "2.7", "90f047876870c70b986e01ed4784fbafb183ad805dcccabdd6cd695502f1d82d"),
+        ("A830", "2.4", "36676a9588d41eb1e8fb016e54c0ec07611a8a3369fd13782bc456c8e6b0f79c"),
+        ("A840", "2.8", "033039c5c9843ced2f119387bdc0b21af3fa359f97d8fabaa3189dbc411510bc"),
+    ]
+    for gpu,version,sha in alternatives:
+        name=f"Drnas-Turnip-NeuroFlow-{gpu}-H{version}-TESTING-ONLY.zip"
+        own.append({"kind":"Turnip", "name":f"Drnas-Turnip-{gpu}-H{version}.zip",
+                    "compression":"ZIP", "url":base+"drnas-turnip-neuroflow-a8xx-testing-20261016/"+name,
+                    "sha256":sha, "gpuTarget":gpu, "releaseAssetName":name})
     return [legacy] + own
 
 

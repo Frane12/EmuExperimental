@@ -36,10 +36,10 @@ final class BundledComponents {
         if (manifest.getInt("schema") != 1) throw new IOException("Unsupported bundled schema");
         JSONArray items = manifest.getJSONArray("items");
         // 2 core WCPs (Proton, FEXCore) + 2 DXVK WCP variants +
-        // 4 Turnip ZIPs (shared A6xx/A7xx, A810, A830, A840) = 8 entries.
+        // 7 Turnip ZIPs (shared A6/A7 plus two variants for each A8 GPU) = 11 entries.
         // The count is a sanity guard, not a requirement for every optional GPU.
         log.accept("[bundle] Manifest lists " + items.length() + " bundled components");
-        if (items.length() < 3 || items.length() > 8)
+        if (items.length() < 3 || items.length() > 11)
             throw new IOException("Bundled manifest component count out of range: " + items.length());
         Set<String> kinds = new HashSet<>();
         File vault = new File(context.getFilesDir(), "wcp-vault");
@@ -54,7 +54,7 @@ final class BundledComponents {
             long expectedSize = p.getLong("bytes");
             String gpuTarget=p.optString("gpuTarget","");
             String variant=p.optString("variant","");
-            String kindKey=kind.equals("Turnip")?kind+gpuTarget:
+            String kindKey=kind.equals("Turnip")?kind+gpuTarget+":"+name:
                     kind.equals("DXVK")?kind+variant:kind;
             if (!kinds.add(kindKey) ||
                     (kind.equals("DXVK") &&

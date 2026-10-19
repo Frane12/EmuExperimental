@@ -19,6 +19,13 @@ typedef struct {uint8_t type,pad;uint16_t sequence;uint32_t length;uint32_t capa
 Cookie xcb_query_extension(void *c,uint16_t n,const char *s) {(void)c;(void)n;(void)s;return (Cookie){1};}
 Reply *xcb_query_extension_reply(void *c,Cookie k,void **e) {(void)c;(void)k;(void)e;Reply *r=calloc(1,sizeof(*r));r->present=atoi(getenv("FAKE_PRESENT"));return r;}
 Cookie xcb_no_operation(void *c) {(void)c;return (Cookie){101};}
+static int wire_queries;
+const Reply *xcb_get_extension_data(void *c,Extension *e) {
+ (void)c;(void)e;static Reply cached;static int valid;
+ if(!valid){cached.present=atoi(getenv("FAKE_PRESENT"));wire_queries++;valid=1;}
+ return &cached;
+}
+int fake_wire_queries(void) {return wire_queries;}
 Cookie xcb_no_operation_checked(void *c) {(void)c;return (Cookie){102};}
 Cookie xcb_present_query_capabilities(void *c,uint32_t t) {(void)c;(void)t;return (Cookie){301};}
 CapReply *xcb_present_query_capabilities_reply(void *c,Cookie k,void **e) {(void)c;(void)k;(void)e;CapReply *r=calloc(1,sizeof(*r));r->capabilities=15;return r;}
@@ -40,6 +47,7 @@ extern Cookie xcb_present_select_input(void *,uint32_t,uint32_t,uint32_t);
 extern Cookie xcb_present_select_input_checked(void *,uint32_t,uint32_t,uint32_t);
 extern void *xcb_register_for_special_xge(void *,Extension *,uint32_t,uint32_t *);
 extern void xcb_unregister_for_special_event(void *,void *);
+extern int fake_wire_queries(void);
 int main(void) {
  Extension e={"Present",0},other={"Other",0};
  printf("%u %u ",xcb_present_select_input(0,1,2,7).sequence,xcb_present_select_input_checked(0,1,2,0).sequence);
@@ -48,7 +56,8 @@ int main(void) {
  CapReply *capreply=xcb_present_query_capabilities_reply(0,capcookie,0);
  printf("%d %d %u %u\n",q!=0,xcb_register_for_special_xge(0,&other,1,0)!=0,capcookie.sequence,capreply?capreply->capabilities:0);
  free(capreply);
- xcb_unregister_for_special_event(0,q);return 0;
+ xcb_unregister_for_special_event(0,q);
+ fprintf(stderr,"WIRE_QUERIES=%d\n",fake_wire_queries());return 0;
 }
 '''
 
@@ -73,5 +82,6 @@ class GuardTest(unittest.TestCase):
                     self.assertEqual(result.stdout.strip(),want)
                     self.assertEqual('DRNAS_XCB_GUARD skipped' in result.stderr,want.startswith('101'))
                     self.assertEqual('DRNAS_XCB_GUARD_QUERY_BYPASS' in result.stderr,want.startswith('101'))
+                    self.assertIn('WIRE_QUERIES='+('1' if enabled=='1' and mode=='sw,noshm' else '0'),result.stderr)
 
 if __name__=='__main__': unittest.main()

@@ -31,12 +31,14 @@ static int absent_present(void *connection) {
     const char *enabled = getenv("DRNAS_XCB_PRESENT_GUARD");
     const char *mode = getenv("MESA_VK_WSI_DEBUG");
     if (!enabled || strcmp(enabled, "1") || !mode || strcmp(mode, "sw,noshm")) return 0;
-    Cookie (*query)(void *, uint16_t, const char *) = resolve("xcb_query_extension", "libxcb.so.1");
-    ExtensionReply *(*reply)(void *, Cookie, void **) = resolve("xcb_query_extension_reply", "libxcb.so.1");
-    ExtensionReply *answer = reply(connection, query(connection, 7, "Present"), NULL);
-    int absent = answer && !answer->present;
-    free(answer);
-    return absent;
+    /* libxcb owns this cache per connection and clears it on disconnect.
+     * Avoid a new QueryExtension round trip for each wrapper hook. Never
+     * cache connection pointers ourselves: their addresses can be reused. */
+    static Extension present_extension = {"Present", 0};
+    const ExtensionReply *(*get)(void *, Extension *) =
+        resolve("xcb_get_extension_data", "libxcb.so.1");
+    const ExtensionReply *answer = get(connection, &present_extension);
+    return answer && !answer->present;
 }
 /*
  * Mesa WSI calls QueryCapabilities BEFORE SelectInput.  libxcb-present will
