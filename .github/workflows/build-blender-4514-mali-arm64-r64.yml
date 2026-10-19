@@ -84,7 +84,20 @@ jobs:
           $needle = '%PYDEBUG_CMAKE_ARGS%'
           if ([regex]::Matches($txt,[regex]::Escape($needle)).Count -ne 1) { throw 'Unexpected upstream CMake args' }
           $txt = $txt.Replace($needle,$needle + ' %DRNAS_CMAKE_ARM64%')
+          # Upstream configure_msbuild.cmd appends every XML line to
+          # Directory.Build.props, INCLUDING the opening <Project> root.
+          # make.bat is intentionally invoked twice (configure, then build);
+          # without truncation the second invocation creates 2 root elements
+          # and MSBuild aborts with MSB4024. Create a fresh props document
+          # on each invocation, then append only the remaining XML lines.
+          $opening='echo ^<Project^> >> %BUILD_DIR%\Directory.build.props'
+          $fixed='echo ^<Project^> > %BUILD_DIR%\Directory.build.props'
+          if ([regex]::Matches($txt,[regex]::Escape($opening)).Count -ne 1) {
+            throw 'Upstream Blender MSBuild XML root echo changed; do not build malformed project'
+          }
+          $txt=$txt.Replace($opening,$fixed)
           [IO.File]::WriteAllText($config,$txt)
+          Write-Host 'Fixed MSBuild XML props root: first echo overwrites, subsequent echoes append'
           # CMake intentionally copies the *host* AMD64 processor when using
           # -A ARM64 on an x64 Windows runner. A -D CMAKE_SYSTEM_PROCESSOR
           # cache flag is overwritten by CMake's platform detection.
@@ -196,6 +209,15 @@ jobs:
           $v=[regex]::Match($verText,'set\(CMAKE_CXX_COMPILER_VERSION "([0-9]+)\.([0-9]+)(?:\.([0-9]+))?"\)')
           if (!$v.Success -or [int]$v.Groups[1].Value -lt 20) { throw "CMake using wrong clang-cl: $($v.Value)" }
           Write-Host "Confirmed Windows ARM64, windows_arm64 lib and clang-cl >=20"
+          # Validate XML before wasting time on a full MSBuild attempt.
+          $props=Join-Path $build 'Directory.Build.props'
+          if (!(Test-Path -LiteralPath $props -PathType Leaf)) { throw 'MSBuild Directory.Build.props missing' }
+          $xml=New-Object System.Xml.XmlDocument
+          $xml.Load($props)
+          if ($xml.DocumentElement.LocalName -ne 'Project') {
+            throw 'MSBuild Directory.Build.props invalid root, expected Project'
+          }
+          Write-Host "Pre-build Directory.Build.props XML root validated"
           "BLENDER_BUILD=$build" >> $env:GITHUB_ENV
           Write-Host "Configured Blender Windows ARM64: $build"
 
