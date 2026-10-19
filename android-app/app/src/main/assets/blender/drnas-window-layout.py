@@ -18,7 +18,13 @@ POPUP = 0x80000000
 
 
 def primary_title(title):
-    return title == 'Blender' or ' - Blender' in title
+    if title == 'Blender':
+        return True
+    # Secondary Render Result and Preferences can carry a Blender suffix.
+    if title.startswith(('Render Result - Blender', 'Render - Blender',
+                         'Preferences - Blender', 'Blender Preferences')):
+        return False
+    return ' - Blender' in title
 
 
 class LayoutController:
@@ -41,7 +47,10 @@ class LayoutController:
         if self.main is None:
             candidates = [w for w in visible if not w['owner'] and
                           primary_title(w['title']) and
-                          w['rect'][2] >= 240 and w['rect'][3] >= 140]
+                          # At startup only a desktop-sized GHOST top-level
+                          # can be the primary; Preferences may be titled Blender.
+                          desktop[0] * .9 <= w['rect'][2] <= desktop[0] * 1.2 and
+                          desktop[1] * .9 <= w['rect'][3] <= desktop[1] * 1.2]
             if not candidates:
                 return
             self.main = max(candidates, key=lambda w: w['rect'][2] * w['rect'][3])['handle']
