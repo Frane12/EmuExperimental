@@ -27,8 +27,8 @@ final class XclipseRadvRuntime {
         String n=name==null?"":name.toLowerCase(Locale.ROOT);
         // Device model can be reported without a GPU name on Samsung firmware.
         return n.matches(".*\\bxclipse[ _-]*940\\b.*") ||
-                (m.startsWith("SM-S731") || m.startsWith("SM-S921") ||
-                 m.startsWith("SM-S926") || m.startsWith("SM-S928"));
+                (m.startsWith("SM-S731B") || m.startsWith("SM-S921B") ||
+                 m.startsWith("SM-S926B"));
     }
     static boolean matchesDevice(){
         return compatible(Build.MODEL,NativeHost.vulkanDeviceName(),Build.VERSION.SDK_INT);
