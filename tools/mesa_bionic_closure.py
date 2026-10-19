@@ -94,12 +94,18 @@ def verified_imagefs(path):
                 elif entry.issym():
                     target = entry.linkname
                     if not VALID_LIBRARY.fullmatch(target):
-                        raise ValueError("Unsafe Bionic library symlink: " + name)
+                        # Platform links such as libc.so may legitimately point
+                        # outside usr/lib. They are never copied into this bundle.
+                        # If a needed dep resolves only to an unsafe symlink,
+                        # fetch() will fail closed with the missing library.
+                        continue
                     entries[name] = ("link", target)
                 elif entry.islnk():
                     target = Path(entry.linkname.removeprefix("./"))
                     if target.parent != Path("usr/lib") or not VALID_LIBRARY.fullmatch(target.name):
-                        raise ValueError("Unsafe Bionic library hardlink: " + name)
+                        # Cannot import an archive hardlink outside the pinned
+                        # library directory; fail only if it becomes a required dep.
+                        continue
                     entries[name] = ("link", target.name)
 
         def fetch(name):
