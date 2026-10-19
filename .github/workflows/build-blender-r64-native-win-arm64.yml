@@ -179,7 +179,7 @@ jobs:
               $numVars++
             }
           }
-          if ($env:VSCMD_VER -notmatch '^18\\.[0-9]+' -or $env:VSCMD_ARG_TGT_ARCH -ne 'arm64') {
+          if ($env:VSCMD_VER -notmatch '^18\.[0-9]+' -or $env:VSCMD_ARG_TGT_ARCH -ne 'arm64') {
             throw "Incorrect VS2026 ARM64 environment: VSCMD_VER=$env:VSCMD_VER target=$env:VSCMD_ARG_TGT_ARCH"
           }
           if (!$env:VCToolsRedistDir -or !(Test-Path -LiteralPath $env:VCToolsRedistDir)) {
