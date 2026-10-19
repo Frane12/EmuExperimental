@@ -8,7 +8,11 @@ This private candidate brings the **Windows ARM64 edition of Blender** to Androi
 
 > **Tested:** Blender viewport, project/file dialogs, Eevee GPU operation and animation playback on the developer's Adreno 840 test device. Broader compatibility, render quality, frame pacing, and stability still require testing.
 
-## Window and Mali corrections in this candidate
+## Window, Vulkan and Mali corrections in this candidate
+
+- **Blender Vulkan startup:** the ARM64 direct-launch path now explicitly selects WineVulkan even when the saved app profile was the default. This checks for the native bridge before Wine starts, rather than leaving Vulkan setup implicit. **A real first rendered Blender frame on the updated build still needs to be tested.**
+- **Debugging black windows:** quiet exports now retain Blender's window-layout success/failure markers so a black screen can be separated from incorrect sizing.
+
 
 - **Main window:** fills the display without cropped borders.
 - **Render and other windows:** keep a visible title bar with close/minimize controls and stay inside the display.
@@ -55,7 +59,7 @@ Recognized Adreno 6xx/7xx models: **610, 612, 615, 616, 618, 619, 620, 630, 640,
 
 The app is experimental and requires sufficient storage and available RAM. It does not require root access.
 
-> **Updating from earlier stable-signed builds:** Install this APK over the existing app; it retains `com.drnas.console`, the same permanent signing certificate and a higher version code (**113**). Keep a separate backup of important projects. Older ephemeral LAB packages may use a different signing identity.
+> **Updating from earlier stable-signed builds:** Install this APK over the existing app; it retains `com.drnas.console`, the same permanent signing certificate and a higher version code (**114**). Keep a separate backup of important projects. Older ephemeral LAB packages may use a different signing identity.
 
 ## IMPORTANT — Select your Android project folder at startup
 
