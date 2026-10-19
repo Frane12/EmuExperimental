@@ -60,7 +60,7 @@ Checked the **exact upstream v4.5.14** versions of
 - Proposed `DRNAS_CMAKE_ARM64` appears in the assembled CMake command.
 - Fail-closed guard is inserted before Blender's `LIBDIR` fallback.
 - Blender `find_llvm.cmd` supports `LLVM_EXE` override.
-- Private r64 branch and current live workflow unchanged by this fix draft.
+- The active GitHub Actions workflow and existing Blender executable remain unchanged; only review files were added to the private r64 branch.
 - **Not** proof of Windows PowerShell execution, CMake configuration
   success, compiled Windows ARM64 Blender, or GPU support.
 
