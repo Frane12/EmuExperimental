@@ -1,0 +1,55 @@
+name: Make approved Blender v1.1 asset readable inside private repo
+on:
+  push:
+    branches:
+      - release/blender-v1.1-review
+    paths:
+      - '.github/workflows/promote-blender-v1.1-private-source.yml'
+permissions:
+  contents: write
+concurrency:
+  group: prepare-blender-v1.1-private-source
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify repository remains PRIVATE and exact approved APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == "Frane12/EmuExperimental" ]] || exit 1
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" == true ]] || {
+            echo "::error::Source repository must stay private"; exit 1;
+          }
+          gh api "repos/$GITHUB_REPOSITORY/releases/417178551" > "$RUNNER_TEMP/source-release.json"
+          python3 - "$RUNNER_TEMP/source-release.json" <<'PY'
+          import json,sys
+          release=json.load(open(sys.argv[1]))
+          assert release['id']==417178551
+          assert release['tag_name']=='blender-v1.1-review-39239465737-1'
+          assert release['draft'] is True, 'Already available or release state changed'
+          assets=[a for a in release['assets'] if a['id']==655993266]
+          assert len(assets)==1
+          a=assets[0]
+          assert a['name']=='Blender-v1.1-ARM64-Android-Preview-VULKAN-STABLE-SIGNED.apk'
+          assert a['size']==455187613
+          assert a['digest']=='sha256:e7c2ea996b86ef467a7090d6742e61298cf5d70f863e14ec14ae7843c09618e5'
+          print('Approved stable signed APK digest and private release verified.')
+          PY
+      - name: Make exact source release visible to repository READ tokens (repository remains private)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit blender-v1.1-review-39239465737-1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --title 'Blender v1.1 — Private signed source for Testturnip distribution'
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" == true ]] || exit 1
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/417178551" --jq '.draft')" == false ]] || exit 1
+          echo 'Blender source release readable within PRIVATE EmuExperimental; repository not public.'
