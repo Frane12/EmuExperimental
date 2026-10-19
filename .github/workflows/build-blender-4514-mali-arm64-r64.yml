@@ -61,6 +61,18 @@ jobs:
           git -C $src diff --check
           if ($LASTEXITCODE -ne 0) { throw 'Source whitespace/check errors' }
           git -C $src diff --stat
+          # Host runner is x64; the upstream 4.5 script calls vcvarsall arm64
+          # (ARM64 host!), which cannot run cl.exe on a Windows x64 runner.
+          # Use VS x64-hosted tools targeting ARM64. This is BUILD-SCRIPT-ONLY;
+          # the Blender GPU patch is separately verified against pristine v4.5.14.
+          $vcDetect = Join-Path $src 'build_files/windows/detect_msvc_vswhere.cmd'
+          $detectText = [System.IO.File]::ReadAllText($vcDetect)
+          $oldCall = 'call "%VCVARS%" %BUILD_ARCH%'
+          if (!$detectText.Contains($oldCall)) { throw 'Unrecognized upstream VS compiler detection; refusing unsafe rewrite' }
+          $newCall = 'if "%BUILD_ARCH%" == "arm64" (call "%VCVARS%" x64_arm64) else (call "%VCVARS%" %BUILD_ARCH%)'
+          $detectText = $detectText.Replace($oldCall,$newCall)
+          [System.IO.File]::WriteAllText($vcDetect,$detectText)
+          Write-Host 'CI host-only correction: vcvarsall x64_arm64 (VS x64 cross compiler for ARM64 target)'
           "BLENDER_SOURCE=$src" >> $env:GITHUB_ENV
           "BLENDER_SOURCE_COMMIT=$(git -C $src rev-parse HEAD)" >> $env:GITHUB_ENV
 
@@ -99,7 +111,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Push-Location $env:BLENDER_SOURCE
           try {
-            & cmd.exe /d /c 'make.bat arm64 2022 clang full nobuild'
+            & cmd.exe /d /c 'make.bat arm64 2022 clang full nobuild verbose'
             if ($LASTEXITCODE -ne 0) { throw "Windows ARM64 ClangCl CMake configure failed: $LASTEXITCODE" }
           } finally { Pop-Location }
           $build = Join-Path (Split-Path $env:BLENDER_SOURCE -Parent) 'build_windows_Full_arm64_vc17_Release'
@@ -116,7 +128,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Push-Location $env:BLENDER_SOURCE
           try {
-            & cmd.exe /d /c 'make.bat arm64 2022 clang full'
+            & cmd.exe /d /c 'make.bat arm64 2022 clang full verbose'
             if ($LASTEXITCODE -ne 0) { throw "Native Blender Windows ARM64 build/INSTALL failed: $LASTEXITCODE" }
           } finally { Pop-Location }
 
