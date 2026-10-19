@@ -12,7 +12,7 @@ final class BlenderWindowSetup {
     static void ensure(File prefix,File linker,File wine,File cwd,Map<String,String> env,
                        Consumer<String> log,RawWineTrace raw) throws Exception {
         Path root=prefix.getCanonicalFile().toPath();
-        Path marker=root.resolve(".drnas-blender-window-frames-v1");
+        Path marker=root.resolve(".drnas-blender-window-r38-restore-v1");
         if(Files.isSymbolicLink(marker))throw new IOException("Unsafe Blender frame marker");
         if(Files.isRegularFile(marker,LinkOption.NOFOLLOW_LINKS))return;
         Path setup=root.resolve("drive_c/DRNAS-Setup");
@@ -20,11 +20,11 @@ final class BlenderWindowSetup {
         Files.createDirectories(setup);
         Path file=setup.resolve("blender-window-frames.reg");
         if(Files.isSymbolicLink(file))throw new IOException("Unsafe Blender frame policy file");
-        // Let Wine draw captions for render/preferences windows instead of
-        // asking a desktop WM that does not exist in the Android X server.
+        // A/B r48: explicitly undo the persistent r46 Wine per-app overrides.
+        // Remove only these two values; keep all other user/prefix settings.
         String registry="\ufeffWindows Registry Editor Version 5.00\r\n\r\n"+
                 "[HKEY_CURRENT_USER\\Software\\Wine\\AppDefaults\\blender.exe\\X11 Driver]\r\n"+
-                "\"Managed\"=\"N\"\r\n\"Decorated\"=\"N\"\r\n";
+                "\"Managed\"=-\r\n\"Decorated\"=-\r\n";
         Files.write(file,registry.getBytes(StandardCharsets.UTF_16LE));
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
         args.set(args.size()-1,"reg.exe");
@@ -42,7 +42,7 @@ final class BlenderWindowSetup {
         }
         if(result!=0)throw new IOException("Blender window-frame setup failed: "+result);
         Files.write(marker,new byte[]{'o','k'},StandardOpenOption.CREATE_NEW);
-        log.accept("DRNAS_BLENDER_WINDOW_FRAMES: Wine-owned captions; primary-only screen fitting");
+        log.accept("DRNAS_BLENDER_AB_R38_POLICY: removed managed/decorated overrides; fullscreen without Win32 layout hook");
     }
     private BlenderWindowSetup(){}
 }

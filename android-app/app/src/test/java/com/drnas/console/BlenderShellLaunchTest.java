@@ -5,11 +5,11 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class BlenderShellLaunchTest {
-    @Test public void startsBackendWithNormalWindowStateAndPortableSetup() throws Exception {
+    @Test public void startsVulkanWithR38FullscreenAndPortableSetup() throws Exception {
         List<String> a=BlenderShellLaunch.arguments("","auto");
         assertEquals("vulkan",a.get(a.indexOf("--gpu-backend")+1));
-        assertFalse(a.contains("--window-fullscreen"));
-        assertTrue(a.contains("--window-border"));
+        assertTrue(a.contains("--window-fullscreen"));
+        assertFalse(a.contains("--window-border"));
         assertEquals(BundledBlenderArchive.WINDOWS_SETUP,a.get(a.indexOf("--python")+1));
     }
     @Test public void retainsChosenBackendAndAvoidsDuplicateFlags() throws Exception {

@@ -17,8 +17,8 @@ final class BlenderShellLaunch {
         }
         // Match the tested r27 ARM64 launch; auto must not fall back to GLX.
         if(!backend){args.add("--gpu-backend");args.add("vulkan");}
-        // Keep GHOST in normal window mode. Only the primary HWND fills the screen.
-        if(!windowMode)args.add("--window-border");
+        // A/B r48: restore r38 Blender-owned fullscreen; modern Vulkan unchanged.
+        if(!windowMode)args.add("--window-fullscreen");
         if(!python){args.add("--python");args.add(BundledBlenderArchive.WINDOWS_SETUP);}
         return args;
     }
