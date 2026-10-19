@@ -38,6 +38,19 @@ class TestOverlay(unittest.TestCase):
         self.assertIn('DrnasNativeControls.java', patched)
         self.assertEqual(patched, mod.transform(mod.PACKAGE, patched))
 
+    def test_nested_host_tools_are_headless(self):
+        host_cmake = (
+            "  foreach(_v IN LISTS _host_tools_all_cache_vars)\n"
+            "  endforeach()\n"
+            "  unset(_host_tools_all_cache_vars)\n"
+        )
+        patched = mod.transform(mod.HOST_TOOLS, host_cmake)
+        self.assertIn("-DWITH_HEADLESS=ON", patched)
+        self.assertIn("-DWITH_GHOST_ANDROID=OFF", patched)
+        self.assertIn("-DWITH_GHOST_X11=OFF", patched)
+        self.assertIn("-DWITH_GHOST_WAYLAND=OFF", patched)
+        self.assertEqual(patched, mod.transform(mod.HOST_TOOLS, patched))
+
     def test_manifest_and_runner_have_separate_id(self):
         manifest = '<manifest package="org.blender.blender" android:label="Blender">'
         changed = mod.transform(mod.MANIFEST, manifest)
