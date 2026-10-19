@@ -113,6 +113,7 @@ public final class WineGuiActivity extends Activity {
     private int diagnosticSamples, diagnosticStackSamples;
     private void startInputDiagnostics() {
         diagnosticUiBeat=android.os.SystemClock.uptimeMillis();
+        if(diagnosticThread!=null)return;
         diagnosticThread=new android.os.HandlerThread("drnas-input-watchdog");
         diagnosticThread.start();
         android.os.Handler worker=new android.os.Handler(diagnosticThread.getLooper());
@@ -314,7 +315,7 @@ public final class WineGuiActivity extends Activity {
                 .getBoolean("x11_presentation_mask",false));
         // Keep cheap PutImage frame accounting available even in quiet Blender
         // sessions. A mapped HWND by itself does not prove a Vulkan frame.
-        xserver.setFrameDiagnosticsEnabled(verboseLogs || blenderShell);
+        xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
@@ -326,6 +327,7 @@ public final class WineGuiActivity extends Activity {
         // r52 Blender input hotfix: Android must never wait for Wine/X11
         // under the global XServer lock when a touch, click or key arrives.
         xserver.getScreen().setNonBlockingInputEnabled(blenderShell);
+        xserver.getScreen().setInputDebugEnabled(verboseLogs);
         xserver.getScreen().setCameraTouchMode(false);
         // GPU-backed Android HWUI compositing of Wine's CPU X11 bitmaps.
         // This does NOT implement X11 DRI3/Present or Wine Vulkan WSI.
@@ -346,7 +348,7 @@ public final class WineGuiActivity extends Activity {
         if(blenderShell)desktopCursorOverlay.setHostCropTopGuestPx(
                 blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0);
         desktopCursorOverlay.setBlenderVisibleCursor(blenderShell);
-        desktopCursorOverlay.setDiagnosticSink(this::log);
+        desktopCursorOverlay.setDiagnosticSink(verboseLogs?this::log:null);
         xserver.getScreen().setCursorOverlayListener(desktopCursorOverlay::setCursor);
         desktopCursorOverlay.setClickable(false);
         desktopCursorOverlay.setFocusable(false);
@@ -614,7 +616,9 @@ public final class WineGuiActivity extends Activity {
                 WineShortcuts.isLaunchRequest(requested) ? requested:"desktop";
         xserver.setDiagnosticListener(this::log);
         if(blenderShell) {
-            startInputDiagnostics();
+            // Keep the low-frequency fullscreen bridge, but NEVER launch
+            // the 2s stack/watchdog diagnostics in normal usage.
+            if(verboseLogs)startInputDiagnostics();
             startBlenderFullscreenBridge();
         }
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
@@ -887,7 +891,17 @@ public final class WineGuiActivity extends Activity {
                                 .putBoolean("verbose_diagnostics",verboseLogs).apply();
                         if(raw!=null)raw.setVerbose(verboseLogs);
                         if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
-                        if(xserver!=null)xserver.setFrameDiagnosticsEnabled(verboseLogs);
+                        if(xserver!=null) {
+                            xserver.setFrameDiagnosticsEnabled(verboseLogs);
+                            xserver.getScreen().setInputDebugEnabled(verboseLogs);
+                        }
+                        if(desktopCursorOverlay!=null)
+                            desktopCursorOverlay.setDiagnosticSink(verboseLogs?this::log:null);
+                        if(blenderShell && verboseLogs)startInputDiagnostics();
+                        else if(blenderShell && diagnosticThread!=null) {
+                            diagnosticThread.quitSafely();
+                            diagnosticThread=null;
+                        }
                         log("DRNAS_DIAGNOSTICS_TOGGLE "+(verboseLogs?"ON":"OFF")+
                                 " | X11/raw logging changes live. Wine/DXVK verbose env applies after Reset Wine.");
                         AppLanguage.toast(this,verboseLogs?
@@ -974,7 +988,7 @@ public final class WineGuiActivity extends Activity {
                     else if(which==2)captureRenderSample(20000L,true);
                     else if(which==3)shareGuiLog();
                     else if(which==4)showGlassControls();
-                    else if(which==5)new AppDialogBuilder(this).setTitle("Blender · DRNAS preview")
+                    else if(which==5)new AppDialogBuilder(this).setTitle("Blender v1.1 · DRNAS preview")
                             .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
                             .setPositiveButton("OK",null).show();
                     else if(which==7)showBlenderProjectFolder();
@@ -1448,7 +1462,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r60 smooth Blender viewport zoom (versionCode 128)"+
+                "\nRelease candidate: Blender v1.1 (versionCode 129)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+

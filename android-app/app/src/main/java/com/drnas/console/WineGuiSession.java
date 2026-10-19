@@ -175,9 +175,9 @@ final class WineGuiSession implements AutoCloseable {
         if(guestTarget.startsWith("linkwin:") || guestTarget.startsWith("execwin:"))
             log.accept("DRNAS_GUEST_PATH_OK: "+guestTarget.substring(8)+
                     " (Wine DOS path; not Android /data/... path)");
-        // Only confirmed Mali-G52 hardware (or the verified Redmi 13 model)
-        // receives the experimental PanVK driver. The Adreno path remains
-        // Turnip and is not changed for other applications.
+        // Compatible G52/G72/G76 may attempt pinned PanVK variants;
+        // other Mali chips use their own system Vulkan driver. Driver loads
+        // are accepted only after bounded native Vulkan preflight.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
         final boolean nativeOpenGl=appProfile.nativeOpenGl();
         // Blender's default CLI explicitly requests --gpu-backend vulkan.
@@ -190,13 +190,11 @@ final class WineGuiSession implements AutoCloseable {
                 " selectedOpenGL="+nativeOpenGl+
                 " (Wine bridge checked before launch; first rendered frame not yet verified)");
         if(blenderShell)log.accept("DRNAS_UNIFIED_BLENDER_GPU="+
-                (maliBlender?"MALI_G52_PANVK_EXPERIMENT":
-                SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName())?
-                SamsungXclipseSupport.backend(NativeHost.vulkanDeviceName()):
-                "ADRENO_OR_SYSTEM_VULKAN"));
-        if(blenderShell && SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName()))
-            log.accept("DRNAS_XCLIPSE_940_SUPPORT: Samsung AMD RDNA3 / firmware Vulkan ICD only; "+
-                    "no Turnip/PanVK injection; GPU compatibility requires on-device validation.");
+                BlenderGpuRouting.backend(NativeHost.vulkanDeviceName(),
+                        android.os.Build.VERSION.SDK_INT));
+        if(blenderShell && SamsungXclipseSupport.isXclipse(NativeHost.vulkanDeviceName()))
+            log.accept("DRNAS_XCLIPSE_SUPPORT: Samsung AMD Xclipse / firmware Vulkan ICD only; "+
+                    "no Turnip/PanVK injection; rendering requires on-device validation.");
         // A shell .lnk is not an executable. explorer.exe may ignore trailing
         // flags on .lnk files, so use our Wine-side IShellLinkW launcher when
         // an explicit argument, Native Vulkan, or OpenGL EGL is requested.

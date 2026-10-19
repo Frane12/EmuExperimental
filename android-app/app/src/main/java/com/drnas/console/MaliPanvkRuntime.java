@@ -108,7 +108,9 @@ final class MaliPanvkRuntime {
                 env.put("DRNAS_TURNIP_PREFERRED","1");
                 env.put("DRNAS_MALI_PANVK_PREFERRED","1");
                 env.put("DRNAS_MALI_PANVK_ID",entry.id);
-                env.put("PANVK_DEBUG","startup");env.remove("TU_AUTOTUNE_ALGO");
+                // PANVK_DEBUG=startup produced avoidable diagnostic activity.
+                // Keep native candidate probing, disable tracing in normal use.
+                env.remove("PANVK_DEBUG");env.remove("TU_AUTOTUNE_ALGO");
                 log.accept("DRNAS_DRIVER_AUTO: Mali candidate="+entry.id+" staged; native probe pending");
                 return true;
             } catch(Exception error) {

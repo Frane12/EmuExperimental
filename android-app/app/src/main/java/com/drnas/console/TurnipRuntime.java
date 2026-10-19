@@ -70,12 +70,12 @@ final class TurnipRuntime {
     /** Hardware detection and pinned candidates only; no end-user driver choices. */
     static boolean selectBundledA840H29(Context context,JSONObject plan,Consumer<String> log) {
         clearSelection(plan);
-        if(SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName())) {
-            // Samsung Exynos 2400 Xclipse 940 (AMD RDNA 3): only the
-            // device's own Vulkan ICD may be used. Never inject Turnip/PanVK.
-            log.accept("DRNAS_XCLIPSE_940_SYSTEM_VULKAN: RDNA3 backend recognized; "+
-                    "using Samsung firmware ICD, no bundled proprietary driver; "+
-                    "actual Vulkan device/Present remains unverified.");
+        if(SamsungXclipseSupport.isXclipse(NativeHost.vulkanDeviceName())) {
+            // Samsung Xclipse AMD GPUs (including 920/940): firmware Vulkan
+            // ICD only. Never inject Qualcomm Turnip or Mali PanVK.
+            log.accept("DRNAS_XCLIPSE_SYSTEM_VULKAN: Samsung AMD GPU recognized; "+
+                    "using device firmware ICD; no Adreno/Mali driver injection. "+
+                    "Native Vulkan first-Present will be probed.");
             return false;
         }
         if("system".equals(rememberedDriver(context))) {

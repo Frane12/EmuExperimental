@@ -8,6 +8,9 @@ public class SamsungXclipseSupportTest {
         assertTrue(SamsungXclipseSupport.isXclipse940("Samsung Xclipse 940"));
         assertTrue(SamsungXclipseSupport.isXclipse940("Xclipse-940 (AMD RDNA 3)"));
         assertTrue(SamsungXclipseSupport.isXclipse940("xclipse_940"));
+        assertTrue(SamsungXclipseSupport.isXclipse("Samsung Xclipse 920"));
+        assertTrue(SamsungXclipseSupport.isXclipse("Samsung Xclipse 940"));
+        assertTrue(SamsungXclipseSupport.isXclipse("AMD Xclipse-950"));
     }
     @Test public void neverMisidentifiesAdrenoOrMali() {
         assertFalse(SamsungXclipseSupport.isXclipse940(null));
@@ -15,6 +18,8 @@ public class SamsungXclipseSupportTest {
         assertFalse(SamsungXclipseSupport.isXclipse940("Mali-G52"));
         assertFalse(SamsungXclipseSupport.isXclipse940("Xclipse 920"));
         assertFalse(SamsungXclipseSupport.isXclipse940("Xclipse 9400"));
+        assertFalse(SamsungXclipseSupport.isXclipse("Mali G720"));
+        assertFalse(SamsungXclipseSupport.isXclipse("Adreno 840"));
     }
     @Test public void systemVulkanOnlyAndNoTurnip() {
         assertEquals("SAMSUNG_XCLIPSE_940_SYSTEM_VULKAN",

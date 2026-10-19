@@ -236,6 +236,10 @@ public class ScreenView extends View {
     private volatile boolean nonBlockingInputEnabled;
     private java.util.concurrent.ThreadPoolExecutor inputExecutor;
     private volatile Thread inputWorker;
+    // Review release: expensive per-event tracing and watchdog stack capture
+    // are strictly opt-in. Nonblocking input is ALWAYS enabled for Blender.
+    private volatile boolean inputDebugEnabled;
+    public void setInputDebugEnabled(boolean enabled) {inputDebugEnabled=enabled;}
     private final java.util.concurrent.atomic.AtomicLong inputEventSerial=
             new java.util.concurrent.atomic.AtomicLong();
     private final java.util.concurrent.atomic.AtomicInteger inputStalls=
@@ -269,9 +273,10 @@ public class ScreenView extends View {
         java.util.concurrent.ThreadPoolExecutor executor=inputExecutor;
         if(executor==null)return false;
         final long serial=inputEventSerial.incrementAndGet();
-        final java.util.concurrent.atomic.AtomicBoolean finished=
-                new java.util.concurrent.atomic.AtomicBoolean();
-        final long queuedAt=android.os.SystemClock.uptimeMillis();
+        final boolean debug=inputDebugEnabled;
+        final java.util.concurrent.atomic.AtomicBoolean finished=debug?
+                new java.util.concurrent.atomic.AtomicBoolean():null;
+        final long queuedAt=debug?android.os.SystemClock.uptimeMillis():0;
         try {
             executor.execute(()->{
                 inputStarted=serial;
@@ -283,14 +288,16 @@ public class ScreenView extends View {
                             error.getClass().getSimpleName()+": "+error.getMessage());
                 } finally {
                     inputCompleted=serial;
-                    finished.set(true);
-                    long delay=android.os.SystemClock.uptimeMillis()-queuedAt;
-                    if(delay>600 && (serial<=4 || delay>2500))
-                        _xServer.diagnostic("DRNAS_X11_INPUT_SLOW seq="+serial+
-                                " label="+label+" elapsedMs="+delay);
-                    else if(serial<=24)
-                        _xServer.diagnostic("DRNAS_X11_INPUT_DONE seq="+serial+
-                                " label="+label+" elapsedMs="+delay);
+                    if(debug) {
+                        finished.set(true);
+                        long delay=android.os.SystemClock.uptimeMillis()-queuedAt;
+                        if(delay>600 && (serial<=4 || delay>2500))
+                            _xServer.diagnostic("DRNAS_X11_INPUT_SLOW seq="+serial+
+                                    " label="+label+" elapsedMs="+delay);
+                        else if(serial<=24)
+                            _xServer.diagnostic("DRNAS_X11_INPUT_DONE seq="+serial+
+                                    " label="+label+" elapsedMs="+delay);
+                    }
                 }
             });
         } catch(java.util.concurrent.RejectedExecutionException rejected) {
@@ -299,10 +306,10 @@ public class ScreenView extends View {
                     " (Android UI remains responsive; reset session)");
             return false;
         }
-        if(serial<=24)_xServer.diagnostic("DRNAS_X11_INPUT_QUEUED seq="+serial+" label="+label);
+        if(debug && serial<=24)_xServer.diagnostic("DRNAS_X11_INPUT_QUEUED seq="+serial+" label="+label);
         // Never waits for the worker. Capture its stack if X11 stalls; keep
         // the Android UI, controls and log export responsive.
-        if(serial<=24 || label.startsWith("button") || label.startsWith("key")) {
+        if(debug && (serial<=24 || label.startsWith("button") || label.startsWith("key"))) {
             new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
                 if(finished.get() || !nonBlockingInputEnabled)return;
                 if(inputStalls.incrementAndGet()>5)return;
@@ -1319,7 +1326,7 @@ public class ScreenView extends View {
     // Called only on the existing X11/input path; watchdog reads the immutable
     // snapshot without taking the XServer monitor or touching Window objects.
     private void traceInputState(String cause) {
-        if(!nonBlockingInputEnabled)return;
+        if(!nonBlockingInputEnabled || !inputDebugEnabled)return;
         Window hit=_rootWindow==null?null:_rootWindow.windowAtPoint(_motionX,_motionY);
         inputStateSnapshot="focus="+(_focusWindow==null?0:_focusWindow.getId())+
                 " hit="+(hit==null?0:hit.getId())+" xy="+_motionX+","+_motionY+
@@ -1348,7 +1355,7 @@ public class ScreenView extends View {
             _buttons &= ~mask;
         }
 
-        traceInputState("button_"+button+(pressed?"_down":"_up"));
+        if(inputDebugEnabled)traceInputState("button_"+button+(pressed?"_down":"_up"));
         if (nonBlockingInputEnabled && buttonTraceCount++ < 96)
             _xServer.diagnostic("DRNAS_X11_BUTTON button="+button+" pressed="+pressed+
                     " before="+X11ButtonState.beforeTransition(_buttons,button)+
@@ -1383,7 +1390,7 @@ public class ScreenView extends View {
             } else {
                 int timestamp = _xServer.getTimestamp();
                 Window ew = w.buttonNotify(pressed, _motionX, _motionY, button, timestamp, null);
-                if(nonBlockingInputEnabled && buttonTraceCount<=96)
+                if(inputDebugEnabled && nonBlockingInputEnabled && buttonTraceCount<=96)
                     _xServer.diagnostic("DRNAS_X11_CRITICAL_BUTTON_ROUTE pressed="+pressed+
                             " hit="+w.getId()+" deliveredWindow="+(ew==null?0:ew.getId()));
                 reflectPointerFreezeNextEvent();
@@ -1705,7 +1712,7 @@ public class ScreenView extends View {
      */
     public void processRequest(XServer xServer, Client client, byte opcode, byte arg, int bytesRemaining) throws IOException {
         InputOutput io = client.getInputOutput();
-        if((opcode & 255)>=26 && (opcode & 255)<=35 || opcode==RequestCode.SetInputFocus)
+        if(inputDebugEnabled && ((opcode & 255)>=26 && (opcode & 255)<=35 || opcode==RequestCode.SetInputFocus))
             traceInputState("request_"+(opcode & 255)+"_arg_"+(arg & 255)+"_client_"+client.resourceIdBase());
 
         switch (opcode) {
@@ -1890,7 +1897,7 @@ public class ScreenView extends View {
                 }
                 break;
         }
-        if(((opcode & 255)>=26 && (opcode & 255)<=35) || opcode==RequestCode.SetInputFocus)
+        if(inputDebugEnabled && (((opcode & 255)>=26 && (opcode & 255)<=35) || opcode==RequestCode.SetInputFocus))
             traceInputState("request_done_"+(opcode & 255));
     }
 
@@ -2304,7 +2311,7 @@ public class ScreenView extends View {
         InputOutput io = client.getInputOutput();
         int wid = io.readInt();    // Focus window.
         int time = io.readInt();    // Time.
-        traceInputState("focus_request_target_"+wid+"_client_"+client.resourceIdBase()+"_time_"+time);
+        if(inputDebugEnabled)traceInputState("focus_request_target_"+wid+"_client_"+client.resourceIdBase()+"_time_"+time);
         Window w;
 
         if (wid == 0) {
@@ -2353,7 +2360,7 @@ public class ScreenView extends View {
 
     private void callGrabButtonNotify(Window w, boolean pressed, int motionX, int motionY, int button,
             int grabEventMask, Client grabPointerClient, boolean grabPointerOwnerEvents, int eventState) {
-        traceInputState("grab_delivery_window_"+w.getId()+"_pressed_"+pressed+"_mask_"+grabEventMask);
+        if(inputDebugEnabled)traceInputState("grab_delivery_window_"+w.getId()+"_pressed_"+pressed+"_mask_"+grabEventMask);
         w.grabButtonNotify(pressed, motionX, motionY, button, grabEventMask,
                 grabPointerClient, grabPointerOwnerEvents, eventState);
         reflectPointerFreezeNextEvent();
