@@ -9,9 +9,9 @@ public class BlenderFullscreenSignalTest {
         Path dir=Files.createTempDirectory("drnas-fs");
         Path signal=dir.resolve("drnas-host-fullscreen.signal");
         assertEquals(0,BlenderFullscreenSignal.readSequence(signal));
-        Files.write(signal,"r57:1\\n".getBytes(StandardCharsets.US_ASCII));
+        Files.write(signal,"r57:1".getBytes(StandardCharsets.US_ASCII));
         assertEquals(1,BlenderFullscreenSignal.readSequence(signal));
-        Files.write(signal,"r57:3\\n".getBytes(StandardCharsets.US_ASCII));
+        Files.write(signal,"r57:3".getBytes(StandardCharsets.US_ASCII));
         assertEquals(3,BlenderFullscreenSignal.readSequence(signal));
         BlenderFullscreenSignal.clearStale(signal);
         assertEquals(0,BlenderFullscreenSignal.readSequence(signal));

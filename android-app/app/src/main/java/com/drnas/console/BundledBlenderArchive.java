@@ -55,34 +55,34 @@ final class BundledBlenderArchive {
             "    bpy.context.preferences.inputs.use_mouse_emulate_3_button = True\n"+
             "    bpy.ops.wm.save_userpref()\n"+
             "# r55: restore r50 startup; no Win32 window mutation on Blender UI thread.\n"+
-            "print('DRNAS_BLENDER_LAYOUT_DISABLED r56 r50-window-policy', flush=True)\n"+
-            "# r56: replace the dangerous native fullscreen menu entry, NOT the guest HWND.\n"+
+            "print('DRNAS_BLENDER_LAYOUT_DISABLED r57 r50-window-policy', flush=True)\n"+
+            "# r57: replace the dangerous native fullscreen menu entry, NOT the guest HWND.\n"+
             "# Android already crops the title strip using a matched compositor/input transform.\n"+
             "try:\n"+
             "    import bl_ui.space_topbar as drnas_topbar\n"+
-            "            "    class DRNAS_OT_safe_fullscreen(bpy.types.Operator):\n"+
+            "    class DRNAS_OT_safe_fullscreen(bpy.types.Operator):\n"+
             "        bl_idname = \"drnas.safe_fullscreen\"\n"+
             "        bl_label = \"Toggle Window Fullscreen (DRNAS)\"\n"+
-            "        bl_description = \"Toggle Android fullscreen safely without changing the Wine window\"\n"+
+            "        bl_description = \"Toggle Android fullscreen safely, without Wine window mutation\"\n"+
             "        def execute(self, context):\n"+
             "            try:\n"+
             "                signal = os.path.join(os.path.dirname(__file__), 'drnas-host-fullscreen.signal')\n"+
             "                seq = bpy.app.driver_namespace.get('drnas_host_fullscreen_seq', 0) + 1\n"+
             "                bpy.app.driver_namespace['drnas_host_fullscreen_seq'] = seq\n"+
             "                tmp = signal + '.tmp'\n"+
-            "                with open(tmp, 'w', encoding='ascii') as out:\n"+
-            "                    out.write('r57:%d\\\\n' % seq)\n"+
+            "                with open(tmp, 'w', encoding='ascii') as output:\n"+
+            "                    output.write('r57:%d' % seq)\n"+
             "                os.replace(tmp, signal)\n"+
             "                print('DRNAS_BLENDER_SAFE_FULLSCREEN_REQUEST seq=%d' % seq, flush=True)\n"+
-            "                self.report({'INFO'}, \"Android fullscreen requested without native Wine fullscreen\")\n"+
+            "                self.report({'INFO'}, \"Android fullscreen toggle requested\")\n"+
             "                return {'FINISHED'}\n"+
             "            except Exception as error:\n"+
             "                print('DRNAS_BLENDER_SAFE_FULLSCREEN_REQUEST_FAILED', repr(error), flush=True)\n"+
-            "                self.report({'WARNING'}, \"DRNAS fullscreen request failed; native fullscreen not attempted\")\n"+
+            "                self.report({'WARNING'}, \"Fullscreen request failed; native Wine fullscreen avoided\")\n"+
             "                return {'CANCELLED'}\n"+
             "    if not hasattr(bpy.types, 'DRNAS_OT_safe_fullscreen'):\n"+
-            "        bpy.utils.register_class(DRNAS_OT_safe_fullscreen)\n"
-    def drnas_window_menu(self, context):\n"+
+            "        bpy.utils.register_class(DRNAS_OT_safe_fullscreen)\n"+
+            "    def drnas_window_menu(self, context):\n"+
             "        layout = self.layout\n"+
             "        layout.operator(\"wm.window_new\", text=\"New Window\")\n"+
             "        layout.operator(\"wm.window_new_main\", text=\"New Main Window\")\n"+
@@ -97,7 +97,8 @@ final class BundledBlenderArchive {
             "        layout.operator(\"screen.screenshot\", text=\"Save Screenshot\")\n"+
             "        layout.operator(\"screen.screenshot_area\", text=\"Save Screenshot (Editor)\")\n"+
             "        layout.separator()\n"+
-            "        layout.operator(\"wm.console_toggle\", text=\"Toggle System Console\")\n"+
+            "        layout.operator(\"wm.console_toggle\", text=\"Toggle System Console\")\n"
++
             "    drnas_topbar.TOPBAR_MT_window.draw = drnas_window_menu\n"+
             "    print(\"DRNAS_BLENDER_SAFE_FULLSCREEN_MENU installed=true r57\", flush=True)\n"+
             "except Exception as exc:\n"+
