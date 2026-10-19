@@ -1,0 +1,54 @@
+name: "Blender r64 Windows ARM64: no-build preflight"
+# Source patch + Windows toolchain inventory ONLY. No build, no downloads of
+# multi-GB Blender library submodules, no APK, no release, no signing.
+on:
+  push:
+    branches:
+      - experiment/blender-4514-mali-vulkan-native-r64
+    paths:
+      - ".github/workflows/preflight-blender-4514-arm64.yml"
+      - "tools/preflight_blender_win_arm64_r64.ps1"
+      - "tools/check_blender_mali_patch.py"
+      - "patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch"
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  readonly-preflight:
+    name: Source patch + Windows ARM64 prerequisites (NO COMPILATION)
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - name: Checkout DRNAS source only
+        uses: actions/checkout@v4
+      - name: Clone exact Blender v4.5.14 tag with sparse sources only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $target = Join-Path $env:RUNNER_TEMP 'blender-upstream'
+          git clone -c core.longpaths=true --filter=blob:none --depth=1 --branch v4.5.14 --single-branch --no-checkout https://github.com/blender/blender.git $target
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to obtain exact upstream tag' }
+          git -C $target sparse-checkout init --cone
+          if ($LASTEXITCODE -ne 0) { throw 'Sparse initialization failed' }
+          git -C $target sparse-checkout set intern/ghost/intern source/blender/gpu/vulkan
+          if ($LASTEXITCODE -ne 0) { throw 'Sparse checkout paths failed' }
+          git -C $target checkout --detach v4.5.14
+          if ($LASTEXITCODE -ne 0) { throw 'Upstream tag checkout failed' }
+          "BLENDER_CHECKOUT=$target" >> $env:GITHUB_ENV
+          Write-Host "Exact v4.5.14 checkout prepared. No dependencies fetched."
+      - name: Verify unmodified upstream matches all r64 patch hunks
+        shell: pwsh
+        run: |
+          python tools/check_blender_mali_patch.py "$env:BLENDER_CHECKOUT"
+          if ($LASTEXITCODE -ne 0) { throw 'Patch did not match source' }
+      - name: Inspect Windows ARM64 toolchain (read-only; no CMake or build)
+        shell: pwsh
+        run: |
+          ./tools/preflight_blender_win_arm64_r64.ps1 -BlenderSource "$env:BLENDER_CHECKOUT"
+      - name: Record no-build boundary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "NO native Blender compile, no CMake configure, no APK compile/signing, no releases."
+          Write-Host "External Blender windows_arm64 dependency libs deliberately NOT fetched."
