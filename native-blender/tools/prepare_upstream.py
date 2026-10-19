@@ -25,6 +25,7 @@ MANIFEST = Path("build_files/android/apk/app/src/main/AndroidManifest.xml")
 GRADLE = Path("build_files/android/apk/app/build.gradle")
 PACKAGE = Path("build_files/android/apk/package.sh")
 RUNNER = Path("build_files/android/build.py")
+HOST_TOOLS = Path("build_files/cmake/host_tools.cmake")
 
 
 def replace_once(source: str, old: str, new: str, location: str) -> str:
@@ -62,6 +63,24 @@ def transform(path: Path, original: str) -> str:
             "    }\n",
             str(path))
         return result
+    if path == HOST_TOOLS:
+        # Upstream forwards ANDROID-specific GPU/window options into the
+        # nested Linux host codegen build. That makes its configure demand X11
+        # and would later select an inappropriate GHOST Android backend.
+        # Override ONLY host generator options; ARM64 target flags stay intact.
+        anchor = "  unset(_host_tools_all_cache_vars)\n"
+        updated = (
+            "  # DRNAS Native: host generators must be headless Linux tools, not Android GUI.\n"
+            "  # CMake accepts the last -D assignment, so these override the cache forwarding.\n"
+            "  list(APPEND _host_tools_forwarded_args\n"
+            "    \"-DWITH_HEADLESS=ON\"\n"
+            "    \"-DWITH_GHOST_ANDROID=OFF\"\n"
+            "    \"-DWITH_GHOST_X11=OFF\"\n"
+            "    \"-DWITH_GHOST_WAYLAND=OFF\"\n"
+            "    \"-DWITH_AUDASPACE=OFF\"\n"
+            "  )\n"
+        )
+        return replace_once(original, anchor, anchor + updated, str(path))
     if path == PACKAGE:
         old = '  "$SCRIPT_DIR/app/src/main/java/org/blender/blender/BlenderActivity.java"'
         new = old + ' \\\n' + '  "$SCRIPT_DIR/app/src/main/java/org/blender/blender/DrnasNativeControls.java"'
@@ -110,7 +129,7 @@ def prepare(checkout: Path, overlay_java: Path, apply: bool) -> list[Path]:
             "upstream revision mismatch: pin to " + UPSTREAM_SHA +
             " before applying this overlay; do not blindly patch newer builds")
     changes: dict[Path, str] = {}
-    for relative in (ACTIVITY, MANIFEST, GRADLE, PACKAGE, RUNNER):
+    for relative in (ACTIVITY, MANIFEST, GRADLE, PACKAGE, RUNNER, HOST_TOOLS):
         target = checkout / relative
         if not target.is_file():
             raise FileNotFoundError(target)
