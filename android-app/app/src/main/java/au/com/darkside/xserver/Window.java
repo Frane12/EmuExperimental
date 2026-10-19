@@ -580,8 +580,12 @@ public class Window extends Resource {
 
     boolean isBlenderPrimary() {
         Window root=_screen.getRootWindow();
-        return _isMapped && !_inputOnly && _overrideRedirect && BlenderPopupPolicy.primary(
+        boolean ready=BlenderPopupPolicy.startupPrimary(_isMapped,_inputOnly,
                 titleForStackAudit(),_irect.width(),_irect.height(),root._irect.width(),root._irect.height());
+        if(ready)_xServer.diagnostic("DRNAS_X11_CRITICAL_BLENDER_PRIMARY id="+getId()+
+                " overrideRedirect="+_overrideRedirect+" bounds="+_irect.toShortString()+
+                " startupReady=true");
+        return ready;
     }
 
     private String titleForStackAudit() {

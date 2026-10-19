@@ -4,6 +4,16 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class BlenderPopupPolicyTest {
+    @Test public void directLaunchRecordedOnA840CompletesStartup() {
+        // r44: managed title=Blender, bounds [0,19][1288,743].
+        // Startup detection must not require override_redirect as popup logic does.
+        assertTrue(BlenderPopupPolicy.startupPrimary(true,false,"Blender",1288,724,1280,720));
+        assertTrue(BlenderPopupPolicy.startupPrimary(true,false,"Blender",960,544,960,544));
+        assertFalse(BlenderPopupPolicy.startupPrimary(false,false,"Blender",1288,724,1280,720));
+        assertFalse(BlenderPopupPolicy.startupPrimary(true,true,"Blender",1288,724,1280,720));
+        assertFalse(BlenderPopupPolicy.startupPrimary(true,false,"Default IME",1,1,1280,720));
+        assertFalse(BlenderPopupPolicy.startupPrimary(true,false,"Preferences",668,547,1280,720));
+    }
     @Test public void ownerRaiseKeepsPreferencesAboveAndUnrelatedAppAboveBoth() {
         java.util.List<String> order = new java.util.ArrayList<>(
                 java.util.Arrays.asList("desktop", "preferences", "main", "other-app"));
@@ -41,3 +51,4 @@ public class BlenderPopupPolicyTest {
         assertFalse(BlenderPopupPolicy.auxiliary("Preferences",1400,600,1288,728));
     }
 }
+

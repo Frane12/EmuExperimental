@@ -3,6 +3,13 @@ package au.com.darkside.xserver;
 /** Bounded fallback for Wine's unmanaged Blender windows without owner hints. */
 final class BlenderPopupPolicy {
     private BlenderPopupPolicy() {}
+    /** Both managed (direct Wine launch) and unmanaged (Explorer desktop)
+     * primary windows can finish startup. override_redirect is only relevant
+     * to the separate, conservative popup-stacking fallback below. */
+    static boolean startupPrimary(boolean mapped,boolean inputOnly,String title,
+                                  int width,int height,int desktopWidth,int desktopHeight) {
+        return mapped&&!inputOnly&&primary(title,width,height,desktopWidth,desktopHeight);
+    }
 
     static <T> boolean moveAbove(java.util.List<T> order, T child, T owner) {
         int childIndex = order.indexOf(child), ownerIndex = order.indexOf(owner);
