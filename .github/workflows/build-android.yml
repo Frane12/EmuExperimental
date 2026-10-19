@@ -1,47 +1,8 @@
-name: Blender DRNAS r38 - render transfer audit and FPS
+name: Blender r38 Xclipse 940 - ISOLATED PRIVATE
 on:
   push:
     branches:
-      - main
-      - feat/bundled-runtime-autostart
-      - experiment/proton11-anon-pe-v0.5.16
-      - feat/explorer-desktop-1280x720-v0.5.17
-      - feat/wine-power-progress-taskbar-touch-v0.5.18
-      - feat/desktop-audio-turnip-reset-v0.5.19
-      - feat/persistent-prefix-mono-vcredist-live-rdrive-v0.5.26
-      - feat/hwui-cursor-dxvk-probe-v0.5.26
-      - feat/keyboard-crash-logs-v0.5.26
-      - feat/ime-fallback-focus-v0.5.27
-      - feat/crysis-windowed-crash-diagnostics-v0.5.28
-      - feat/turnip-cube-v0.5.29
-      - fix/x11-window-present-v0.5.33
-      - fix/turnip-autotuner-v0.5.34
-      - fix/x11-framing-fex-performance-v0.5.36
-      - fix/x11-dependency-diagnostics-v0.5.37
-      - experiment/dxvk-fifo-wsi-v0.5.38
-      - experiment/first-present-teardown-v0.5.39
-      - experiment/wsi-mode-diagnostics-v0.5.44
-      - feat/emudrnas-fullscreen-stretch-prealpha-r4
-      - feat/emudrnas-retro-shortcuts-tools-r5
-      - feat/emudrnas-compact-breeze-r7
-      - fix/r13-bundled-wcp-boot
-      - fix/r15-desktop-launch-keys-taskbar
-      - feat/winevulkan-merged-r16
-      - feat/blender-vulkan-shortcuts-r17
-      - fix/r18-blender-arm64-dxgi-guard
-      - diagnostic/r19-native-dxgi-load-trace
-      - fix/r21-blender-arm64-dxgi-stage
-      - fix/r22-blender-popup-map-state
-      - fix/r23-compositor-window-stability
-      - fix/r24-x11-popups-geometry-fastcopy
-      - feat/r25-wine11-egl-opengl-experiment
-      - feat/r28-blender-shell
-      - fix/r29-blender-arm64-dxgi-launch
-      - fix/r30-blender-cursor-startup
-      - experiment/r31-blender-mali-g52-panvk
-      - feat/r32-unified-blender-mali-merged
-      - feat/r33-blender-android-save-export
-      - feat/r34-blender-direct-d-drive
+      - experiment/blender-r38-xclipse940-isolated
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
@@ -116,6 +77,17 @@ jobs:
           unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
           unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F libvulkan_panfrost.so
           unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F NOTICE.txt
+      - name: Bundle independently SHA-pinned experimental RADV Xclipse 940 v1.7.0
+        run: |
+          set -euo pipefail
+          mkdir -p android-app/app/src/main/assets/xclipse
+          curl -fL --retry 3 --retry-delay 3 --max-time 180 \
+            "https://github.com/JimVulkan/radv-xclipse/releases/download/v1.7.0/radv-xclipse-27.0.0-devel-0340c63.zip" \
+            -o android-app/app/src/main/assets/xclipse/radv-xclipse-27.0.0-devel-0340c63.zip
+          echo "0155e9114f8f8b975107c49495e4730161b45805d52fe955cd1e4aed888b4763  android-app/app/src/main/assets/xclipse/radv-xclipse-27.0.0-devel-0340c63.zip" | sha256sum -c -
+          unzip -t android-app/app/src/main/assets/xclipse/radv-xclipse-27.0.0-devel-0340c63.zip
+          unzip -l android-app/app/src/main/assets/xclipse/radv-xclipse-27.0.0-devel-0340c63.zip | grep -F vulkan.radeon.so
+          unzip -l android-app/app/src/main/assets/xclipse/radv-xclipse-27.0.0-devel-0340c63.zip | grep -F NOTICE.txt
       - name: Bundle pinned Android PulseAudio and AAudio output
         run: |
           python3 tools/package_audio_runtime.py android-app/app/src/main
@@ -256,12 +228,14 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Dxvk-1.10.3-async.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A6xx-A7xx-R6.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/mali-panvk-26.3.0-devel-r4.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep xclipse/radv-xclipse-27.0.0-devel-0340c63.zip
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep -F "package: name='com.drnas.blender.xclipse940.lab'"
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
-      - name: Stage stable-signed EmuDrnas preAlpha APK (updates enabled)
+      - name: Stage independent, stable-signed Xclipse TEST APK
         if: github.event_name != 'pull_request'
         shell: bash
         run: |
@@ -273,36 +247,36 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r38-Render-Transfer-FPS-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-r38-Xclipse940-ISOLATED-TEST-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          Blender DRNAS r38 - render transfer audit and FPS
-          Package: com.drnas.console
-          versionCode: 104
+          Blender r38 Xclipse 940 - independent experimental test app
+          Package: com.drnas.blender.xclipse940.lab (independent of com.drnas.console)
+          versionCode: 1
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
-          In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Reusable bounded X11 request buffers (4 MiB retained per client; larger requests released), direct BGRX decoding from framed request without the extra full-image byte copy, snapshot-free CopyArea for independent opaque source/destination bitmaps, overflow and zero-area guards, corrected receive timing, compact UI FPS HUD enabled after Blender maps with a menu toggle and idle-zero behavior. UI FPS measures Android desktop draw callbacks, not Blender engine or Vulkan Present FPS. Preserves direct Android D drive, D-only volume list, Mesa R6 and existing A8xx/Mali selection. The backend still uses GPU readback and X11 PutImage; native Android GPU-buffer presentation is researched, not implemented. FPS gains and actual rendering correctness need on-device A/B tests. Same stable certificate, versionCode 104.
-          Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
+          This APK has its own app data, Wine prefix and chosen D: folder grant. It installs alongside the normal Blender. Never upgrades or replaces the public Blender.
+          Base: r38 pixel transfer/FPS. Added: hardware-gated RADV Xclipse 940 v1.7.0 experimental driver with pinned SHA-256; Samsung firmware Vulkan fallback on staging failure; latest r54 keyboard proportions with LMB/MMB touch-hold for mouse-free sculpting/orbit. Actual GPU/WSI Blender functionality is unverified until device test.
+          Private owner/tester draft only. If GPU hangs, reboot the phone, share logs and do not enable it on other hardware.
           EOF
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r38-Render-Transfer-FPS-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r38-Render-Transfer-FPS-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-r38-Xclipse940-ISOLATED-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
+          unzip -t "$RUNNER_TEMP/Blender-r38-Xclipse940-ISOLATED-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
+        continue-on-error: false
         with:
-          name: Blender-DRNAS-r38-Render-Transfer-FPS-test-ZIP
+          name: Blender-r38-Xclipse940-ISOLATED-private
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
       - name: Preserve verified APK in a private draft release
-        if: success() && github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive')
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/experiment/blender-r38-xclipse940-isolated'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r38-render-fps-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r38-Render-Transfer-FPS-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r38 - lean pixel transport and FPS HUD" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="blender-r38-xclipse940-isolated-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-r38-Xclipse940-ISOLATED-preview.zip" --draft --target "$GITHUB_SHA" --title "PRIVATE TEST · Blender r38 Xclipse 940 ISOLATED" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
 
 
 
