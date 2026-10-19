@@ -53,7 +53,14 @@ final class BundledBlenderArchive {
             "    bpy.context.preferences.view.show_splash = False\n"+
             "    bpy.context.preferences.inputs.use_emulate_numpad = True\n"+
             "    bpy.context.preferences.inputs.use_mouse_emulate_3_button = True\n"+
-            "    bpy.ops.wm.save_userpref()\n";
+            "    bpy.ops.wm.save_userpref()\n"+
+            "# Only the original Blender HWND gets borderless guest fullscreen.\n"+
+            "# Preferences, Render and file dialogs keep Wine's native window controls.\n"+
+            "try:\n"+
+            "    import runpy\n"+
+            "    runpy.run_path(os.path.join(os.path.dirname(__file__), 'drnas-window-layout.py'), run_name='__main__')\n"+
+            "except Exception as drnas_fullscreen_error:\n"+
+            "    print('DRNAS_BLENDER_PRIMARY_FULLSCREEN_SETUP_FAILED', repr(drnas_fullscreen_error), flush=True)\n";
 
     static boolean ready(Path target) throws IOException {
         Path marker=target.resolve(".drnas-bundle-sha256");

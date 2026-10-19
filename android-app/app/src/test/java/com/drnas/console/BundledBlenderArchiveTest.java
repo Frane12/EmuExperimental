@@ -29,7 +29,11 @@ public class BundledBlenderArchiveTest {
         assertTrue(Files.isRegularFile(target.resolve("blender.exe")));
         assertTrue(Files.isDirectory(target.resolve("4.5/config")));
         assertEquals(hash(zip),new String(Files.readAllBytes(target.resolve(".drnas-bundle-sha256")),java.nio.charset.StandardCharsets.US_ASCII));
-        assertTrue(new String(Files.readAllBytes(target.resolve("drnas-startup.py")),java.nio.charset.StandardCharsets.UTF_8).contains("userpref.blend"));
+        String startup=new String(Files.readAllBytes(target.resolve("drnas-startup.py")),java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(startup.contains("userpref.blend"));
+        assertTrue(startup.contains("drnas-window-layout.py"));
+        assertTrue(startup.contains("runpy.run_path"));
+        assertTrue(startup.contains("DRNAS_BLENDER_PRIMARY_FULLSCREEN_SETUP_FAILED"));
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
     }
     @Test public void badHashRollsBackAllFiles() throws Exception {

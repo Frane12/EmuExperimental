@@ -564,7 +564,7 @@ public final class WineGuiActivity extends Activity {
                     } else {
                         startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                     }
-                    log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; Android immersive active; guest window mode unforced":"mapped X11 window after Explorer launch"));
+                    log("DRNAS_DESKTOP_CONFIRMED: "+(blenderShell?"Blender primary mapped; Android immersive active; primary-only Win32 fullscreen requested (verify DRNAS_BLENDER_PRIMARY_FULLSCREEN)":"mapped X11 window after Explorer launch"));
                 }
                 else {
                     if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
