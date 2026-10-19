@@ -70,6 +70,14 @@ final class TurnipRuntime {
     /** Hardware detection and pinned candidates only; no end-user driver choices. */
     static boolean selectBundledA840H29(Context context,JSONObject plan,Consumer<String> log) {
         clearSelection(plan);
+        if(SamsungXclipseSupport.isXclipse940(NativeHost.vulkanDeviceName())) {
+            // Samsung Exynos 2400 Xclipse 940 (AMD RDNA 3): only the
+            // device's own Vulkan ICD may be used. Never inject Turnip/PanVK.
+            log.accept("DRNAS_XCLIPSE_940_SYSTEM_VULKAN: RDNA3 backend recognized; "+
+                    "using Samsung firmware ICD, no bundled proprietary driver; "+
+                    "actual Vulkan device/Present remains unverified.");
+            return false;
+        }
         if("system".equals(rememberedDriver(context))) {
             log.accept("DRNAS_DRIVER_AUTO: using last verified system backend for this device/build");
             return false;
