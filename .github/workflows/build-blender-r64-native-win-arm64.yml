@@ -88,6 +88,104 @@ jobs:
           $build=Join-Path $env:RUNNER_TEMP 'drnas-blender4514-native-build'
           $lib=Join-Path $src 'lib/windows_arm64'
           $config=Join-Path $src 'build_files/cmake/config/blender_full.cmake'
+          # Blender 4.5 ARM64 insists on an initialized VS developer shell:
+          # platform_win32.cmake:56-73 reads VSCMD_VER from environment,
+          # and line 19 reads VCToolsRedistDir. -G/-A/-T alone are insufficient.
+          # Import full, actual vcvarsall environment rather than fabricating
+          # VSCMD_VER or bypassing upstream checks.
+          $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path -LiteralPath $vswhere)) { throw 'Missing VS2026 vswhere on ARM64 host' }
+          $installs=@(& $vswhere -latest -version '[18.0,19.0)' -property installationPath)
+          if ($LASTEXITCODE -ne 0 -or !$installs -or ![string]$installs[0]) {
+            throw 'Cannot discover VS2026 developer command prompt'
+          }
+          $vcvars=Join-Path ([string]$installs[0]).Trim() 'VC/Auxiliary/Build/vcvarsall.bat'
+          if (!(Test-Path -LiteralPath $vcvars -PathType Leaf)) {
+            throw "VS2026 vcvarsall.bat not found: $vcvars"
+          }
+          $envScript=Join-Path $env:RUNNER_TEMP 'drnas-vs2026-arm64-environment.cmd'
+          @(
+            '@echo off'
+            ('call "'+$vcvars+'" arm64 1>nul')
+            'if errorlevel 1 exit /b 1'
+            'set'
+          ) | Set-Content -LiteralPath $envScript -Encoding ascii
+          $environmentLines=@(& cmd.exe /d /c $envScript 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw "VS2026 arm64 vcvarsall initialization failed: $($environmentLines[-1])" }
+          $numVars=0
+          foreach($item in $environmentLines) {
+            $line=[string]$item
+            if($line -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)
+          if ($LASTEXITCODE -ne 0) { throw "Native Windows ARM64 CMake failed: $LASTEXITCODE" }
+          $cache=Get-Content (Join-Path $build 'CMakeCache.txt') -Raw
+          if ($cache -notmatch '(?m)^CMAKE_GENERATOR_PLATFORM:INTERNAL=ARM64\r?$') { throw 'CMake generator is not ARM64' }
+          if ($cache -notmatch '(?m)^LIBDIR:PATH=.+windows_arm64\r?$') { throw 'CMake using wrong library architecture' }
+          if (!(Test-Path (Join-Path $build 'Blender.sln'))) { throw 'Blender.sln missing' }
+          "DRNAS_BLENDER_BUILD=$build" >> $env:GITHUB_ENV
+          Write-Host 'PASS: native Windows ARM64 Blender CMake configuration'
+      - name: Compile and INSTALL full native Windows ARM64 Blender
+        shell: pwsh
+        timeout-minutes: 180
+        run: |
+          $ErrorActionPreference='Stop'
+          & cmake --build $env:DRNAS_BLENDER_BUILD --config Release --target INSTALL --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Real native Blender build failed: $LASTEXITCODE" }
+      - name: Validate Windows ARM64 PE and bundle distribution plus GPL source patch
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          $ErrorActionPreference='Stop'
+          $bin=Join-Path $env:DRNAS_BLENDER_BUILD 'bin/Release'
+          $exe=Join-Path $bin 'blender.exe'
+          if (!(Test-Path $exe -PathType Leaf)) { throw "blender.exe missing: $exe" }
+          $bytes=[IO.File]::ReadAllBytes($exe)
+          $offset=[BitConverter]::ToInt32($bytes,60)
+          if ($offset -lt 64 -or $offset+6 -ge $bytes.Length -or [BitConverter]::ToUInt32($bytes,$offset) -ne 0x4550) { throw 'Bad Windows PE' }
+          if ([BitConverter]::ToUInt16($bytes,$offset+4) -ne 0xAA64) { throw 'Compiled EXE is not ARM64 PE 0xAA64' }
+          $out=Join-Path $env:RUNNER_TEMP 'drnas-blender-native-output'
+          New-Item $out -ItemType Directory -Force | Out-Null
+          $zip=Join-Path $out 'Blender-4.5.14-DRNAS-MaliVulkan-r64-WindowsARM64-NATIVE-PRIVATE.zip'
+          Compress-Archive -Path (Join-Path $bin '*') -DestinationPath $zip -CompressionLevel Optimal
+          if ((Get-Item $zip).Length -gt 1900MB) { throw 'ZIP too large for GitHub release asset' }
+          $digest=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  $(Split-Path $zip -Leaf)" | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @(
+            'Blender v4.5.14 patched for DRNAS Mali Vulkan r64. Native Windows ARM64 build.'
+            "Source: blender v4.5.14 $env:DRNAS_BLENDER_SHA + attached Vulkan r64 patch."
+            "SHA256: $digest"
+            'NOT an Android APK; Mali functionality NOT verified. GPL-2.0-or-later.'
+            'Blender v4.5.14 upstream source: https://github.com/blender/blender/tree/v4.5.14'
+          ) | Set-Content (Join-Path $out 'README.txt') -Encoding utf8
+          Copy-Item 'patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch' $out
+          "DRNAS_BLENDER_OUTPUT=$out" >> $env:GITHUB_ENV
+          Write-Host "PASS: native Windows ARM64 Blender ZIP, SHA256=$digest"
+      - name: Store in PRIVATE DRAFT GitHub release only
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:GITHUB_REPOSITORY -ne 'Frane12/EmuExperimental') { throw 'Wrong GitHub repo' }
+          $private=(gh api "repos/$env:GITHUB_REPOSITORY" --jq '.private').Trim()
+          if ($LASTEXITCODE -ne 0 -or $private -ne 'true') { throw 'Refusing to publish to public repo' }
+          $out=$env:DRNAS_BLENDER_OUTPUT
+          $tag="blender-r64-native-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $zip=Join-Path $out 'Blender-4.5.14-DRNAS-MaliVulkan-r64-WindowsARM64-NATIVE-PRIVATE.zip'
+          gh release create $tag $zip (Join-Path $out 'README.txt') (Join-Path $out 'SHA256SUMS.txt') (Join-Path $out 'blender-4.5.14-mali-vulkan-optional-features-r64.patch') --draft --target $env:GITHUB_SHA --title 'Blender r64 native Windows ARM64 — PRIVATE, NOT DEVICE TESTED' --notes-file (Join-Path $out 'README.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Private draft upload failed' }
+) {
+              [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
+              $numVars++
+            }
+          }
+          if ($env:VSCMD_VER -notmatch '^18\\.[0-9]+' -or $env:VSCMD_ARG_TGT_ARCH -ne 'arm64') {
+            throw "Incorrect VS2026 ARM64 environment: VSCMD_VER=$env:VSCMD_VER target=$env:VSCMD_ARG_TGT_ARCH"
+          }
+          if (!$env:VCToolsRedistDir -or !(Test-Path -LiteralPath $env:VCToolsRedistDir)) {
+            throw 'VS2026 ARM64 redistributable path not initialized'
+          }
+          Write-Host "PASS: imported $numVars genuine VS2026 vcvarsall ARM64 environment variables; VSCMD_VER=$env:VSCMD_VER; target=$env:VSCMD_ARG_TGT_ARCH"
           & cmake -S $src -B $build -G 'Visual Studio 18 2026' -A ARM64 -T ClangCl -C $config -DLIBDIR:PATH=$lib -DWITH_CYCLES_OSL:BOOL=OFF -DWITH_WINDOWS_EXTERNAL_MANIFEST:BOOL=ON
           if ($LASTEXITCODE -ne 0) { throw "Native Windows ARM64 CMake failed: $LASTEXITCODE" }
           $cache=Get-Content (Join-Path $build 'CMakeCache.txt') -Raw
