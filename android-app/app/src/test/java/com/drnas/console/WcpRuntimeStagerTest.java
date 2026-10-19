@@ -141,6 +141,15 @@ public final class WcpRuntimeStagerTest {
         return packed;
     }
 
+    // Android SDK Java stubs do not expose Files.readString/writeString.
+    private static void writeText(java.nio.file.Path path,String content) throws Exception {
+        java.nio.file.Files.write(path,content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    private static String readText(java.nio.file.Path path) throws Exception {
+        return new String(java.nio.file.Files.readAllBytes(path),
+                java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     private static void cleanWork(java.nio.file.Path work) throws Exception {
         try(java.util.stream.Stream<java.nio.file.Path> paths=java.nio.file.Files.walk(work)) {
             paths.sorted(java.util.Comparator.reverseOrder()).forEach(p->{
@@ -157,7 +166,7 @@ public final class WcpRuntimeStagerTest {
             java.nio.file.Path userFile=prefix.toPath().resolve(
                     "drive_c/users/xuser/Documents/important.blend");
             java.nio.file.Files.createDirectories(userFile.getParent());
-            java.nio.file.Files.writeString(userFile,"user project - retain");
+            writeText(userFile,"user project - retain");
             java.util.List<String> log=new java.util.ArrayList<>();
             WcpRuntimeStager.unpackPrefixPack(packed,prefix,log::add);
             assertEquals(true,new java.io.File(prefix,"drnas-prefix.ready").isFile());
@@ -167,7 +176,7 @@ public final class WcpRuntimeStagerTest {
             java.io.File[] backups=work.toFile().listFiles(
                     (folder,name)->name.startsWith(".prefix-incomplete-backup-"));
             assertEquals(1,backups.length);
-            assertEquals("user project - retain",java.nio.file.Files.readString(
+            assertEquals("user project - retain",readText(
                     backups[0].toPath().resolve("drive_c/users/xuser/Documents/important.blend")));
             assertEquals(true,log.stream().anyMatch(m->m.startsWith("PREFIX_RECOVERY_BACKUP:")));
             // A second run is idempotent: it must not produce another backup.
@@ -203,13 +212,13 @@ public final class WcpRuntimeStagerTest {
         java.nio.file.Path work=java.nio.file.Files.createTempDirectory("drnas-prefix-failure");
         try {
             java.io.File broken=work.resolve("broken.txz").toFile();
-            java.nio.file.Files.writeString(broken.toPath(),"not a tar.xz");
+            writeText(broken.toPath(),"not a tar.xz");
             java.io.File prefix=work.resolve("prefix").toFile();
             java.nio.file.Files.createDirectory(prefix.toPath());
-            java.nio.file.Files.writeString(prefix.toPath().resolve("sentinel.txt"),"preserve");
+            writeText(prefix.toPath().resolve("sentinel.txt"),"preserve");
             assertThrows(IOException.class,()->WcpRuntimeStager.unpackPrefixPack(
                     broken,prefix,msg->{}));
-            assertEquals("preserve",java.nio.file.Files.readString(
+            assertEquals("preserve",readText(
                     prefix.toPath().resolve("sentinel.txt")));
             assertEquals(0,work.toFile().listFiles(
                     (folder,name)->name.startsWith(".prefix-incomplete-backup-")).length);
@@ -222,12 +231,12 @@ public final class WcpRuntimeStagerTest {
             java.io.File packed=minimalPrefixPack(work);
             java.nio.file.Path outside=work.resolve("outside");
             java.nio.file.Files.createDirectory(outside);
-            java.nio.file.Files.writeString(outside.resolve("sentinel.txt"),"untouched");
+            writeText(outside.resolve("sentinel.txt"),"untouched");
             java.io.File prefix=work.resolve("prefix").toFile();
             java.nio.file.Files.createSymbolicLink(prefix.toPath(),outside);
             assertThrows(IOException.class,()->WcpRuntimeStager.unpackPrefixPack(
                     packed,prefix,msg->{}));
-            assertEquals("untouched",java.nio.file.Files.readString(
+            assertEquals("untouched",readText(
                     outside.resolve("sentinel.txt")));
         } finally {cleanWork(work);}
     }
