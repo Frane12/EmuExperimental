@@ -234,7 +234,9 @@ public final class WineGuiActivity extends Activity {
         // The prior 707-row mask did not fix the artifact, so opt in only.
         xserver.setPresentationMaskEnabled(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_presentation_mask",false));
-        xserver.setFrameDiagnosticsEnabled(verboseLogs);
+        // Keep cheap PutImage frame accounting available even in quiet Blender
+        // sessions. A mapped HWND by itself does not prove a Vulkan frame.
+        xserver.setFrameDiagnosticsEnabled(verboseLogs || blenderShell);
         xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(

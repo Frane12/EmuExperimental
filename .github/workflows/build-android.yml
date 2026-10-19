@@ -289,15 +289,15 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-Hotfix-1.1-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-Hotfix-1.1-r47-VULKAN-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
           Blender Hotfix 1.1 - private review
           Package: com.drnas.console
-          versionCode: 114
+          versionCode: 115
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 114. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
+          Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 115. Vulkan-only Blender preflight validates native WSI queue-Present in an isolated child without known-stalling swapchain teardown, and tries compatible Vulkan backends if native first Present fails. Blender first visible frame still requires device testing; no OpenGL fallback. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
           cp releases/blender-hotfix-1.1.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"

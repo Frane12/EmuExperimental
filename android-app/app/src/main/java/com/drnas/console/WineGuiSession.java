@@ -383,8 +383,14 @@ final class WineGuiSession implements AutoCloseable {
             File mesa = WineOpenGlRuntime.install(context,log);
             WineOpenGlRuntime.configure(mesa,env,log);
         }
-        if(blenderShell&&!nativeOpenGl)
+        if(blenderShell&&!nativeOpenGl) {
+            // The Java X server already exists at this point. Check it before
+            // asking native Mesa WSI to create its bounded test swapchain.
+            X11Probe.check(6012);
+            env.put("DRNAS_BLENDER_WSI_PREFLIGHT","1");
+            log.accept("DRNAS_BLENDER_VULKAN_WSI_CHECK X11 connected; testing native first queue-present before Wine; no OpenGL fallback");
             TurnipRuntime.verifyAutomaticBackend(context,guiRuntime,plan,env,log,raw);
+        }
         else TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
         audio=new PulseAudioRuntime();

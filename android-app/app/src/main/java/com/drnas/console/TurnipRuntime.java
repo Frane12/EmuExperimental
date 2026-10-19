@@ -96,18 +96,22 @@ final class TurnipRuntime {
         java.util.Set<String> attempted=new java.util.HashSet<>();
         String current=plan.optString("turnipAutoSelected","");
         if(!current.isEmpty())attempted.add(current);
+        // An enumerated Vulkan device does not prove a swapchain can Present.
+        // Blender therefore validates a single native Vulkan present in a
+        // bounded child; the probe exits without known-broken teardown.
+        final boolean firstPresent="1".equals(env.get("DRNAS_BLENDER_WSI_PREFLIGHT"));
         boolean panvk="1".equals(env.get("DRNAS_MALI_PANVK_PREFERRED"));
         boolean custom=env.containsKey("ADRENOTOOLS_DRIVER_NAME");
-        if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+        if(probeWine(context,gui,env,log,raw,firstPresent,firstPresent?"first-present":"fifo")) {
             rememberDriver(context,current.isEmpty()?(panvk?env.getOrDefault("DRNAS_MALI_PANVK_ID","panvk"):"system"):current);
-            log.accept("DRNAS_DRIVER_AUTO_VERIFIED backend="+(current.isEmpty()?(panvk?"PanVK":"system"):current));
+            log.accept("DRNAS_DRIVER_AUTO_VERIFIED backend="+(current.isEmpty()?(panvk?"PanVK":"system"):current)+" check="+(firstPresent?"native-first-present-call":"enumeration")+" WineBlenderPixels=unverified");
             return;
         }
         if(panvk) {
             attempted.add(env.getOrDefault("DRNAS_MALI_PANVK_ID",""));
             while(MaliPanvkRuntime.selectNext(context,env,log,attempted)) {
                 log.accept("DRNAS_DRIVER_AUTO_RETRY backend="+env.get("DRNAS_MALI_PANVK_ID"));
-                if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+                if(probeWine(context,gui,env,log,raw,firstPresent,firstPresent?"first-present":"fifo")) {
                     rememberDriver(context,env.get("DRNAS_MALI_PANVK_ID"));return;
                 }
             }
@@ -116,7 +120,7 @@ final class TurnipRuntime {
             configureWine(context,plan,env,log);
             current=plan.optString("turnipAutoSelected","");
             log.accept("DRNAS_DRIVER_AUTO_RETRY backend="+current);
-            if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+            if(probeWine(context,gui,env,log,raw,firstPresent,firstPresent?"first-present":"fifo")) {
                 rememberDriver(context,current);return;
             }
         }
@@ -124,11 +128,18 @@ final class TurnipRuntime {
             MaliPanvkRuntime.clear(env);
             clearSelection(plan);configureWine(context,plan,env,log);
             log.accept("DRNAS_DRIVER_AUTO_RETRY backend=system");
-            if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+            if(probeWine(context,gui,env,log,raw,firstPresent,firstPresent?"first-present":"fifo")) {
                 rememberDriver(context,"system");return;
             }
         }
-        throw new IOException("No compatible Vulkan backend passed the automatic startup check. Please share the log for this device.");
+        // Preserve existing Vulkan-only execution when this experimental WSI
+        // test cannot produce a first Present. Do not silently switch to GL.
+        if(firstPresent && probeWine(context,gui,env,log,raw,false,"fifo")) {
+            rememberDriver(context,"system");
+            log.accept("DRNAS_BLENDER_WSI_UNVERIFIED native_present_failed; using enumerated system Vulkan only (Blender frame still unverified)");
+            return;
+        }
+        throw new IOException("No compatible Vulkan backend passed native first-Present/driver checks. Please share the Blender log.");
     }
 
     private static boolean selectPinned(Context context,JSONObject plan,Consumer<String> log,
@@ -361,16 +372,18 @@ final class TurnipRuntime {
             else if("x11-only".equals(testMode))command.add("--x11-only");
             else if("create-checkpoints".equals(testMode))command.add("--create-checkpoints");
             else if("present-checkpoints".equals(testMode))command.add("--present-checkpoints");
+            else if("first-present".equals(testMode))command.add("--first-present-no-teardown");
             else if(present&&!"fifo".equals(testMode))throw new IOException("Unknown experiment: "+testMode);
             log.accept(present ? "DRNAS_WSI_TEST mode="+testMode+
-                    " (15 second isolated child, native watcher at 3s; inspect complete cleanup)" :
+                    ("first-present".equals(testMode)?" (isolated native present only, NO teardown; not Blender pixels)":
+                    " (15 second isolated child, native watcher at 3s; inspect complete cleanup)") :
                     "Vulkan startup test: enumerate backend only.");
             ProcessBuilder pb=new ProcessBuilder(command).redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);pb.environment().remove("LD_PRELOAD");
             configurePresentGuard(context,pb.environment());
             log.accept("DRNAS_EXPERIMENT_BEGIN mode="+testMode+" | isolated child; Explorer stays running");
             p=pb.start();Thread output=WineServerDiagnostics.pipe(p,"[Wine Vulkan] ",log,20,raw);
-            boolean ended=p.waitFor(15,java.util.concurrent.TimeUnit.SECONDS);
+            boolean ended=p.waitFor("first-present".equals(testMode)?9:15,java.util.concurrent.TimeUnit.SECONDS);
             if(!ended)p.destroyForcibly();
             output.join(1000);
             log.accept("DRNAS_EXPERIMENT_END mode="+testMode+" result="+(!ended?"TIMEOUT":p.exitValue()==0?"PASS":"FAIL exit="+p.exitValue()));
@@ -379,7 +392,8 @@ final class TurnipRuntime {
                         " probe exceeded 15 seconds; check LAST DRNAS_WSI_TEARDOWN marker to locate blocked cleanup. VK_SUCCESS on Present does not imply clean shutdown.");
             else if(p.exitValue()==0)
                 log.accept("x11-only".equals(testMode)?"Native X11 lifecycle PASSED (no Vulkan loaded).":
-                        "create-checkpoints".equals(testMode)||"create-only".equals(testMode)?"Native Vulkan create/destroy and X11 cleanup PASSED (no Present attempted).":present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
+                        "create-checkpoints".equals(testMode)||"create-only".equals(testMode)?"Native Vulkan create/destroy and X11 cleanup PASSED (no Present attempted).":
+                        "first-present".equals(testMode)?"Native Vulkan queue-present call returned; isolated probe exited without swapchain teardown. Blender pixels and Wine bridge NOT yet verified.":present ? "Native Vulkan X11 PRESENT AND CLEANUP PASSED. Test Direct3D separately to verify the Wine/DXVK path." :
                         "Native Vulkan GPU enumeration PASSED. Windows DXVK adapter/presentation remain unverified.");
             else log.accept("Native Vulkan "+(present?"presentation/cleanup":"enumeration")+" FAILED (exit="+p.exitValue()+"); inspect [Wine Vulkan]. Exit 12 means requested Turnip was NOT verified; no silent success on the system driver.");
             return ended && p.exitValue()==0;

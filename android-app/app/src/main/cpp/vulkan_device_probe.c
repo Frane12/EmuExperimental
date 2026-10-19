@@ -128,7 +128,7 @@ static void *drnas_wsi_watch(void *unused) {
 }
 
 static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhysicalDevice gpu,
-                         VkPresentModeKHR requested_mode,int create_only,int sync_after_present) {
+                         VkPresentModeKHR requested_mode,int create_only,int sync_after_present,int quick_first_present) {
     int status=20;
     void *xlib=dlopen("libX11.so.6",RTLD_NOW|RTLD_LOCAL);
     if(!xlib){fprintf(stderr,"Xlib: %s\n",dlerror());return status;}
@@ -309,6 +309,16 @@ static int present_probe(PFN_vkGetInstanceProcAddr get,VkInstance instance,VkPhy
         puts("DRNAS_WSI_XSYNC 400ms observation completed; teardown follows");
     }
 done:
+    // Native Blender preflight runs in its OWN child. Mesa WSI previously
+    // returned VK_SUCCESS from queue-present then deadlocked in swapchain
+    // teardown. Let the OS reclaim this isolated child on ANY result, without
+    // running the problematic vkDestroySwapchainKHR path before Wine starts.
+    // This proves only the native queue-present call, not Blender pixels.
+    if(quick_first_present) {
+        printf("DRNAS_VULKAN_FIRST_PRESENT status=%d native_call_only pixels_unverified\n",status);
+        fflush(NULL);
+        _exit(status);
+    }
     printf("DRNAS_WSI_TEARDOWN begin after present status=%d\n",status);
     if(device&&idle) {
         VkResult drained=idle(device);
@@ -378,7 +388,9 @@ int main(int argc,char **argv) {
     int immediate=argc==3&&strcmp(argv[2],"--present-immediate")==0;
     int create_only=argc==3&&(strcmp(argv[2],"--create-destroy")==0||strcmp(argv[2],"--create-checkpoints")==0);
     int sync_after_present=argc==3&&(strcmp(argv[2],"--present-sync")==0||strcmp(argv[2],"--present-checkpoints")==0);
-    if(argc==3&&!enumerate_only&&!immediate&&!create_only&&!sync_after_present)return 2;
+    int quick_first_present=argc==3&&strcmp(argv[2],"--first-present-no-teardown")==0;
+    if(argc==3&&!enumerate_only&&!immediate&&!create_only&&!sync_after_present&&!quick_first_present)return 2;
+    if(quick_first_present)puts("DRNAS_VULKAN_FIRST_PRESENT_PREFLIGHT isolated child, no Vulkan/X11 teardown");
     if(create_only)puts("DRNAS_WSI_TEST_A create-destroy only, no Present");
     if(sync_after_present)puts("DRNAS_WSI_TEST_B FIFO Present + XSync/delay observation");
     void *loader=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);
@@ -424,7 +436,7 @@ int main(int argc,char **argv) {
             puts("DRNAS_TURNIP_REQUEST_NOT_HONORED: system/wrapper device is not proof of Turnip activation");
             status=12;continue;
         }
-        status=enumerate_only?0:present_probe(get,instance,devices[i],immediate?VK_PRESENT_MODE_IMMEDIATE_KHR:VK_PRESENT_MODE_FIFO_KHR,create_only,sync_after_present);
+        status=enumerate_only?0:present_probe(get,instance,devices[i],immediate?VK_PRESENT_MODE_IMMEDIATE_KHR:VK_PRESENT_MODE_FIFO_KHR,create_only,sync_after_present,quick_first_present);
         if(!status)break;
     }
     destroy(instance,NULL);dlclose(loader);
