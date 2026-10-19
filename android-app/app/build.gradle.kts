@@ -5,6 +5,9 @@ val drnasKeyPassword = System.getenv("DRNAS_SIGNING_KEY_PASSWORD")
 val drnasStableSigning = listOf(
     drnasKeyPath,drnasStorePassword,drnasKeyAlias,drnasKeyPassword
 ).all { !it.isNullOrBlank() }
+// Deliberately separate from installed public Blender; a recovery LAB build
+// owns its own private storage and cannot overwrite user projects.
+val drnasPrefixRecoveryLab = System.getenv("DRNAS_PREFIX_RECOVERY_LAB") == "1"
 
 // Build jobs that distribute APKs must never silently fall back to a one-off
 // Android debug certificate. Local debug/test builds remain possible.
@@ -53,7 +56,11 @@ android {
             // Use the SAME private secret-backed key on EVERY downloadable build.
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
-            } else {
+            }
+            if (drnasPrefixRecoveryLab) {
+                applicationIdSuffix = ".prefixfixlab"
+                manifestPlaceholders["appLabel"] = "Blender PrefixFix LAB"
+            } else if (!drnasStableSigning) {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
                 applicationIdSuffix = ".prealpha01r4lab"
