@@ -134,8 +134,8 @@ def install():
         if user.IsZoomed(handle):
             user.ShowWindow(handle, 9)  # SW_RESTORE, only on first encounter.
         ctypes.set_last_error(0)
-        user.SetWindowLongPtrW(handle, -16, style)
-        if ctypes.get_last_error():
+        previous = user.SetWindowLongPtrW(handle, -16, style)
+        if previous == 0 and ctypes.get_last_error():
             raise ctypes.WinError(ctypes.get_last_error())
         # Recalculate non-client borders without changing focus, owner or Z order.
         if not user.SetWindowPos(handle, None, *rect, 0x0234):
