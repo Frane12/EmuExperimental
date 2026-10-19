@@ -77,6 +77,7 @@ public final class WineServerDiagnostics {
                     // when pipe buffers fill. No frame-related writes in quiet mode.
                     if(!verbose.getAsBoolean()) {
                         boolean serious=line.startsWith("DRNAS_X11_CRITICAL_") ||
+                                line.startsWith("DRNAS_BLENDER_WINDOW_LAYOUT") ||
                                 line.contains(":err:") ||
                                 line.contains("fatal") || line.contains("dlerror") ||
                                 line.contains("Failed to") || line.contains("X connection to") ||
@@ -98,7 +99,8 @@ public final class WineServerDiagnostics {
                                 (line.contains("NtCreateUserProcess") ||
                                  line.contains("NtTerminateProcess") ||
                                  line.contains("RtlExitUserProcess"));
-                        if(line.startsWith("DRNAS_X11_CRITICAL_") && priority++<120)
+                        if((line.startsWith("DRNAS_X11_CRITICAL_") ||
+                                line.startsWith("DRNAS_BLENDER_WINDOW_LAYOUT")) && priority++<120)
                             log.accept(prefix+line.substring(0,Math.min(line.length(),800)));
                         else if(exitOrCreate && processEvents++<120)
                             log.accept(prefix+"[guest process] "+line.substring(0,Math.min(line.length(),650)));
