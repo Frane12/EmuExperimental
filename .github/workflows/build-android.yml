@@ -50,6 +50,7 @@ on:
       - release/blender-v1.1-r62-compatible
       - experiment/blender-nothing-a142-g610-rescue-r63
       - experiment/blender-xiaomi-g57-opengl-zink-r65
+      - experiment/blender-g57-opengl-depclosure-r66
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
