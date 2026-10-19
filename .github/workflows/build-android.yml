@@ -283,7 +283,7 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_xcb_present_guard.so'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs android-app/app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep "package: name=\x27com.drnas.console.prefixfixlab\x27"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging android-app/app/build/outputs/apk/debug/app-debug.apk | grep -F "package: name='com.drnas.console.prefixfixlab'"
       - name: Stage separate-package PrefixFix LAB APK (private only)
         if: github.event_name != 'pull_request'
         shell: bash
