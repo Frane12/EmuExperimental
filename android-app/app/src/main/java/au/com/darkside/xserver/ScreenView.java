@@ -1464,7 +1464,8 @@ public class ScreenView extends View {
     public boolean onKeyDown(int keycode, KeyEvent event) {
         if(nonBlockingInputEnabled && onAndroidUiThread()) {
             final KeyEvent owned=new KeyEvent(event);
-            queueInput("key_"+keycode+"_down",()->onKeyDown(keycode,owned));
+            final int originalKeycode=keycode;
+            queueInput("key_"+originalKeycode+"_down",()->onKeyDown(originalKeycode,owned));
             return true;
         }
         synchronized (_xServer) {
@@ -1528,7 +1529,8 @@ public class ScreenView extends View {
     public boolean onKeyUp(int keycode, KeyEvent event) {
         if(nonBlockingInputEnabled && onAndroidUiThread()) {
             final KeyEvent owned=new KeyEvent(event);
-            queueInput("key_"+keycode+"_up",()->onKeyUp(keycode,owned));
+            final int originalKeycode=keycode;
+            queueInput("key_"+originalKeycode+"_up",()->onKeyUp(originalKeycode,owned));
             return true;
         }
         synchronized (_xServer) {
