@@ -264,7 +264,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
-        continue-on-error: false
+        continue-on-error: true  # Actions artifact storage may be at quota; the private draft release is the deliverable.
         with:
           name: Blender-r38-Xclipse940-ISOLATED-private
           path: ${{ runner.temp }}/drnas-distribution/
