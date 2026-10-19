@@ -3,124 +3,125 @@ package com.drnas.console;
 import android.content.Context;
 import android.os.Build;
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.*;
 
-/**
- * Opt-in-to-hardware, APK-pinned PanVK Kbase experiment for Mali-G52 MC2.
- * Only the isolated Wine process is configured; no global Android GPU driver
- * is replaced. Do NOT advertise Vulkan success until the native probe succeeds.
- */
+/** Hardware-gated PanVK candidates, isolated to the Wine child environment. */
 final class MaliPanvkRuntime {
-    static final String ARCHIVE = "mali/mali-panvk-26.3.0-devel-r4.zip";
-    static final String SHA256 = "1bf5fdbc6fa7134100f747692436eeee5e112e640a8b5064345facbfac918787";
-    static final String DRIVER = "libvulkan_panfrost.so";
-
-    static boolean isTargetGpu(String model, String vkName) {
-        final String gpu=vkName == null ? "" : vkName.toLowerCase(Locale.ROOT);
-        final String device=model == null ? "" : model.toUpperCase(Locale.ROOT);
-        // Explicit device from the failure report even when stock Vulkan
-        // enumeration returns no physical device.
-        return gpu.contains("mali-g52") || device.equals("24040RN64Y");
+    static final String ARCHIVE="mali/"+MaliDriverCatalog.ENTRIES[0].archive;
+    static final String SHA256=MaliDriverCatalog.ENTRIES[0].sha;
+    static final String DRIVER="libvulkan_panfrost.so";
+    private static final String BASE_LD="DRNAS_MALI_BASE_LD_LIBRARY_PATH";
+    static boolean isTargetGpu(String model,String name) {
+        return !MaliDriverCatalog.gpu(model,name).isEmpty();
     }
-
     static boolean matchesDevice() {
-        return Build.VERSION.SDK_INT >= 31 &&
-                isTargetGpu(Build.MODEL,NativeHost.vulkanDeviceName());
+        return !MaliDriverCatalog.compatible(Build.MODEL,NativeHost.vulkanDeviceName(),
+                Build.VERSION.SDK_INT,"").isEmpty();
     }
-
-    private static String sha(File source) throws Exception {
+    private static boolean elf(File file) throws IOException {
+        if(Files.isSymbolicLink(file.toPath())||!file.isFile()||file.length()<20)return false;
+        try(DataInputStream in=new DataInputStream(new FileInputStream(file))) {
+            byte[] h=new byte[20];in.readFully(h);
+            return h[0]==127&&h[1]=='E'&&h[2]=='L'&&h[3]=='F'&&h[4]==2&&
+                    (h[18]&255)==183&&h[19]==0;
+        }
+    }
+    private static String sha(File file) throws Exception {
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        try(InputStream in=new BufferedInputStream(new FileInputStream(source))) {
-            byte[] buf=new byte[64*1024]; int n;
+        try(InputStream in=new BufferedInputStream(new FileInputStream(file))) {
+            byte[] buf=new byte[65536];int n;
             while((n=in.read(buf))!=-1)if(n>0)digest.update(buf,0,n);
         }
-        StringBuilder hex=new StringBuilder(64);
-        for(byte b:digest.digest())hex.append(String.format(Locale.ROOT,"%02x",b&255));
-        return hex.toString();
+        StringBuilder result=new StringBuilder(64);
+        for(byte b:digest.digest())result.append(String.format(Locale.ROOT,"%02x",b&255));
+        return result.toString();
     }
-
-    private static File install(Context ctx,Consumer<String> log) throws Exception {
-        File root=new File(ctx.getFilesDir(),"mali-panvk/r4");
-        File driver=new File(root,DRIVER);
-        // Reverify the ELF every startup: files live in app-private storage.
-        if(!root.isDirectory()&&!root.mkdirs())throw new IOException("Cannot create PanVK storage");
-        File archive=new File(root,".panvk-package.zip");
-        try(InputStream in=ctx.getAssets().open(ARCHIVE);
-                OutputStream out=new BufferedOutputStream(new FileOutputStream(archive))) {
-            byte[] buf=new byte[65536];int n;
-            while((n=in.read(buf))!=-1)if(n>0)out.write(buf,0,n);
-        }
-        if(!SHA256.equals(sha(archive)))throw new IOException("PanVK r4 archive checksum mismatch");
-        File tmp=new File(root,DRIVER+".partial");
-        long expanded=0;
-        boolean found=false;
-        try(ZipInputStream zip=new ZipInputStream(new FileInputStream(archive))) {
-            ZipEntry entry;
-            while((entry=zip.getNextEntry())!=null) {
-                if(entry.isDirectory())continue;
-                String name=entry.getName();
-                if(!name.equals(DRIVER))continue;
-                if(found)throw new IOException("Duplicate PanVK driver entry");
-                found=true;
-                try(OutputStream out=new BufferedOutputStream(new FileOutputStream(tmp))) {
-                    byte[] buffer=new byte[65536];int n;
-                    while((n=zip.read(buffer))!=-1) {
-                        if(n==0)continue;
-                        expanded+=n;
-                        if(expanded>64L*1024*1024)throw new IOException("PanVK ELF exceeds size limit");
-                        out.write(buffer,0,n);
+    private static File install(Context ctx,MaliDriverCatalog.Entry entry) throws Exception {
+        Path base=new File(ctx.getFilesDir(),"mali-panvk").toPath();
+        Path root=base.resolve(entry.id);
+        if(Files.isSymbolicLink(base)||Files.isSymbolicLink(root))throw new IOException("Unsafe PanVK directory");
+        Files.createDirectories(root);
+        Path marker=root.resolve(".archive-sha256");
+        if(Files.isSymbolicLink(marker))throw new IOException("Unsafe PanVK marker");
+        String[] libraries=entry.g52Only?new String[]{DRIVER,"libc++_shared.so","libdrm.so"}:new String[]{DRIVER};
+        boolean ready=Files.isRegularFile(marker)&&entry.sha.equals(new String(Files.readAllBytes(marker),StandardCharsets.US_ASCII));
+        for(String name:libraries)ready&=elf(root.resolve(name).toFile());
+        if(ready)return root.resolve(DRIVER).toFile();
+        Path archive=Files.createTempFile(base,".panvk-",".zip");
+        Path stage=Files.createTempDirectory(base,".panvk-extract-");
+        Set<String> extracted=new HashSet<>();
+        try {
+            try(InputStream in=ctx.getAssets().open("mali/"+entry.archive)) {
+                Files.copy(in,archive,StandardCopyOption.REPLACE_EXISTING);
+            }
+            if(!entry.sha.equals(sha(archive.toFile())))throw new IOException("PanVK checksum mismatch: "+entry.id);
+            long total=0;
+            try(ZipInputStream zip=new ZipInputStream(Files.newInputStream(archive))) {
+                ZipEntry item;
+                while((item=zip.getNextEntry())!=null) {
+                    String name=item.getName();
+                    if(item.isDirectory()||!Arrays.asList(libraries).contains(name))continue;
+                    if(!extracted.add(name))throw new IOException("Duplicate PanVK library");
+                    long size=0,limit=name.equals(DRIVER)?160L*1024*1024:8L*1024*1024;
+                    try(OutputStream out=Files.newOutputStream(stage.resolve(name),StandardOpenOption.CREATE_NEW)) {
+                        byte[] buffer=new byte[65536];int n;
+                        while((n=zip.read(buffer))!=-1) {
+                            size+=n;total+=n;
+                            if(size>limit||total>176L*1024*1024)throw new IOException("PanVK archive size limit");
+                            out.write(buffer,0,n);
+                        }
                     }
+                    if(!elf(stage.resolve(name).toFile()))throw new IOException("PanVK library is not ARM64 ELF: "+name);
                 }
             }
-        } finally {archive.delete();}
-        if(!found||expanded<200000)throw new IOException("Pinned PanVK ELF missing");
-        try(InputStream in=new FileInputStream(tmp)) {
-            byte[] h=new byte[20];
-            if(in.read(h)!=20||h[0]!=127||h[1]!='E'||h[2]!='L'||h[3]!='F'||
-                    h[4]!=2||(h[18]&255)!=183||h[19]!=0)
-                throw new IOException("PanVK package does not contain ARM64 ELF");
+            for(String name:libraries) {
+                if(!extracted.contains(name))throw new IOException("Missing PanVK dependency: "+name);
+                if(Files.isSymbolicLink(root.resolve(name)))throw new IOException("Unsafe PanVK library");
+            }
+            for(String name:libraries)Files.move(stage.resolve(name),root.resolve(name),StandardCopyOption.REPLACE_EXISTING);
+            Files.write(marker,entry.sha.getBytes(StandardCharsets.US_ASCII));
+            return root.resolve(DRIVER).toFile();
+        } finally {
+            Files.deleteIfExists(archive);
+            for(String name:libraries)Files.deleteIfExists(stage.resolve(name));
+            Files.deleteIfExists(stage);
         }
-        Files.move(tmp.toPath(),driver.toPath(),StandardCopyOption.REPLACE_EXISTING);
-        log.accept("DRNAS_MALI_PANVK_STAGED: "+DRIVER+" "+expanded+
-                " bytes; archive SHA256 verified; GPU execution not yet established");
-        return driver;
     }
-
-    static boolean select(Context ctx, Map<String,String> env, Consumer<String> log) {
-        String deviceName=NativeHost.vulkanDeviceName();
-        if(!matchesDevice()) {
-            log.accept("DRNAS_MALI_PANVK_SKIP: model="+Build.MODEL+" gpu="+deviceName);
-            return false;
+    static boolean select(Context ctx,Map<String,String> env,Consumer<String> log) {
+        return selectNext(ctx,env,log,new HashSet<>());
+    }
+    static boolean selectNext(Context ctx,Map<String,String> env,Consumer<String> log,Set<String> attempted) {
+        for(MaliDriverCatalog.Entry entry:MaliDriverCatalog.compatible(Build.MODEL,
+                NativeHost.vulkanDeviceName(),Build.VERSION.SDK_INT,TurnipRuntime.rememberedDriver(ctx))) {
+            if(!attempted.add(entry.id))continue;
+            try {
+                File driver=install(ctx,entry);
+                env.putIfAbsent(BASE_LD,env.getOrDefault("LD_LIBRARY_PATH",""));
+                env.put("LD_LIBRARY_PATH",driver.getParent()+":"+env.get(BASE_LD));
+                env.put("ADRENOTOOLS_DRIVER_PATH",driver.getParent()+"/");
+                env.put("ADRENOTOOLS_DRIVER_NAME",DRIVER);
+                env.put("DRNAS_TURNIP_PREFERRED","1");
+                env.put("DRNAS_MALI_PANVK_PREFERRED","1");
+                env.put("DRNAS_MALI_PANVK_ID",entry.id);
+                env.put("PANVK_DEBUG","startup");env.remove("TU_AUTOTUNE_ALGO");
+                log.accept("DRNAS_DRIVER_AUTO: Mali candidate="+entry.id+" staged; native probe pending");
+                return true;
+            } catch(Exception error) {
+                log.accept("DRNAS_DRIVER_AUTO: Mali candidate="+entry.id+" unavailable: "+error.getMessage());
+            }
         }
-        try {
-            File driver=install(ctx,log);
-            // Keep the same X11 WSI wrapper used by DRNAS. Its backend driver
-            // override is experimental on Mali and MUST be validated by the
-            // vulkan_device_probe and by Wine/Blender's real frame.
-            File parent=driver.getParentFile().getCanonicalFile();
-            env.put("ADRENOTOOLS_DRIVER_PATH",parent.getAbsolutePath()+"/");
-            env.put("ADRENOTOOLS_DRIVER_NAME",DRIVER);
-            env.put("DRNAS_TURNIP_PREFERRED","1");
-            env.put("DRNAS_MALI_PANVK_PREFERRED","1");
-            env.put("PANVK_DEBUG","startup");
-            env.remove("TU_AUTOTUNE_ALGO");
-            env.put("LD_LIBRARY_PATH",parent.getAbsolutePath()+":"+
-                    env.getOrDefault("LD_LIBRARY_PATH",""));
-            log.accept("DRNAS_MALI_PANVK_BACKEND_REQUESTED: PanVK Kbase r4 for "+Build.MODEL+
-                    " / "+deviceName+"; X11 wrapper retained; adapter and presentation NOT verified");
-            return true;
-        } catch(Exception e) {
-            log.accept("DRNAS_MALI_PANVK_FAILED: "+e.getClass().getSimpleName()+
-                    ": "+e.getMessage()+"; system Vulkan left unchanged");
-            return false;
-        }
+        return false;
+    }
+    static void clear(Map<String,String> env) {
+        String base=env.remove(BASE_LD);
+        if(base!=null)env.put("LD_LIBRARY_PATH",base);
+        for(String key:new String[]{"ADRENOTOOLS_DRIVER_PATH","ADRENOTOOLS_DRIVER_NAME",
+                "DRNAS_TURNIP_PREFERRED","DRNAS_MALI_PANVK_PREFERRED","DRNAS_MALI_PANVK_ID","PANVK_DEBUG"})env.remove(key);
     }
     private MaliPanvkRuntime(){}
 }

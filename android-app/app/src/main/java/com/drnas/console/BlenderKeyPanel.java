@@ -65,6 +65,7 @@ final class BlenderKeyPanel extends LinearLayout {
         gap(top);key(top,"Axis X",KeyEvent.KEYCODE_X);key(top,"Axis Y",KeyEvent.KEYCODE_Y);key(top,"Axis Z",KeyEvent.KEYCODE_Z);
         gap(top);key(top,"Extrude",KeyEvent.KEYCODE_E);key(top,"Box Select",KeyEvent.KEYCODE_B);key(top,"Select All",KeyEvent.KEYCODE_A);
         key(top,"Search",KeyEvent.KEYCODE_F3);key(top,"Play/Pause",KeyEvent.KEYCODE_SPACE);
+        key(top,"Render View",KeyEvent.KEYCODE_F11);
         modifier(bottom,"Shift",KeyEvent.KEYCODE_SHIFT_LEFT);
         modifier(bottom,"Ctrl",KeyEvent.KEYCODE_CTRL_LEFT);
         modifier(bottom,"Alt",KeyEvent.KEYCODE_ALT_LEFT);

@@ -17,6 +17,8 @@ final class BundledBlenderArchive {
     static final String WINDOWS_SETUP="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\drnas-startup.py";
     static final long MAX_EXPANDED=1024L*1024*1024;
     static final String SETUP="import bpy, os\n"+
+            "import runpy\n"+
+            "runpy.run_path(os.path.join(os.path.dirname(__file__), 'drnas-window-layout.py'), run_name='__main__')\n"+
             "# Filter Blender's Volumes panel only; Wine still needs its internal C: disk.\n"+
             "from bl_ui import space_filebrowser as drnas_file_ui\n"+
             "class DRNAS_UL_project_volumes(bpy.types.UIList):\n"+
@@ -143,5 +145,6 @@ final class BundledBlenderArchive {
     }
     private BundledBlenderArchive(){}
 }
+
 
 

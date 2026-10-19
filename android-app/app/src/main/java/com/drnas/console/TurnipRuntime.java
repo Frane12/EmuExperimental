@@ -23,7 +23,7 @@ final class TurnipRuntime {
         catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
         return android.os.Build.FINGERPRINT+":"+gpuTarget(NativeHost.vulkanDeviceName())+":"+version;
     }
-    private static String rememberedDriver(Context context) {
+    static String rememberedDriver(Context context) {
         android.content.SharedPreferences prefs=context.getSharedPreferences("emudrnas-graphics",Context.MODE_PRIVATE);
         return automaticDeviceKey(context).equals(prefs.getString("automatic-driver-device",""))?
                 prefs.getString("automatic-driver-id",""):"";
@@ -99,9 +99,18 @@ final class TurnipRuntime {
         boolean panvk="1".equals(env.get("DRNAS_MALI_PANVK_PREFERRED"));
         boolean custom=env.containsKey("ADRENOTOOLS_DRIVER_NAME");
         if(probeWine(context,gui,env,log,raw,false,"fifo")) {
-            rememberDriver(context,current.isEmpty()?(panvk?"panvk":"system"):current);
+            rememberDriver(context,current.isEmpty()?(panvk?env.getOrDefault("DRNAS_MALI_PANVK_ID","panvk"):"system"):current);
             log.accept("DRNAS_DRIVER_AUTO_VERIFIED backend="+(current.isEmpty()?(panvk?"PanVK":"system"):current));
             return;
+        }
+        if(panvk) {
+            attempted.add(env.getOrDefault("DRNAS_MALI_PANVK_ID",""));
+            while(MaliPanvkRuntime.selectNext(context,env,log,attempted)) {
+                log.accept("DRNAS_DRIVER_AUTO_RETRY backend="+env.get("DRNAS_MALI_PANVK_ID"));
+                if(probeWine(context,gui,env,log,raw,false,"fifo")) {
+                    rememberDriver(context,env.get("DRNAS_MALI_PANVK_ID"));return;
+                }
+            }
         }
         if(!panvk)while(selectAutomatic(context,plan,log,attempted)) {
             configureWine(context,plan,env,log);
@@ -112,6 +121,7 @@ final class TurnipRuntime {
             }
         }
         if(custom || !attempted.isEmpty()) {
+            MaliPanvkRuntime.clear(env);
             clearSelection(plan);configureWine(context,plan,env,log);
             log.accept("DRNAS_DRIVER_AUTO_RETRY backend=system");
             if(probeWine(context,gui,env,log,raw,false,"fifo")) {

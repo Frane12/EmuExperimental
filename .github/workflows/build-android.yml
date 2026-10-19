@@ -1,4 +1,4 @@
-name: Blender DRNAS r46 - Blender Hotfix 1.1
+name: Blender Hotfix 1.1 - private window and Mali compatibility review
 on:
   push:
     branches:
@@ -49,6 +49,7 @@ on:
       - "tools/package_bundled_runtime.py"
       - "tools/package_blender.py"
       - "tools/package_audio_runtime.py"
+      - "tests/test_blender_window_layout.py"
       - "tests/test_dxvk_bundle.py"
       - "tests/test_turnip_bundle.py"
       - "tools/graphics-tests/**"
@@ -116,6 +117,18 @@ jobs:
           unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
           unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F libvulkan_panfrost.so
           unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F NOTICE.txt
+      - name: Bundle additional pinned Mali drivers and dependencies
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --max-time 180 "https://github.com/JimVulkan/mali-panvk/releases/download/v1.2.0/mali-panvk-26.3.0-devel-r3.zip" -o android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip
+          echo "a53aa1747e19e8471bb839de21b570c70a34d868206ffac852e3e684cd284167  android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip" | sha256sum -c -
+          curl -fL --retry 3 --max-time 180 "https://github.com/LukeValen/panvk-mali-g52/releases/download/v0.0.2-alpha/PanVk-V7-0.0.2-alpha.zip" -o android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip
+          echo "a5da75ae597b23337825c5a35d480c7a7cc0c8655d35850ca5fd25b37ac78289  android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip" | sha256sum -c -
+          unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip
+          unzip -t android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip
+          unzip -l android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip | grep -E 'libvulkan_panfrost.so|libc\+\+_shared.so|libdrm.so'
+      - name: Test primary and auxiliary Blender window layout
+        run: python3 -m unittest discover -s tests -p 'test_blender_window_layout.py'
       - name: Bundle pinned Android PulseAudio and AAudio output
         run: |
           python3 tools/package_audio_runtime.py android-app/app/src/main
@@ -256,6 +269,9 @@ jobs:
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Dxvk-1.10.3-async.wcp
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep bundled/Turnip-A6xx-A7xx-R6.zip
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/mali-panvk-26.3.0-devel-r4.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/mali-panvk-26.3.0-devel-r3.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep mali/PanVk-V7-0.0.2-alpha.zip
+          unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep blender/drnas-window-layout.py
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_host.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_nls.so'
           unzip -l android-app/app/build/outputs/apk/debug/app-debug.apk | grep 'lib/arm64-v8a/libdrnas_wine_child_exec.so'
@@ -273,26 +289,27 @@ jobs:
           [[ "$CERT" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || { echo "::error::APK certificate mismatch; refusing distribution"; exit 1; }
           [[ "$CERT" == "393fd0522cbbf36dd17412031a62b1cc29933e5e8e9851637193c73b4eb7d67f" ]] || { echo "::error::Certificate differs from installed r5/r6"; exit 1; }
           mkdir -p "$RUNNER_TEMP/drnas-distribution"
-          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-DRNAS-r46-Hotfix-1.1-STABLE-SIGNED.apk"
+          cp "$APK" "$RUNNER_TEMP/drnas-distribution/Blender-Hotfix-1.1-STABLE-SIGNED.apk"
           cat > "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt" <<EOF
-          Blender DRNAS r46 - Blender Hotfix 1.1
+          Blender Hotfix 1.1 - private review
           Package: com.drnas.console
-          versionCode: 112
+          versionCode: 113
           Signing certificate SHA-256: $CERT
           Signing: persistent key from private DRNAS signing-identity draft release; NOT a runner debug key.
           In-place updates require the SAME signing certificate, SAME applicationId and a HIGHER versionCode.
-          Changed: Blender Hotfix 1.1 (r46). Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 112. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
+          Changed: Blender Hotfix 1.1. Window correction: only the main window fills the display; auxiliary windows receive Wine-drawn title bars, close/minimize controls and bounded positions. Render View button toggles the render window. Adds PanVK r3 and G52 V7 0.0.2 with its dependencies, automatic native-probe fallback, API/model checks and cached verified choice. Mali G52/G72/G76 paths remain experimental.  Continuous left/right mouse hold and drag, larger named translucent controls with 10 percent less background opacity, automatic GPU driver selection and fallback, direct Blender launch, English default, A810 960x544 / stronger GPUs 1280x720 and a saved Resolution menu. Fixes the 92 percent startup overlay for managed Blender windows. Requests Android file access at launch if missing, then selects the project folder for drive D:. Same stable certificate and package, versionCode 113. Experimental community build; not an official Blender Android port. JVM tests and signed APK verification run in CI.
           Previous ephemeral LAB packages cannot be upgraded in place; back up app data before migration.
           EOF
+          cp releases/blender-hotfix-1.1.md "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
           sha256sum "$RUNNER_TEMP/drnas-distribution/"*.apk > "$RUNNER_TEMP/drnas-distribution/SHA256SUMS.txt"
-          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-DRNAS-r46-Hotfix-1.1-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt )
-          unzip -t "$RUNNER_TEMP/Blender-DRNAS-r46-Hotfix-1.1-preview.zip"
+          ( cd "$RUNNER_TEMP/drnas-distribution" && zip -9 -q "../Blender-Hotfix-1.1-preview.zip" ./*.apk ./README-SIGNING.txt ./SHA256SUMS.txt ./CHANGELOG.md )
+          unzip -t "$RUNNER_TEMP/Blender-Hotfix-1.1-preview.zip"
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         id: apk-artifact
         continue-on-error: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/feat/emudrnas-compact-breeze-r7' || github.ref == 'refs/heads/fix/r13-bundled-wcp-boot' || github.ref == 'refs/heads/fix/r15-desktop-launch-keys-taskbar' || github.ref == 'refs/heads/feat/winevulkan-merged-r16' || github.ref == 'refs/heads/feat/blender-vulkan-shortcuts-r17' || github.ref == 'refs/heads/fix/r18-blender-arm64-dxgi-guard' || github.ref == 'refs/heads/diagnostic/r19-native-dxgi-load-trace' || github.ref == 'refs/heads/fix/r21-blender-arm64-dxgi-stage' || github.ref == 'refs/heads/fix/r22-blender-popup-map-state' || github.ref == 'refs/heads/fix/r23-compositor-window-stability' || github.ref == 'refs/heads/fix/r24-x11-popups-geometry-fastcopy' || github.ref == 'refs/heads/feat/r25-wine11-egl-opengl-experiment' || github.ref == 'refs/heads/feat/r28-blender-shell' || github.ref == 'refs/heads/fix/r29-blender-arm64-dxgi-launch' || github.ref == 'refs/heads/fix/r30-blender-cursor-startup' || github.ref == 'refs/heads/experiment/r31-blender-mali-g52-panvk' || github.ref == 'refs/heads/feat/r32-unified-blender-mali-merged' || github.ref == 'refs/heads/feat/r34-blender-direct-d-drive') }}
         with:
-          name: Blender-DRNAS-r46-Hotfix-1.1-test-ZIP
+          name: Blender-Hotfix-1.1-test-ZIP
           path: ${{ runner.temp }}/drnas-distribution/
           if-no-files-found: error
           retention-days: 14
@@ -301,8 +318,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="emudrnas-prealpha-0.1-r46-hotfix-1.1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-DRNAS-r46-Hotfix-1.1-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender ARM64 DRNAS r46 - Hotfix 1.1" --notes-file "$RUNNER_TEMP/drnas-distribution/README-SIGNING.txt"
+          tag="blender-hotfix-1.1-review-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-distribution/"* "$RUNNER_TEMP/Blender-Hotfix-1.1-preview.zip" --draft --target "$GITHUB_SHA" --title "Blender Hotfix 1.1 - PRIVATE REVIEW" --notes-file "$RUNNER_TEMP/drnas-distribution/CHANGELOG.md"
 
 
 

@@ -14,6 +14,7 @@ final class BundledBlender {
             Path script=target.resolve("drnas-startup.py");
             if(Files.isSymbolicLink(script))throw new IOException("Unsafe Blender setup script");
             Files.write(script,BundledBlenderArchive.SETUP.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            installWindowLayout(context,target);
             return;
         }
         File available=target.toFile().getParentFile();
@@ -23,8 +24,17 @@ final class BundledBlender {
         try(InputStream in=context.getAssets().open("blender/"+BundledBlenderArchive.NAME)) {
             BundledBlenderArchive.extract(in,target,BundledBlenderArchive.SHA256,log);
         }
+        installWindowLayout(context,target);
+    }
+    private static void installWindowLayout(Context context,Path target) throws IOException {
+        Path script=target.resolve("drnas-window-layout.py");
+        if(Files.isSymbolicLink(script))throw new IOException("Unsafe Blender layout script");
+        try(InputStream in=context.getAssets().open("blender/drnas-window-layout.py")) {
+            Files.copy(in,script,StandardCopyOption.REPLACE_EXISTING);
+        }
     }
     private BundledBlender(){}
 }
+
 
 

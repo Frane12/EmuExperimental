@@ -423,6 +423,7 @@ final class WineGuiSession implements AutoCloseable {
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
             if(!blenderShell)FexPerformanceProfile.apply(env);
+            if(blenderShell)BlenderWindowSetup.ensure(prefix,linker,wine,proton,env,log,raw);
             if(blenderShell)log.accept("DRNAS_BLENDER_LEAN: no game controller shim, Paint, game diagnostics, Mono installer, wallpaper or FEX performance setup; Wine ABI and graphics dependencies retained");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
