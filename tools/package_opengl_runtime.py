@@ -42,12 +42,12 @@ REQUIRED_XCB = ("libxcb-glx.so", "libxcb-xfixes.so", "libX11-xcb.so")
 
 
 def git_blob_id(data):
-    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
 
 def check_arm64(name, data):
     check_name(name)
-    if (len(data) < 20 or data[:5] != b"\\x7fELF\\x02"
+    if (len(data) < 20 or data[:5] != b"\x7fELF\x02"
             or int.from_bytes(data[18:20], "little") != 183):
         raise ValueError("Expected ELF64 AArch64 Bionic library: " + name)
 
@@ -78,7 +78,7 @@ def package(output, rootfs):
             filename = tmp / name
             filename.write_bytes(data)
             dyn = subprocess.check_output(["readelf", "-d", str(filename)], text=True)
-            needed = re.findall(r"\\(NEEDED\\).*?\\[(.*?)\\]", dyn)
+            needed = re.findall(r"\(NEEDED\).*?\[(.*?)\]", dyn)
             for dep in needed:
                 check_name(dep)
             metadata[name] = needed
