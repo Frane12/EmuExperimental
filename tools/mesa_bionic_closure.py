@@ -18,7 +18,7 @@ ANDROID_SYSTEM = {
     "libc.so", "libdl.so", "libm.so", "liblog.so",
     "libandroid.so", "libnativewindow.so",
 }
-VALID_LIBRARY = re.compile(r"lib[A-Za-z0-9_.+-]+\\.so(?:\\.[0-9]+)*\\Z")
+VALID_LIBRARY = re.compile(r"lib[A-Za-z0-9_.+-]+\.so(?:\.[0-9]+)*\Z")
 MAX_INPUT_LIB = 64 * 1024 * 1024
 MAX_BUNDLE_SIZE = 112 * 1024 * 1024
 MAX_BUNDLE_LIBS = 72
@@ -114,7 +114,7 @@ def verified_imagefs(path):
                 kind, value = entries[name]
                 if kind == "file":
                     data = value.read_bytes()
-                    if len(data) < 20 or data[:5] != b"\\x7fELF\\x02" or int.from_bytes(data[18:20], "little") != 183:
+                    if len(data) < 20 or data[:5] != b"\x7fELF\x02" or int.from_bytes(data[18:20], "little") != 183:
                         raise ValueError("Not an ARM64 ELF library: " + name)
                     return data
                 name = value
