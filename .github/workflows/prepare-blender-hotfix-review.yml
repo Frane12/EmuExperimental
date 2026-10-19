@@ -1,0 +1,35 @@
+name: Prepare private Blender Hotfix 1.1 review
+on:
+  push:
+    branches: [feat/r34-blender-direct-d-drive]
+    paths: [.github/workflows/prepare-blender-hotfix-review.yml]
+permissions:
+  contents: write
+jobs:
+  draft-notes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update only the private draft for owner review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = Frane12/EmuExperimental
+          gh api "repos/$GITHUB_REPOSITORY" --jq '.private' | grep -qx true
+          gh api "repos/$GITHUB_REPOSITORY/releases/416840213" > "$RUNNER_TEMP/review-release.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'review-release.json').read_text())
+          assert r['draft'] is True, 'Refusing to edit a published release'
+          assert 'r46' in r['name'] and 'Blender' in r['name']
+          a=[a for a in r['assets'] if a['name']=='Blender-DRNAS-r46-Hotfix-1.1-STABLE-SIGNED.apk']
+          assert len(a)==1 and a[0]['digest']=='sha256:27312747b4fa3d588907422e60c6b89def62fa2a41b218c0e10f66352eb20b36'
+          with open(os.environ['GITHUB_ENV'],'a') as f: f.write('REVIEW_TAG='+r['tag_name']+'\n')
+          PY
+          gh release edit "$REVIEW_TAG" --repo "$GITHUB_REPOSITORY" --draft --title "Blender Hotfix 1.1 r46 - PRIVATE REVIEW" --notes-file releases/blender-v1.1-r46.md
+          cp releases/blender-v1.1-r46.md "$RUNNER_TEMP/CHANGELOG-Hotfix-1.1.md"
+          gh release upload "$REVIEW_TAG" "$RUNNER_TEMP/CHANGELOG-Hotfix-1.1.md" --repo "$GITHUB_REPOSITORY" --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/416840213" --jq '{draft:.draft,name:.name,url:.html_url,assets:[.assets[].name]}'
