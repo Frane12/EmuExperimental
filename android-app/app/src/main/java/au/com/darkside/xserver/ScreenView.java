@@ -222,8 +222,102 @@ public class ScreenView extends View {
             MotionEvent.BUTTON_TERTIARY,MotionEvent.BUTTON_SECONDARY};
     private boolean _touchUsedOverlay;
 
+    // Blender's first click must never acquire the global X11 monitor on
+    // Android's main looper. Queue all pointer and keyboard events in FIFO order.
+    private volatile boolean nonBlockingInputEnabled;
+    private java.util.concurrent.ThreadPoolExecutor inputExecutor;
+    private volatile Thread inputWorker;
+    private final java.util.concurrent.atomic.AtomicLong inputEventSerial=
+            new java.util.concurrent.atomic.AtomicLong();
+    private final java.util.concurrent.atomic.AtomicInteger inputStalls=
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /** Enable only for the experimental Blender profile; other apps unchanged. */
+    public void setNonBlockingInputEnabled(boolean enabled) {
+        if (enabled == nonBlockingInputEnabled) return;
+        if (enabled) {
+            inputExecutor=new java.util.concurrent.ThreadPoolExecutor(1,1,0,
+                    java.util.concurrent.TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(192),task->{
+                        Thread thread=new Thread(task,"drnas-x11-input");
+                        thread.setDaemon(true);
+                        inputWorker=thread;
+                        return thread;
+                    },new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+            inputExecutor.prestartAllCoreThreads();
+            nonBlockingInputEnabled=true;
+            _xServer.diagnostic("DRNAS_X11_INPUT_ASYNC enabled=true queue=192 ordered=FIFO");
+        } else {
+            nonBlockingInputEnabled=false;
+            if(inputExecutor!=null)inputExecutor.shutdownNow();
+            inputExecutor=null;
+        }
+    }
+    private boolean onAndroidUiThread() {
+        return android.os.Looper.myLooper()==android.os.Looper.getMainLooper();
+    }
+    private boolean queueInput(String label,Runnable action) {
+        java.util.concurrent.ThreadPoolExecutor executor=inputExecutor;
+        if(executor==null)return false;
+        final long serial=inputEventSerial.incrementAndGet();
+        final java.util.concurrent.atomic.AtomicBoolean finished=
+                new java.util.concurrent.atomic.AtomicBoolean();
+        final long queuedAt=android.os.SystemClock.uptimeMillis();
+        try {
+            executor.execute(()->{
+                try {
+                    action.run();
+                } catch(RuntimeException error) {
+                    _xServer.diagnostic("DRNAS_X11_INPUT_EXCEPTION seq="+serial+" "+
+                            error.getClass().getSimpleName()+": "+error.getMessage());
+                } finally {
+                    finished.set(true);
+                    long delay=android.os.SystemClock.uptimeMillis()-queuedAt;
+                    if(delay>600 && (serial<=4 || delay>2500))
+                        _xServer.diagnostic("DRNAS_X11_INPUT_SLOW seq="+serial+
+                                " label="+label+" elapsedMs="+delay);
+                    else if(serial<=3)
+                        _xServer.diagnostic("DRNAS_X11_INPUT_DONE seq="+serial+
+                                " label="+label+" elapsedMs="+delay);
+                }
+            });
+        } catch(java.util.concurrent.RejectedExecutionException rejected) {
+            _xServer.diagnostic("DRNAS_X11_INPUT_QUEUE_OVERFLOW label="+label+
+                    " pending="+executor.getQueue().size()+
+                    " (Android UI remains responsive; reset session)");
+            return false;
+        }
+        if(serial<=3)_xServer.diagnostic("DRNAS_X11_INPUT_QUEUED seq="+serial+" label="+label);
+        // Never waits for the worker. Capture its stack if X11 stalls; keep
+        // the Android UI, controls and log export responsive.
+        if(serial<=3 || label.startsWith("button") || label.startsWith("key")) {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
+                if(finished.get() || !nonBlockingInputEnabled)return;
+                if(inputStalls.incrementAndGet()>5)return;
+                Thread worker=inputWorker;
+                StackTraceElement[] stack=worker==null?
+                        new StackTraceElement[0]:worker.getStackTrace();
+                StringBuilder trace=new StringBuilder();
+                for(int i=0;i<Math.min(9,stack.length);i++)
+                    trace.append(" | ").append(stack[i].toString());
+                _xServer.diagnostic("DRNAS_X11_INPUT_STALL seq="+serial+
+                        " label="+label+" waitedMs="+
+                        (android.os.SystemClock.uptimeMillis()-queuedAt)+
+                        " workerState="+(worker==null?"none":worker.getState())+
+                        " queued="+executor.getQueue().size()+
+                        " stack="+trace);
+            },2500);
+        }
+        return true;
+    }
+
     /** Overlay presses are independent of tap-to-click touchpad gestures. */
     public void setOverlayPointerButton(int button,boolean pressed) {
+        if(nonBlockingInputEnabled && onAndroidUiThread()) {
+            queueInput("button_"+button+(pressed?"_press":"_release"),
+                    ()->setOverlayPointerButton(button,pressed));
+            return;
+        }
         synchronized(_xServer) {
             if(_rootWindow==null)return;
             if(pressed) {
@@ -265,6 +359,14 @@ public class ScreenView extends View {
     }
 
     @Override public boolean onGenericMotionEvent(MotionEvent event) {
+        if(nonBlockingInputEnabled && onAndroidUiThread() &&
+                event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) {
+            MotionEvent owned=MotionEvent.obtain(event);
+            if(!queueInput("mouse_"+event.getActionMasked(),()->{
+                try {onGenericMotionEvent(owned);} finally {owned.recycle();}
+            }))owned.recycle();
+            return true;
+        }
         if(event.isFromSource(android.view.InputDevice.SOURCE_MOUSE)) {
             synchronized(_xServer) {
                 if(_rootWindow==null)return false;
@@ -276,6 +378,10 @@ public class ScreenView extends View {
     }
 
     public void cancelPointerGestures() {
+        if(nonBlockingInputEnabled && onAndroidUiThread()) {
+            queueInput("cancel_pointer",this::cancelPointerGestures);
+            return;
+        }
         synchronized(_xServer) {
             _overlayButtons=_hardwareMouseButtons=0;
             _touchDragging=false;_touchUsedOverlay=true;
@@ -286,6 +392,53 @@ public class ScreenView extends View {
 
     public void setRelativeTouchMode(boolean enabled) {
         _relativeTouchMode=enabled;
+    }
+
+    /** Called on the serial X11 input worker in the Blender profile. */
+    private boolean handleTouchOnWorker(MotionEvent event) {
+                synchronized (_xServer) {
+                    if (_rootWindow == null) return false;
+        
+                    blank(false);    // Reset the screen saver.
+                    if(event.isFromSource(android.view.InputDevice.SOURCE_MOUSE))
+                        return handleHardwareMouse(event);
+                    if (_relativeTouchMode) return handleRelativeTouch(event);
+                    updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
+        
+                    if(_enableTouchClicks){
+                        if(event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getActionIndex() == 0)
+                            updatePointerButtons (1, true);
+                        if(event.getActionMasked() == MotionEvent.ACTION_UP && event.getActionIndex() == 0)
+                            updatePointerButtons (1, false);
+                        if(event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN && event.getActionIndex() == 1)
+                            updatePointerButtons (3, true);
+                        if((event.getActionMasked() == MotionEvent.ACTION_POINTER_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL)  && event.getActionIndex() == 1)
+                            updatePointerButtons (3, false);
+                    }
+                }
+
+                if(event.getActionMasked() == MotionEvent.ACTION_DOWN){
+                    _totalMove = 0;
+                    _xPrec = event.getX();
+                    _yPrec = event.getY();
+                }
+                else if (event.getActionMasked() == MotionEvent.ACTION_MOVE){
+                    final double dx = event.getX() - _xPrec;
+                    final double dy = event.getY() - _yPrec;
+                    final double dl = Math.sqrt(dx * dx + dy * dy);
+                    _totalMove += dl;
+                    _xPrec = event.getX();
+                    _yPrec = event.getY();
+                }
+
+
+                if(_totalMove < 20){ // -- workaround for phones with cheap touchscreens (which will constantly trigger ACTION_MOVE events)
+                    _ignoreLongPress = false;
+                    return false; // make longClick Listeners work!
+                }
+
+                _ignoreLongPress = true;
+                return true;
     }
 
     private boolean handleRelativeTouch(MotionEvent event) {
@@ -469,54 +622,18 @@ public class ScreenView extends View {
         });
 
         setOnTouchListener(new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                synchronized (_xServer) {
-                    if (_rootWindow == null) return false;
-        
-                    blank(false);    // Reset the screen saver.
-                    if(event.isFromSource(android.view.InputDevice.SOURCE_MOUSE))
-                        return handleHardwareMouse(event);
-                    if (_relativeTouchMode) return handleRelativeTouch(event);
-                    updatePointerPosition(guestX(event.getX()),guestY(event.getY()),0);
-        
-                    if(_enableTouchClicks){
-                        if(event.getActionMasked() == MotionEvent.ACTION_DOWN && event.getActionIndex() == 0)
-                            updatePointerButtons (1, true);
-                        if(event.getActionMasked() == MotionEvent.ACTION_UP && event.getActionIndex() == 0)
-                            updatePointerButtons (1, false);
-                        if(event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN && event.getActionIndex() == 1)
-                            updatePointerButtons (3, true);
-                        if((event.getActionMasked() == MotionEvent.ACTION_POINTER_UP || event.getActionMasked() == MotionEvent.ACTION_CANCEL)  && event.getActionIndex() == 1)
-                            updatePointerButtons (3, false);
-                    }
+            @Override public boolean onTouch(View v, MotionEvent event) {
+                if(nonBlockingInputEnabled && onAndroidUiThread()) {
+                    MotionEvent owned=MotionEvent.obtain(event);
+                    if(!queueInput("touch_"+event.getActionMasked(),()->{
+                        try {handleTouchOnWorker(owned);} finally {owned.recycle();}
+                    }))owned.recycle();
+                    return true;
                 }
-
-                if(event.getActionMasked() == MotionEvent.ACTION_DOWN){
-                    _totalMove = 0;
-                    _xPrec = event.getX();
-                    _yPrec = event.getY();
-                }
-                else if (event.getActionMasked() == MotionEvent.ACTION_MOVE){
-                    final double dx = event.getX() - _xPrec;
-                    final double dy = event.getY() - _yPrec;
-                    final double dl = Math.sqrt(dx * dx + dy * dy);
-                    _totalMove += dl;
-                    _xPrec = event.getX();
-                    _yPrec = event.getY();
-                }
-
-
-                if(_totalMove < 20){ // -- workaround for phones with cheap touchscreens (which will constantly trigger ACTION_MOVE events)
-                    _ignoreLongPress = false;
-                    return false; // make longClick Listeners work!
-                }
-
-                _ignoreLongPress = true;
-                return true;
+                return handleTouchOnWorker(event);
             }
         });
-        
+
         setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
@@ -1345,6 +1462,11 @@ public class ScreenView extends View {
      */
     @Override
     public boolean onKeyDown(int keycode, KeyEvent event) {
+        if(nonBlockingInputEnabled && onAndroidUiThread()) {
+            final KeyEvent owned=new KeyEvent(event);
+            queueInput("key_"+keycode+"_down",()->onKeyDown(keycode,owned));
+            return true;
+        }
         synchronized (_xServer) {
             if (_rootWindow == null) return false;
 
@@ -1404,6 +1526,11 @@ public class ScreenView extends View {
      */
     @Override
     public boolean onKeyUp(int keycode, KeyEvent event) {
+        if(nonBlockingInputEnabled && onAndroidUiThread()) {
+            final KeyEvent owned=new KeyEvent(event);
+            queueInput("key_"+keycode+"_up",()->onKeyUp(keycode,owned));
+            return true;
+        }
         synchronized (_xServer) {
             if (_rootWindow == null) return false;
 
