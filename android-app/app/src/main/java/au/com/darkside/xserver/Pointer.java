@@ -11,13 +11,17 @@ import java.io.IOException;
  * @author Matthew Kwan
  */
 public class Pointer {
-    private byte[] _buttonMap = {1, 2, 3};
+    // X11 scroll-wheel events use logical buttons 4 (up) and 5 (down).
+    // The former 3-button map silently discarded both in mapButton(), so
+    // Blender r58's Android zoom slider generated no guest scroll events.
+    // Advertise and map all five through the normal X11 pointer protocol.
+    private byte[] _buttonMap = {1, 2, 3, 4, 5};
 
     /**
      * Return the virtual button that a physical button has been mapped to.
      * Zero indicates the button has been disabled.
      *
-     * @param button The physical button: 1, 2, or 3.
+     * @param button The physical button: 1-5, including X11 wheel up/down 4/5.
      * @return The virtual button, or 0 for disabled.
      */
     public int mapButton(int button) {

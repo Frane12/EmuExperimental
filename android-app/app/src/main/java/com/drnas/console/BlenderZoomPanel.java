@@ -100,8 +100,9 @@ final class BlenderZoomPanel extends LinearLayout {
         return b;
     }
     private void pulseWheel(int button,int clicks) {
-        // X11 wheel buttons 4=in, 5=out. Mouse handler delivers to currently
-        // hovered Blender editor, so position the cursor over 3D View first.
+        // X11 wheel buttons 4=in, 5=out are now actually mapped by Pointer.
+        // The guest dispatches wheel events to the editor currently under
+        // the cursor. For viewport zoom, hover the 3D View (not Properties).
         for(int i=0;i<Math.min(10,clicks);i++) {
             wheel.send(button,true);
             wheel.send(button,false);
