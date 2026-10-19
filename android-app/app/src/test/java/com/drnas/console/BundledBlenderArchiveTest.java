@@ -36,6 +36,8 @@ public class BundledBlenderArchiveTest {
         assertTrue(startup.contains("DRNAS_BLENDER_LAYOUT_DISABLED"));
         assertTrue(startup.contains("DRNAS_BLENDER_SAFE_FULLSCREEN_MENU"));
         assertTrue(startup.contains("drnas.safe_fullscreen"));
+        assertTrue(startup.contains("drnas-host-fullscreen.signal"));
+        assertTrue(startup.contains("DRNAS_BLENDER_SAFE_FULLSCREEN_REQUEST"));
         assertFalse(startup.contains("layout.operator(\"wm.window_fullscreen_toggle\""));
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
     }

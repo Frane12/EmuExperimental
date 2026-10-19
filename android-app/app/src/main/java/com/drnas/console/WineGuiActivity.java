@@ -106,6 +106,7 @@ public final class WineGuiActivity extends Activity {
     };
 
     private android.os.HandlerThread diagnosticThread;
+    private android.os.HandlerThread blenderFullscreenBridgeThread;
     private volatile long diagnosticUiBeat;
     private int diagnosticSamples, diagnosticStackSamples;
     private void startInputDiagnostics() {
@@ -115,7 +116,7 @@ public final class WineGuiActivity extends Activity {
         android.os.Handler worker=new android.os.Handler(diagnosticThread.getLooper());
         android.os.Handler ui=new android.os.Handler(android.os.Looper.getMainLooper());
         java.util.concurrent.atomic.AtomicBoolean uiPingPending=new java.util.concurrent.atomic.AtomicBoolean();
-        log("DRNAS_X11_CRITICAL_DIAGNOSTICS r55 enabled=true verboseIndependent=true intervalMs=2000 maxSamples=180");
+        log("DRNAS_X11_CRITICAL_DIAGNOSTICS r57 enabled=true verboseIndependent=true intervalMs=2000 maxSamples=180");
         worker.post(new Runnable() {
             @Override public void run() {
                 if(destroyed || diagnosticSamples++>=180)return;
@@ -138,6 +139,44 @@ public final class WineGuiActivity extends Activity {
                 worker.postDelayed(this,2000);
             }
         });
+    }
+
+    // Poll a tiny app-private command file off Android's UI and X11 threads.
+    // Native Blender/Wine fullscreen remains untouched; this toggles only
+    // Android's existing compositor crop and its matched cursor/input map.
+    private void startBlenderFullscreenBridge() {
+        final java.nio.file.Path signal=BlenderFullscreenSignal.path(
+                WineShortcuts.prefix(this));
+        try {
+            BlenderFullscreenSignal.clearStale(signal);
+        } catch(java.io.IOException error) {
+            log("DRNAS_BLENDER_FULLSCREEN_BRIDGE_CLEAR_FAILED "+error.getMessage());
+        }
+        blenderFullscreenBridgeThread=new android.os.HandlerThread("drnas-blender-fullscreen-bridge");
+        blenderFullscreenBridgeThread.start();
+        android.os.Handler worker=new android.os.Handler(blenderFullscreenBridgeThread.getLooper());
+        worker.postDelayed(new Runnable() {
+            int lastSequence=0;
+            int failures=0;
+            @Override public void run() {
+                if(destroyed)return;
+                try {
+                    int sequence=BlenderFullscreenSignal.readSequence(signal);
+                    if(sequence>lastSequence) {
+                        int delta=sequence-lastSequence;
+                        lastSequence=sequence;
+                        log("DRNAS_BLENDER_FULLSCREEN_BRIDGE r57 seq="+sequence+
+                                " delta="+delta+" change="+((delta&1)!=0));
+                        if((delta&1)!=0)runOnUiThread(()->{
+                            if(!destroyed && blenderShell)toggleBlenderHostFullscreen();
+                        });
+                    }
+                } catch(java.io.IOException | SecurityException error) {
+                    if(failures++<4)log("DRNAS_BLENDER_FULLSCREEN_BRIDGE_ERROR "+error.getMessage());
+                }
+                if(!destroyed)worker.postDelayed(this,350);
+            }
+        },350);
     }
 
     // The percentage is a conservative, monotonic *boot milestone*, not a
@@ -509,7 +548,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().setFpsCounterEnabled(performanceHud.isActive()&&!blenderShell);
         if(blenderShell)performanceHud.setVisibility(View.GONE);
         if(blenderShell) {
-            log("DRNAS_BLENDER_HOST_FULLSCREEN r56 enabled="+blenderHostFullscreen+
+            log("DRNAS_BLENDER_HOST_FULLSCREEN r57 enabled="+blenderHostFullscreen+
                     " cropGuestTop="+(blenderHostFullscreen?BLENDER_HOST_TITLE_CROP:0)+
                     " nativeWineFullscreen=false");
             blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
@@ -553,7 +592,10 @@ public final class WineGuiActivity extends Activity {
                 "config".equals(requested) ? "config":
                 WineShortcuts.isLaunchRequest(requested) ? requested:"desktop";
         xserver.setDiagnosticListener(this::log);
-        if(blenderShell)startInputDiagnostics();
+        if(blenderShell) {
+            startInputDiagnostics();
+            startBlenderFullscreenBridge();
+        }
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
             @Override public void onStart() {
                 if(started || destroyed)return;
@@ -1384,7 +1426,7 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nDiagnostic build: r56 Android-host-fullscreen (versionCode 124)"+
+                "\nDiagnostic build: r57 Blender fullscreen bridge (versionCode 125)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+
@@ -1563,6 +1605,7 @@ public final class WineGuiActivity extends Activity {
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
         if(diagnosticThread!=null)diagnosticThread.quitSafely();
+        if(blenderFullscreenBridgeThread!=null)blenderFullscreenBridgeThread.quitSafely();
         if(performanceHud!=null)performanceHud.removeCallbacks(hudTicker);
         if(xserver!=null)xserver.getScreen().setNonBlockingInputEnabled(false);
         if(xinputState!=null)xinputState.close();
