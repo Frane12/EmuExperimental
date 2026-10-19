@@ -989,7 +989,7 @@ public final class WineGuiActivity extends Activity {
                     else if(which==3)shareGuiLog();
                     else if(which==4)showGlassControls();
                     else if(which==5)new AppDialogBuilder(this).setTitle("Blender v1.1 · DRNAS preview")
-                            .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nPrivatni eksperimentalni prikaz; nije službeni Blender Android port.")
+                            .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nNeslužbeni Blender Android preview; kompatibilnost ovisi o GPU-u i Vulkan driveru.")
                             .setPositiveButton("OK",null).show();
                     else if(which==7)showBlenderProjectFolder();
                     else if(which==8) {
