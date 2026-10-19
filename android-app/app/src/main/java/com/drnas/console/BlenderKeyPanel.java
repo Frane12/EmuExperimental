@@ -29,15 +29,17 @@ final class BlenderKeyPanel extends LinearLayout {
         if(right-left!=oldRight-oldLeft || bottom-top!=oldBottom-oldTop)
             post(this::restoreWhenMeasured);
     };
-    private final Runnable keyboard,options,exportToAndroid;
+    private final Runnable keyboard,options,exportToAndroid,backFromRender;
 
     BlenderKeyPanel(Context context,KeySink sink,MouseSink mouse,
-                    Runnable keyboard,Runnable options,Runnable exportToAndroid) {
+                    Runnable keyboard,Runnable options,Runnable exportToAndroid,
+                    Runnable backFromRender) {
         super(context);this.sink=sink;this.mouse=mouse;
         mouseHold=new MouseButtonHold(mouse::send);
         setMotionEventSplittingEnabled(true);
         this.keyboard=keyboard;this.options=options;
         this.exportToAndroid=exportToAndroid;
+        this.backFromRender=backFromRender;
         prefs=context.getSharedPreferences("blender-shortcuts",Context.MODE_PRIVATE);
         setOrientation(HORIZONTAL);setGravity(Gravity.CENTER_VERTICAL);
         setPadding(dp(7),dp(7),dp(7),dp(7));
@@ -66,6 +68,9 @@ final class BlenderKeyPanel extends LinearLayout {
         gap(top);key(top,"Extrude",KeyEvent.KEYCODE_E);key(top,"Box Select",KeyEvent.KEYCODE_B);key(top,"Select All",KeyEvent.KEYCODE_A);
         key(top,"Search",KeyEvent.KEYCODE_F3);key(top,"Play/Pause",KeyEvent.KEYCODE_SPACE);
         key(top,"Render View",KeyEvent.KEYCODE_F11);
+        // Close only a Blender-owned secondary Render Result window.
+        // Never synthesize Alt+F4: it could terminate the primary Blender HWND.
+        action(top,"← Blender",backFromRender);
         modifier(bottom,"Shift",KeyEvent.KEYCODE_SHIFT_LEFT);
         modifier(bottom,"Ctrl",KeyEvent.KEYCODE_CTRL_LEFT);
         modifier(bottom,"Alt",KeyEvent.KEYCODE_ALT_LEFT);

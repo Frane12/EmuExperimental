@@ -34,7 +34,25 @@ public final class BlenderLauncherActivity extends Activity {
         status=new TextView(this);status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Pripremam Blender…"));
         status.setTextSize(13);status.setTextColor(0xffaaaab2);status.setPadding(16,20,16,20);
         status.setGravity(Gravity.CENTER);panel.addView(status);
-        setContentView(panel);
+        FrameLayout root=new FrameLayout(this);
+        root.addView(panel,new FrameLayout.LayoutParams(-1,-1));
+        LinearLayout brand=new LinearLayout(this);
+        brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.setAlpha(0.72f);
+        ImageView mini=new ImageView(this);
+        mini.setImageResource(R.drawable.ic_drnas_launcher);
+        int iconSize=Math.round(18*getResources().getDisplayMetrics().density);
+        brand.addView(mini,new LinearLayout.LayoutParams(iconSize,iconSize));
+        TextView label=new TextView(this);
+        label.setText("EMUDRNAS");
+        label.setTextColor(0xffcbd7dd);label.setTextSize(11);
+        label.setPadding(6,0,0,0);brand.addView(label);
+        FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(-2,-2,
+                Gravity.END|Gravity.BOTTOM);
+        int margin=Math.round(12*getResources().getDisplayMetrics().density);
+        position.rightMargin=margin;position.bottomMargin=margin;
+        root.addView(brand,position);
+        setContentView(root);
         if(state!=null) {
             String pending=state.getString("pickedTree");
             if(pending!=null)pickedTree=android.net.Uri.parse(pending);

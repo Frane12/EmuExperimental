@@ -9,6 +9,9 @@ import org.tukaani.xz.XZInputStream;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.DigestOutputStream;
+import java.util.concurrent.TimeUnit;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
@@ -309,6 +312,55 @@ public final class WcpRuntimeStager {
         return true;
     }
 
+
+    private static final long PREFIX_WATCHDOG_NS=TimeUnit.MINUTES.toNanos(18);
+    private static void checkPrefixDeadline(long deadline) throws IOException {
+        if(Thread.currentThread().isInterrupted() || System.nanoTime()-deadline>0)
+            throw new IOException("PREFIX_INSTALL_WATCHDOG: timed out or interrupted");
+    }
+    private static String shaHex(byte[] bytes) {
+        StringBuilder value=new StringBuilder(bytes.length*2);
+        for(byte part:bytes)value.append(String.format(Locale.ROOT,"%02x",part&255));
+        return value.toString();
+    }
+    private static String checksumFile(File source,long deadline) throws Exception {
+        MessageDigest digest=MessageDigest.getInstance("SHA-256");
+        try(InputStream in=new FileInputStream(source)) {
+            byte[] buffer=new byte[65536];int n;
+            while((n=in.read(buffer))!=-1) {
+                checkPrefixDeadline(deadline);
+                if(n>0)digest.update(buffer,0,n);
+            }
+        }
+        return shaHex(digest.digest());
+    }
+    private static void copyPrefixWatched(InputStream src,OutputStream dst,
+                                           long size,long deadline) throws IOException {
+        if(size<0 || size>MAX_FILE)throw new IOException("Prefix member too large");
+        byte[] buffer=new byte[65536];
+        long remaining=size;
+        while(remaining>0) {
+            checkPrefixDeadline(deadline);
+            int n=src.read(buffer,0,(int)Math.min(buffer.length,remaining));
+            if(n<0)throw new IOException("Truncated prefix member");
+            if(n==0)continue;
+            dst.write(buffer,0,n);
+            remaining-=n;
+        }
+    }
+    private static boolean verifiedPrefixMarker(File prefix,File marker) throws IOException {
+        if(!Files.isRegularFile(marker.toPath(),java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                || marker.length()>512)return false;
+        String content=new String(Files.readAllBytes(marker.toPath()),StandardCharsets.US_ASCII);
+        if(!content.startsWith("schema=2\n")
+                || !content.matches("(?s).*\\nsha256=[0-9a-f]{64}\\n.*"))return false;
+        for(String windows:new String[]{"drive_c/windows","prefix/drive_c/windows",
+                "wineprefix/drive_c/windows",".wine/drive_c/windows"})
+            if(Files.isDirectory(new File(prefix,windows).toPath(),
+                    java.nio.file.LinkOption.NOFOLLOW_LINKS))return true;
+        return false;
+    }
+
     // The activity may start multiple bootstrap instances. Serialize both within the
     // app process and across Android processes; the marker must be checked UNDER lock.
     public static synchronized void unpackPrefixPack(File prefixPack,File prefix,
@@ -325,10 +377,11 @@ public final class WcpRuntimeStager {
             if(Files.isSymbolicLink(prefix.toPath()))
                 throw new IOException("Unsafe prefix symlink");
             File marker=new File(prefix,"drnas-prefix.ready");
-            if(marker.isFile()) {
-                report.accept("PREFIX_READY: existing staged Wine prefix reused");
+            if(verifiedPrefixMarker(prefix,marker)) {
+                report.accept("PREFIX_READY: schema-2 verified staged Wine prefix reused");
                 return;
             }
+            if(marker.exists())report.accept("PREFIX_INTEGRITY: stale or invalid marker; preserving old prefix before recovery");
             if(prefix.exists()) {
                 if(!prefix.isDirectory())
                     throw new IOException("Existing prefix is not a directory");
@@ -337,6 +390,9 @@ public final class WcpRuntimeStager {
             File temp=new File(parent,".prefix-"+System.nanoTime());
             if(!temp.mkdir())throw new IOException("Cannot create prefix");
         boolean ok=false;
+        final long deadline=System.nanoTime()+PREFIX_WATCHDOG_NS;
+        MessageDigest manifest=MessageDigest.getInstance("SHA-256");
+        List<String[]> regularChecksums=new ArrayList<>();
         int regular=0, symlinks=0, deferredDrives=0, hardlinks=0;long sum=0;
         List<String[]> pendingSymlinks=new ArrayList<>();
         List<String[]> pendingHardlinks=new ArrayList<>();
@@ -346,6 +402,7 @@ public final class WcpRuntimeStager {
                 TarArchiveEntry entry;
                 Set<String> names=new HashSet<>();
                 while((entry=tar.getNextTarEntry())!=null) {
+                    checkPrefixDeadline(deadline);
                     String name=clean(entry.getName(),entry.isDirectory());
                     if(name.isEmpty()&&entry.isDirectory())continue;
                     if(!names.add(name))throw new IOException("Duplicate prefix name");
@@ -373,13 +430,26 @@ public final class WcpRuntimeStager {
                         if(sum>MAX_EXPANDED)throw new IOException("Prefix expansion too large");
                         if(!out.getParentFile().isDirectory()&&!out.getParentFile().mkdirs())
                             throw new IOException("Prefix file parent");
-                        try(OutputStream dst=new FileOutputStream(out)) {
-                            copyExactly(tar,dst,entry.getSize(),MAX_FILE);
+                        MessageDigest fileDigest=MessageDigest.getInstance("SHA-256");
+                        try(OutputStream dst=new DigestOutputStream(new FileOutputStream(out),fileDigest)) {
+                            copyPrefixWatched(tar,dst,entry.getSize(),deadline);
                         }
+                        String sha=shaHex(fileDigest.digest());
+                        regularChecksums.add(new String[]{name,sha});
+                        manifest.update((name+"\0"+entry.getSize()+"\0"+sha+"\n")
+                                .getBytes(StandardCharsets.UTF_8));
                         regular++;
                     } else throw new IOException("Untrusted prefix special entry: "+name);
                 }
             }
+            // Read back every regular file from disk before committing the prefix.
+            for(String[] checked:regularChecksums) {
+                checkPrefixDeadline(deadline);
+                if(!checked[1].equals(checksumFile(outputFor(temp,checked[0]),deadline)))
+                    throw new IOException("PREFIX_INTEGRITY: on-disk SHA-256 mismatch: "+checked[0]);
+            }
+            report.accept("PREFIX_INTEGRITY: SHA-256 verified "+regularChecksums.size()+
+                    " extracted regular files");
             // Hardlinks first, symlinks last. This prevents archive member
             // extraction from following attacker-controlled symbolic links.
             for(String[] pair:pendingHardlinks) {
@@ -404,9 +474,10 @@ public final class WcpRuntimeStager {
                 symlinks++;
             }
             try(FileOutputStream output=new FileOutputStream(new File(temp,"drnas-prefix.ready"))) {
-                output.write(("files="+regular+" symlinks="+symlinks+
-                        " hardlinks="+hardlinks+" deferredDrives="+deferredDrives)
-                        .getBytes(StandardCharsets.UTF_8));
+                output.write(("schema=2\nfiles="+regular+" symlinks="+symlinks+
+                        " hardlinks="+hardlinks+" deferredDrives="+deferredDrives+
+                        "\nsha256="+shaHex(manifest.digest())+"\n")
+                        .getBytes(StandardCharsets.US_ASCII));
             }
             // Never delete an incomplete prefix: it may contain user data. Rename
             // it into a same-filesystem backup only AFTER the new image is ready.

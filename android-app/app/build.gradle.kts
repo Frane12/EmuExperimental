@@ -27,7 +27,7 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 129
+        versionCode = 130
         versionName = "1.1"
     }
     packaging {

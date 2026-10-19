@@ -241,4 +241,26 @@ public final class WcpRuntimeStagerTest {
         } finally {cleanWork(work);}
     }
 
+    @Test public void schemaTwoMarkerAndInvalidMarkerRecoveryPreserveDocuments() throws Exception {
+        java.nio.file.Path work=java.nio.file.Files.createTempDirectory("drnas-sha-test");
+        try {
+            java.io.File pack=minimalPrefixPack(work);
+            java.io.File prefix=work.resolve("prefix").toFile();
+            WcpRuntimeStager.unpackPrefixPack(pack,prefix,msg->{});
+            String ready=readText(prefix.toPath().resolve("drnas-prefix.ready"));
+            assertEquals(true,ready.startsWith("schema=2\n"));
+            assertEquals(true,ready.matches("(?s).*\\nsha256=[a-f0-9]{64}\\n.*"));
+            writeText(prefix.toPath().resolve("drnas-prefix.ready"),"bad-marker");
+            java.nio.file.Path user=prefix.toPath().resolve("drive_c/important.blend");
+            java.nio.file.Files.createDirectories(user.getParent());
+            writeText(user,"retain user data");
+            WcpRuntimeStager.unpackPrefixPack(pack,prefix,msg->{});
+            java.io.File[] backups=work.toFile().listFiles(
+                    (folder,name)->name.startsWith(".prefix-incomplete-backup-"));
+            assertEquals(1,backups.length);
+            assertEquals("retain user data",readText(backups[0].toPath()
+                    .resolve("drive_c/important.blend")));
+        } finally {cleanWork(work);}
+    }
+
 }

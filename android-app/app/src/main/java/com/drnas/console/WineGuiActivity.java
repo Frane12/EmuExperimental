@@ -40,6 +40,8 @@ public final class WineGuiActivity extends Activity {
     private TextView startupStatus;
     private StartupAnimationView startupAnimation;
     private LinearLayout blenderStartupPanel;
+    private View blenderStartupBrand;
+    private int blenderRenderExitSequence;
     private ProgressBar blenderStartupBar;
     private TextView blenderStartupPercent;
     private int blenderBootMilestone;
@@ -407,6 +409,19 @@ public final class WineGuiActivity extends Activity {
             layout.addView(blenderStartupPanel,new FrameLayout.LayoutParams(
                     Math.min(dp(420),getResources().getDisplayMetrics().widthPixels-dp(36)),
                     ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+            LinearLayout brand=new LinearLayout(this);
+            brand.setGravity(Gravity.CENTER_VERTICAL);brand.setAlpha(0.72f);
+            android.widget.ImageView badge=new android.widget.ImageView(this);
+            badge.setImageResource(R.drawable.ic_drnas_launcher);
+            brand.addView(badge,new LinearLayout.LayoutParams(dp(18),dp(18)));
+            TextView wordmark=new TextView(this);
+            wordmark.setText("EMUDRNAS");wordmark.setTextSize(11);
+            wordmark.setTextColor(0xffc9d3df);wordmark.setPadding(dp(5),0,0,0);
+            brand.addView(wordmark);
+            FrameLayout.LayoutParams corner=new FrameLayout.LayoutParams(-2,-2,Gravity.END|Gravity.BOTTOM);
+            corner.rightMargin=dp(12);corner.bottomMargin=dp(12);
+            layout.addView(brand,corner);
+            blenderStartupBrand=brand;
         } else {
             layout.addView(startupStatus,new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
@@ -567,7 +582,8 @@ public final class WineGuiActivity extends Activity {
                 // ScreenView's independent touchscreen left-click stays active.
                 xserver.getScreen().setOverlayPointerButton(button,pressed);
             },()->{keyboardPending=true;keyboardAttempts=0;showKeyboard();},
-              this::showBlenderMenu,this::showBlenderProjectFolder);
+              this::showBlenderMenu,this::showBlenderProjectFolder,
+              this::returnFromBlenderRender);
             layout.addView(blenderKeys,new FrameLayout.LayoutParams(-2,-2,Gravity.TOP|Gravity.START));
             // No extra controls over the simple "Starting Blender" boot screen.
             // Full keyboard + hotkey panel become available once Blender maps.
@@ -668,6 +684,7 @@ public final class WineGuiActivity extends Activity {
                         xserver.getScreen().postDelayed(()->{
                             if(destroyed)return;
                             if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
+                            if(blenderStartupBrand!=null)blenderStartupBrand.setVisibility(View.GONE);
                             startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
                             if(blenderKeys!=null)blenderKeys.setVisibility(View.VISIBLE);
                             if(blenderZoom!=null)blenderZoom.setVisibility(View.VISIBLE);
@@ -978,11 +995,26 @@ public final class WineGuiActivity extends Activity {
         captureRenderSample(5000L,false);
     }
 
+    private void returnFromBlenderRender() {
+        if(!blenderShell||destroyed)return;
+        try {
+            if(blenderRenderExitSequence>=9999998)blenderRenderExitSequence=0;
+            BlenderRenderExitSignal.write(
+                    BlenderRenderExitSignal.path(WineShortcuts.prefix(this)),
+                    ++blenderRenderExitSequence);
+            log("DRNAS_RENDER_EXIT_REQUEST r62 seq="+blenderRenderExitSequence);
+        } catch(Exception failure) {
+            log("DRNAS_RENDER_EXIT_FAILED "+failure.getMessage());
+            Toast.makeText(this,"Render return unavailable; try F11: "+failure.getMessage(),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void showBlenderMenu() {
         new AppDialogBuilder(this).setTitle("Blender")
                 .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
                         "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution","Android Fullscreen ON/OFF"},(d,which)->{
+                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution","Android Fullscreen ON/OFF","Return from Render"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
                     else if(which==2)captureRenderSample(20000L,true);
@@ -1009,6 +1041,7 @@ public final class WineGuiActivity extends Activity {
                             }).show();
                     else if(which==10)showBlenderResolution();
                     else if(which==11)toggleBlenderHostFullscreen();
+                    else if(which==12)returnFromBlenderRender();
                     else exitConfirmation.confirm(this);
                 }).show();
     }

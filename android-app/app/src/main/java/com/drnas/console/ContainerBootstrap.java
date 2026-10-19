@@ -188,8 +188,18 @@ public final class ContainerBootstrap {
         if(wineConfig==null)throw new IOException("Proton has no executable paths");
         String prefixPackPath=WcpRuntimeStager.clean(wineConfig.getString("prefixPack"),false);
         log("Provisioning isolated prefix from "+prefixPackPath);
-        WcpRuntimeStager.unpackPrefixPack(
-                existing(proton.folder,prefixPackPath),prefix,this::log);
+        File prefixArchive=existing(proton.folder,prefixPackPath);
+        for(int attempt=1;attempt<=2;attempt++) {
+            try {
+                WcpRuntimeStager.unpackPrefixPack(prefixArchive,prefix,this::log);
+                break;
+            } catch(IOException failure) {
+                log("PREFIX_RECOVERY_ATTEMPT "+attempt+"/2: "+failure.getMessage());
+                if(attempt==2)throw new IOException(
+                        "Wine prefix failed verification twice; old data retained.",failure);
+                Thread.sleep(500L);
+            }
+        }
         File winDir=findWindowsDir(prefix);
         log("Isolated prefix: "+winDir.getAbsolutePath());
 

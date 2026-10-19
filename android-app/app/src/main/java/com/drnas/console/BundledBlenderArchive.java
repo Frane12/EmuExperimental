@@ -166,7 +166,55 @@ final class BundledBlenderArchive {
             "    bpy.app.timers.register(drnas_smooth_zoom_tick, first_interval=0.16, persistent=True)\n"+
             "    print('DRNAS_SMOOTH_ZOOM_TIMER registered=true r60 interval_active_ms=25 easing=0.32', flush=True)\n"+
             "except Exception as error:\n"+
-            "    print('DRNAS_SMOOTH_ZOOM_TIMER registered=false r60', repr(error), flush=True)\n";
+            "    print('DRNAS_SMOOTH_ZOOM_TIMER registered=false r60', repr(error), flush=True)\n"+
+            "# r62: explicit guest-side escape from Render Result secondary windows.\n"+
+            "# Never close the primary Blender window and never issue host Alt+F4.\n"+
+            "try:\n"+
+            "    _drnas_render_signal = os.path.join(os.path.dirname(__file__), 'drnas-render-exit.signal')\n"+
+            "    _drnas_render_seq = 0\n"+
+            "    def drnas_render_return_tick():\n"+
+            "        global _drnas_render_seq\n"+
+            "        try:\n"+
+            "            try:\n"+
+            "                with open(_drnas_render_signal, 'r', encoding='ascii') as command:\n"+
+            "                    raw = command.read(32).strip()\n"+
+            "            except OSError:\n"+
+            "                return 0.45\n"+
+            "            parts = raw.split(':')\n"+
+            "            if len(parts) != 2 or parts[0] != 'r62':\n"+
+            "                return 0.45\n"+
+            "            seq = int(parts[1])\n"+
+            "            if seq <= _drnas_render_seq:\n"+
+            "                return 0.45\n"+
+            "            _drnas_render_seq = seq\n"+
+            "            windows = list(bpy.context.window_manager.windows)\n"+
+            "            if len(windows) <= 1:\n"+
+            "                print('DRNAS_RENDER_EXIT_NO_SECONDARY', flush=True)\n"+
+            "                return 0.45\n"+
+            "            primary = next((w for w in windows if any(a.type == 'VIEW_3D' for a in w.screen.areas)), windows[0])\n"+
+            "            render_windows = []\n"+
+            "            for window in windows:\n"+
+            "                if window == primary:\n"+
+            "                    continue\n"+
+            "                for area in window.screen.areas:\n"+
+            "                    space = area.spaces.active\n"+
+            "                    img = getattr(space, 'image', None)\n"+
+            "                    if area.type == 'IMAGE_EDITOR' and img and img.type == 'RENDER_RESULT':\n"+
+            "                        render_windows.append(window)\n"+
+            "                        break\n"+
+            "            if not render_windows:\n"+
+            "                print('DRNAS_RENDER_EXIT_NO_RENDER_WINDOW', flush=True)\n"+
+            "                return 0.45\n"+
+            "            with bpy.context.temp_override(window=render_windows[-1]):\n"+
+            "                bpy.ops.wm.window_close()\n"+
+            "            print('DRNAS_RENDER_EXIT_SECONDARY_CLOSED seq=%d' % seq, flush=True)\n"+
+            "        except Exception as error:\n"+
+            "            print('DRNAS_RENDER_EXIT_ERROR', repr(error), flush=True)\n"+
+            "        return 0.45\n"+
+            "    bpy.app.timers.register(drnas_render_return_tick, first_interval=0.45, persistent=True)\n"+
+            "    print('DRNAS_RENDER_EXIT_BRIDGE enabled=r62', flush=True)\n"+
+            "except Exception as error:\n"+
+            "    print('DRNAS_RENDER_EXIT_BRIDGE_FAILED', repr(error), flush=True)\n";
 
     static boolean ready(Path target) throws IOException {
         Path marker=target.resolve(".drnas-bundle-sha256");
