@@ -511,8 +511,8 @@ final class WineGuiSession implements AutoCloseable {
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
             if(r64WinecfgBaseline)
-                log.accept("DRNAS_R64_BASELINE_PROCESS_STARTED pid="+launcher.pid()+
-                        " (X11 map and actual GDI pixels not yet verified)");
+                log.accept("DRNAS_R64_BASELINE_PROCESS_STARTED live="+launcher.isAlive()+
+                        " (Winecfg guest process; X11 map and actual GDI pixels not yet verified)");
             Thread output=WineServerDiagnostics.pipe(launcher,
                     r64WinecfgBaseline?"[Winecfg baseline] ":"[GUI Wine] ",
                     log,60,raw,()->diagnosticsEnabled || r64WinecfgBaseline);
