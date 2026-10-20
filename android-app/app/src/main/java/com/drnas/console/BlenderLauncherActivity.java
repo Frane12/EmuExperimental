@@ -88,11 +88,12 @@ public final class BlenderLauncherActivity extends Activity {
                         "3 · TEST BLENDER VULKAN (GUI + Wine SEH)",
                         "4 · CMD BEZ BOOTSTRAP (bez X11)",
                         "5 · CMD SA BOOTSTRAP (bez X11)",
-                        "6 · BLENDER HEADLESS (bez X11)"},(dialog,index)->{
+                        "6 · BLENDER HEADLESS (bez X11)",
+                        "7 · BLENDER --VERSION (bez GUI-ja)"},(dialog,index)->{
                     labChoiceMade=true;
                     r64LabMode=new String[]{"winecfg","background","vulkan",
                             R64Arm64Isolation.CMD_NORMAL,R64Arm64Isolation.CMD_BOOTSTRAP,
-                            R64Arm64Isolation.HEADLESS}[index];
+                            R64Arm64Isolation.HEADLESS,R64Arm64Isolation.VERSION}[index];
                     r64WinecfgBaseline="winecfg".equals(r64LabMode);
                     status.setText("R64 LAB test: "+r64LabMode+"…");
                     if(r64WinecfgBaseline || "background".equals(r64LabMode) ||
