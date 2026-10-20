@@ -21,8 +21,10 @@ final class BundledBlender {
         }
         File available=target.toFile().getParentFile();
         while(available!=null&&!available.exists())available=available.getParentFile();
-        if(available!=null&&available.getUsableSpace()<900L*1024*1024)
-            throw new IOException("Blender requires at least 900 MiB free internal storage");
+        if(available!=null&&available.getUsableSpace()<BundledBlenderArchive.REQUIRED_FREE_BYTES)
+            throw new IOException("Blender requires at least "+
+                    ((BundledBlenderArchive.REQUIRED_FREE_BYTES+1024*1024-1)/(1024*1024))+
+                    " MiB free internal storage");
         try(InputStream in=context.getAssets().open("blender/"+BundledBlenderArchive.NAME)) {
             BundledBlenderArchive.extract(in,target,BundledBlenderArchive.SHA256,log);
         }
