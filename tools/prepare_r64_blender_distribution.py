@@ -43,15 +43,33 @@ def checksum(filename: Path) -> str:
 def lfs_pointer(stream) -> bool:
     return stream.read(len(LFS_HEADER)) == LFS_HEADER
 
+# Confirmed in Blender v4.5.14 upstream LFS source: essential brushes and hair
+# assets are Zstandard-compressed .blend files (28 b5 2f fd), while startup
+# templates are uncompressed (BLENDER). Both are legitimate. Avoid false FAIL.
+ZSTD_FRAME_MAGIC = bytes.fromhex("28b52ffd")
+GZIP_MAGIC = bytes.fromhex("1f8b")
+
+
+def valid_asset_magic(filename: str, data: bytes, expected: bytes) -> bool:
+    if data.startswith(LFS_HEADER):
+        return False
+    if expected == b"BLENDER" and filename.lower().endswith(".blend"):
+        return any(data.startswith(magic) for magic in (
+            b"BLENDER", ZSTD_FRAME_MAGIC, GZIP_MAGIC))
+    return data.startswith(expected)
+
+
 def check_magic(path: Path, expected: bytes) -> None:
     if not path.is_file() or path.is_symlink():
         raise ValueError(f"Missing/unsafe required Blender resource: {path}")
+    if path.stat().st_size <= 1024:
+        raise ValueError(f"Blender resource implausibly small / Git LFS pointer: {path}")
     with path.open("rb") as f:
         actual = f.read(max(132, len(expected)))
     if actual.startswith(LFS_HEADER):
         raise ValueError(f"Unresolved Git LFS pointer in required Blender resource: {path}")
-    if not actual.startswith(expected):
-        raise ValueError(f"Incorrect Blender resource signature: {path}; expected {expected!r}")
+    if not valid_asset_magic(path.name, actual, expected):
+        raise ValueError(f"Incorrect Blender resource signature: {path}; expected raw/compressed Blender or EXR")
 
 def source_scan(src: Path) -> dict:
     src = src.resolve(strict=True)
@@ -160,9 +178,12 @@ def verify_zip(path: Path, expected_names: set[str], deny_pdb: bool, required_ma
         if deny_pdb and any(x.casefold().endswith(".pdb") for x in names):
             raise ValueError("Debug PDB was erroneously packaged into runtime ZIP")
         for name, head in required_magic.items():
+            info=z.getinfo(name)
+            if info.file_size <= 1024:
+                raise ValueError(f"ZIP contains implausibly small/placeholder asset: {name}")
             with z.open(name) as f:
                 data = f.read(132)
-            if not data.startswith(head) or data.startswith(LFS_HEADER):
+            if not valid_asset_magic(name, data, head):
                 raise ValueError(f"ZIP contains invalid required asset {name}")
         if z.testzip() is not None:
             raise ValueError(f"ZIP CRC check failed: {path}")
