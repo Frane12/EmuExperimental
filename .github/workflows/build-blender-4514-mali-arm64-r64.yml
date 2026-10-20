@@ -203,9 +203,15 @@ jobs:
           # Previous R64 set GIT_LFS_SKIP_SMUDGE=1 and only fetched lib/windows_arm64 LFS.
           # This left 190 unresolved text pointers under Blender's assets/scripts/datafiles.
           # Download the required source content BEFORE CMake INSTALL, not just the libs.
+          # github.com/blender/blender is an OFFICIAL MIRROR: its Git LFS
+          # objects are intentionally not hosted on GitHub (404s). Fetch them
+          # directly from the canonical Blender project Git LFS endpoint.
+          # See developer.blender.org/docs/handbook/contributing/using_git/clone_update/
+          git -C $src config --local lfs.url 'https://projects.blender.org/blender/blender.git/info/lfs'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot configure canonical Blender Git LFS endpoint' }
           $env:GIT_LFS_SKIP_SMUDGE='0'
           git -C $src lfs pull --include="assets/**,release/datafiles/**,scripts/**" --exclude=""
-          if ($LASTEXITCODE -ne 0) { throw 'Upstream Blender source Git LFS fetch failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'Canonical Blender source Git LFS fetch failed' }
           $env:GIT_LFS_SKIP_SMUDGE='1'
           python tools/prepare_r64_blender_distribution.py source-scan $src
           if ($LASTEXITCODE -ne 0) { throw 'Unresolved upstream Git LFS pointers. BUILD BLOCKED.' }
