@@ -38,14 +38,14 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p native-results
-          if git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src > native-results/clone.log 2>&1; then
+          if GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src > native-results/clone.log 2>&1; then
             clone_rc=0
           else
             clone_rc=$?
           fi
           tail -n 35 native-results/clone.log
           echo "clone_exit=$clone_rc" | tee native-results/summary.txt
-          if [ "$clone_rc" -ne 0 ]; then exit 0; fi
+          if [ "$clone_rc" -ne 0 ]; then echo "::error::Blender source checkout failed"; exit "$clone_rc"; fi
           git -C /tmp/blender-src rev-parse HEAD >> native-results/summary.txt
           cmake -S /tmp/blender-src -B /tmp/blender-build -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
@@ -56,8 +56,8 @@ jobs:
           rc=$?
           echo "blender_configure_exit=$rc" >> native-results/summary.txt
           tail -n 100 native-results/blender-configure.log
-          # Configure failures are expected at this feasibility stage; retain diagnostic logs.
-          exit 0
+          # CMake configure failures must fail the job; logs stay visible.
+          exit "$rc"
       - name: Print feasibility summary in job log (artifact quota independent)
         if: always()
         run: |
