@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/build-mali-r64-lab.yml"
       - "tools/package_blender.py"
+      - "android-app/app/src/main/java/com/drnas/console/BundledBlenderArchive.java"
+      - "android-app/app/src/test/java/com/drnas/console/BundledBlenderArchiveTest.java"
   workflow_dispatch:
 permissions:
   contents: write
@@ -57,6 +59,30 @@ jobs:
           set -euo pipefail
           python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
           python3 tools/package_blender.py android-app/app/src/main/assets "$DRNAS_R64_ZIP"
+      - name: Verify exact installer SHA and compiled ZIP root before building
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, pathlib, re, zipfile
+          expected = "8802767f9ac63a6e8054e6e37b3ba994b49c2fb6d37d34cfc50ae48491851d6f"
+          source = pathlib.Path("android-app/app/src/main/java/com/drnas/console/BundledBlenderArchive.java").read_text()
+          assert f'static final String SHA256="{expected}";' in source, "Installer SHA mismatch"
+          assert "Mixed Blender archive roots" in source, "Mali r64 root guard missing"
+          archive = pathlib.Path("android-app/app/src/main/assets/blender/blender-4.5.14-windows-arm64.zip")
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == expected, "Bundled native ZIP SHA mismatch"
+          with zipfile.ZipFile(archive) as z:
+              names = set(z.namelist())
+              root = "blender-4.5.14-windows-arm64/"
+              flat = "blender.exe" in names
+              wrapped = root+"blender.exe" in names
+              assert flat != wrapped, "Invalid or ambiguous Blender archive layout"
+              assert all(n.startswith(root) for n in names) if wrapped else all(not n.startswith(root) for n in names), "Mixed ZIP roots"
+              exe = z.read("blender.exe" if flat else root+"blender.exe")[:4096]
+              assert exe[:2] == b"MZ", "Invalid embedded Blender PE"
+              pe = int.from_bytes(exe[60:64], "little")
+              assert exe[pe:pe+6] == b"PE\\0\\0\\x64\\xaa", "Not Windows ARM64 Blender"
+              print("DRNAS_MALI_R64_ARCHIVE_VERIFIED", "flat" if flat else "wrapped")
+          PY
       - name: Bundle Android X11 and OpenGL runtime
         run: |
           set -euo pipefail
