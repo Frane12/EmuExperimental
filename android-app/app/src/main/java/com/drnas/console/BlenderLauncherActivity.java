@@ -77,11 +77,10 @@ public final class BlenderLauncherActivity extends Activity {
         return "com.drnas.console.mali.r64.lab".equals(getPackageName());
     }
     private void showR64LabChoice() {
-        new AppDialogBuilder(this).setTitle("DRNAS R64 LAB · izolirani testovi")
-                .setMessage("Winecfg je potvrđen. Sada zasebno testiramo Blender bez "+
-                        "grafičkog prozora i Blenderov Vulkan GUI. "+
-                        "Background ne traži mapu projekata; Vulkan koristi disk D:. "+
-                        "Pošalji DRNAS TXT log nakon svakog testa.")
+        // AlertDialog message and list are mutually exclusive in Android's
+        // content panel: calling setMessage() here HIDES the setItems() rows.
+        // Put descriptions in each list item and leave the message unset.
+        new AppDialogBuilder(this).setTitle("DRNAS R64 LAB · odaberi test")
                 .setItems(new CharSequence[]{
                         "1 · TEST WINECFG (referenca)",
                         "2 · TEST BLENDER BACKGROUND (bez GUI-ja)",
@@ -94,6 +93,7 @@ public final class BlenderLauncherActivity extends Activity {
                         prepareRuntime();
                     else checkStartupAccess();
                 })
+                .setNeutralButton("Zatvori",(dialog,which)->finish())
                 .setCancelable(false).show();
     }
     private boolean waitingExternal;
