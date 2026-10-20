@@ -15,6 +15,7 @@ public final class BlenderLauncherActivity extends Activity {
     private volatile boolean destroyed;
     private static final int PICK_FOLDER=3401, STORAGE_ACCESS=3402, LEGACY_STORAGE=3403;
     private boolean preparing, checking;
+    private boolean labChoiceMade, r64WinecfgBaseline;
     private android.net.Uri pickedTree;
 
     @Override public void onCreate(Bundle state) {
@@ -56,10 +57,43 @@ public final class BlenderLauncherActivity extends Activity {
         if(state!=null) {
             String pending=state.getString("pickedTree");
             if(pending!=null)pickedTree=android.net.Uri.parse(pending);
+            labChoiceMade=state.getBoolean("r64LabChoiceMade",false);
+            r64WinecfgBaseline=state.getBoolean("r64WinecfgBaseline",false);
             // The external picker/settings activity will return its result to us.
             if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
         }
-        checkStartupAccess();
+        if(isR64Lab() && !labChoiceMade) showR64LabChoice();
+        else if(r64WinecfgBaseline) prepareRuntime();
+        else checkStartupAccess();
+    }
+    /**
+     * A user-selected GDI-only Wine smoke test without Blender's 1.6 GB unpack,
+     * project folder picker or Android storage permissions. Only available in
+     * the isolated R64 LAB application; never alter published Blender builds.
+     */
+    private boolean isR64Lab() {
+        return "com.drnas.console.mali.r64.lab".equals(getPackageName());
+    }
+    private void showR64LabChoice() {
+        new AppDialogBuilder(this).setTitle("DRNAS R64 LAB · odabir testa")
+                .setMessage("Za izoliranje Wine stack overflowa prvo možemo pokrenuti "+
+                        "Winecfg (obični Windows prozor) bez Blendera. "+
+                        "Koristi isti Wine ARM64, X11 i Vulkan/Mesa runtime, "+
+                        "ali ne raspakirava Blender. "+
+                        "Nakon 20–30 sekundi pošalji DRNAS log. "+
+                        "Ili odaberi normalan Blender test.")
+                .setPositiveButton("TEST WINECFG",(dialog,which)->{
+                    labChoiceMade=true;
+                    r64WinecfgBaseline=true;
+                    status.setText("R64 Winecfg dijagnostika…");
+                    prepareRuntime();
+                })
+                .setNegativeButton("POKRENI BLENDER",(dialog,which)->{
+                    labChoiceMade=true;
+                    r64WinecfgBaseline=false;
+                    checkStartupAccess();
+                })
+                .setCancelable(false).show();
     }
     private boolean waitingExternal;
     private boolean hasStorageAccess() {
@@ -161,7 +195,10 @@ public final class BlenderLauncherActivity extends Activity {
     }
     @Override protected void onSaveInstanceState(Bundle out) {
         if(pickedTree!=null)out.putString("pickedTree",pickedTree.toString());
-        out.putBoolean("waitingExternal",waitingExternal);super.onSaveInstanceState(out);
+        out.putBoolean("waitingExternal",waitingExternal);
+        out.putBoolean("r64LabChoiceMade",labChoiceMade);
+        out.putBoolean("r64WinecfgBaseline",r64WinecfgBaseline);
+        super.onSaveInstanceState(out);
     }
     private void prepareRuntime() {
         if(preparing||opened||destroyed)return;
@@ -197,7 +234,8 @@ public final class BlenderLauncherActivity extends Activity {
         if(opened||destroyed)return;
         opened=true;
         startActivity(new Intent(this,WineGuiActivity.class)
-                .putExtra("DRNAS_GUI_APP",BlenderShellLaunch.ID));
+                .putExtra("DRNAS_GUI_APP",BlenderShellLaunch.ID)
+                .putExtra("DRNAS_R64_WINECFG_BASELINE",isR64Lab() && r64WinecfgBaseline));
         finish();
     }
     @Override protected void onDestroy(){destroyed=true;super.onDestroy();}

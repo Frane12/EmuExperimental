@@ -9,6 +9,7 @@ public class WineGuiSessionTest {
     private static final File WINE=new File("/data/app/wine");
     @Test public void directBlenderLaunchStartsTheWindowMappingWatchdog() {
         assertTrue(WineGuiSession.isLaunchMarker("Launching Blender directly without Explorer desktop/taskbar"));
+        assertTrue(WineGuiSession.isLaunchMarker("Launching R64 Winecfg baseline without Blender or Explorer"));
         assertTrue(WineGuiSession.isLaunchMarker("Launching Wine explorer.exe virtual desktop"));
         assertFalse(WineGuiSession.isLaunchMarker("Blender archive staged"));
         assertFalse(WineGuiSession.isLaunchMarker(null));
@@ -27,6 +28,13 @@ public class WineGuiSessionTest {
                 BundledBlenderArchive.WINDOWS_EXE,"--gpu-backend","vulkan","--window-fullscreen"),args);
         assertFalse(args.contains("explorer.exe"));
         assertFalse(args.stream().anyMatch(a->a.startsWith("/desktop=")));
+    }
+
+    @Test public void isolatedR64WinecfgBaselineDoesNotRunBlenderOrExplorer() {
+        List<String> args=WineGuiSession.winecfgBaselineCommand(LINKER,WINE);
+        assertEquals(List.of("/system/bin/linker64","/data/app/wine","winecfg.exe"),args);
+        assertFalse(args.contains(BundledBlenderArchive.WINDOWS_EXE));
+        assertFalse(args.contains("explorer.exe"));
     }
 
     @Test public void startsExplorerDesktopAt1280x720ByDefault() {

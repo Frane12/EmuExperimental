@@ -14,6 +14,8 @@ final class WineGuiSession implements AutoCloseable {
     private static WineGuiSession active;
     // Volatile: menu toggle takes effect for Java/X11 diagnostics immediately.
     private volatile boolean diagnosticsEnabled;
+    private volatile boolean r64WinecfgBaseline;
+    void setR64WinecfgBaseline(boolean value) { r64WinecfgBaseline=value; }
     private volatile int frameCap;
     private volatile String dxvkVariant;
     void setDxvkVariant(String value){dxvkVariant=value;}
@@ -46,7 +48,14 @@ final class WineGuiSession implements AutoCloseable {
     }
     static boolean isLaunchMarker(String line) {
         return line!=null && (line.startsWith("Launching Wine explorer") ||
-                line.startsWith("Launching Blender directly"));
+                line.startsWith("Launching Blender directly") ||
+                line.startsWith("Launching R64 Winecfg baseline"));
+    }
+    /** A plain Windows control-panel window, without Blender or Explorer. */
+    static List<String> winecfgBaselineCommand(File linker,File wine) {
+        List<String> command=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        command.set(command.size()-1,"winecfg.exe");
+        return command;
     }
     static List<String> blenderCommand(File linker,File wine,List<String> launchArguments) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
@@ -162,10 +171,15 @@ final class WineGuiSession implements AutoCloseable {
         WinePrefixLayout.ensure(prefix,log);
         final boolean blenderShell=BlenderShellLaunch.ID.equals(app);
         File blenderFolder=null;
-        if(blenderShell) {
+        if(r64WinecfgBaseline && !blenderShell)
+            throw new IOException("R64 Winecfg baseline requires the isolated Blender Wine profile");
+        if(blenderShell && !r64WinecfgBaseline) {
             blenderFolder=BlenderProjectDrive.map(context,prefix,log);
             BundledBlender.install(context,prefix,log);
         }
+        if(r64WinecfgBaseline)
+            log.accept("DRNAS_R64_BASELINE=SELECTED Winecfg.exe; Blender unpack and project access SKIPPED; "+
+                    "retain Blender Wine ARM64/X11/Vulkan/Mesa environment");
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
         final String guestTarget=blenderShell?"execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
@@ -341,6 +355,12 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_PE_IMPORT_AUDIT: Wine +module/+loaddll enabled for Native Vulkan "+
                     "to identify the exact dxgi.dll resolution path; exported raw trace is authoritative.");
         env.put("DXVK_LOG_LEVEL",diagnosticsEnabled?"debug":"error");
+        if(r64WinecfgBaseline) {
+            // Trace only the opted-in baseline run. This exposes guest process
+            // exits and SEH exception frames without penalizing Blender runs.
+            env.put("WINEDEBUG","-all,err+all,+seh,+process");
+            log.accept("DRNAS_R64_BASELINE_WINEDEBUG=seh,process,errors; bounded raw trace");
+        }
         log.accept("DRNAS_DIAGNOSTICS="+(diagnosticsEnabled?"ON":"OFF")+
                 " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
         File guiRuntime=WineGuiRuntime.install(context,log);
@@ -454,12 +474,14 @@ final class WineGuiSession implements AutoCloseable {
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
             if(!blenderShell)FexPerformanceProfile.apply(env);
-            if(blenderShell)BlenderWindowSetup.ensure(prefix,linker,wine,proton,env,log,raw);
+            if(blenderShell && !r64WinecfgBaseline)
+                BlenderWindowSetup.ensure(prefix,linker,wine,proton,env,log,raw);
             if(blenderShell)log.accept("DRNAS_BLENDER_LEAN: no game controller shim, Paint, game diagnostics, Mono installer, wallpaper or FEX performance setup; Wine ABI and graphics dependencies retained");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
                     "user-shortcut":app)+" target="+launchMode);
-            log.accept(blenderShell?"Launching Blender directly without Explorer desktop/taskbar":
+            log.accept(r64WinecfgBaseline?"Launching R64 Winecfg baseline without Blender or Explorer":
+                    blenderShell?"Launching Blender directly without Explorer desktop/taskbar":
                     "Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
@@ -468,17 +490,32 @@ final class WineGuiSession implements AutoCloseable {
             Map<String,String> dxvkSeen=new HashMap<>();
             DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
-            ProcessBuilder pb=new ProcessBuilder(blenderShell?
-                    blenderCommand(linker,wine,launchArgs):command(linker,wine,launchMode,launchArgs))
-                    .directory(blenderShell?blenderFolder:proton).redirectErrorStream(true);
+            if(r64WinecfgBaseline) {
+                File pe=new File(lib,"wine/aarch64-windows/winecfg.exe");
+                if(!pe.isFile() || pe.length()<1024)
+                    throw new IOException("R64 baseline Winecfg guest PE missing: "+pe);
+                log.accept("DRNAS_R64_BASELINE_WINECFG_PE=VERIFIED bytes="+pe.length());
+            }
+            ProcessBuilder pb=new ProcessBuilder(r64WinecfgBaseline?
+                    winecfgBaselineCommand(linker,wine):
+                    blenderShell?blenderCommand(linker,wine,launchArgs):
+                    command(linker,wine,launchMode,launchArgs))
+                    .directory(blenderShell && !r64WinecfgBaseline?blenderFolder:proton)
+                    .redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
-            log.accept(blenderShell?"[Startup] Pokretanje Blendera · čekam Windows prozor":
+            log.accept(r64WinecfgBaseline?"[Startup] R64 test Winecfg · čekam Windows prozor":
+                    blenderShell?"[Startup] Pokretanje Blendera · čekam Windows prozor":
                     "[Startup] Pokretanje Explorera · čekam Windows prozor");
             if(nativeVulkan)log.accept("DRNAS_WINEVULKAN_LAUNCH_ARGUMENTS "+launchArgs+
                     " | WineVulkan files checked, actual Windows Vulkan device unverified.");
             launcher=pb.start();
             if(stopped){launcher.destroyForcibly();return;}
-            Thread output=WineServerDiagnostics.pipe(launcher,"[GUI Wine] ",log,60,raw,()->diagnosticsEnabled);
+            if(r64WinecfgBaseline)
+                log.accept("DRNAS_R64_BASELINE_PROCESS_STARTED pid="+launcher.pid()+
+                        " (X11 map and actual GDI pixels not yet verified)");
+            Thread output=WineServerDiagnostics.pipe(launcher,
+                    r64WinecfgBaseline?"[Winecfg baseline] ":"[GUI Wine] ",
+                    log,60,raw,()->diagnosticsEnabled || r64WinecfgBaseline);
             try{
                 File helper=new File(prefix,"drive_c/DRNAS/Tools/DRNASDesktop.exe");
                 if(helper.isFile() && !blenderShell){
@@ -509,6 +546,9 @@ final class WineGuiSession implements AutoCloseable {
                 // Explorer can delegate its window to a child and return.
                 // Exit alone is never proof that a GUI exists.
                 if(!launcher.isAlive()&&!exitReported) {
+                    if(r64WinecfgBaseline)
+                        log.accept("DRNAS_R64_BASELINE_PROCESS_EXIT="+launcher.exitValue()+
+                                " (inspect guest process and SEH trace)");
                     log.accept("GUI launcher exit="+launcher.exitValue()+"; inspect X11 window mapping evidence.");
                     exitReported=true;
                 }
