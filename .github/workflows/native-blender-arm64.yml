@@ -34,6 +34,24 @@ jobs:
           file native-results/drnas-arm64-smoke | tee native-results/elf-file.txt
           readelf -h native-results/drnas-arm64-smoke | tee native-results/elf-header.txt
           grep -q 'Machine:.*AArch64' native-results/elf-header.txt
+      - name: Cross-compile libjpeg-turbo for Android ARM64
+        run: |
+          set -euxo pipefail
+          mkdir -p native-results
+          export GIT_LFS_SKIP_SMUDGE=1
+          git clone --depth 1 --branch 3.1.2 https://github.com/libjpeg-turbo/libjpeg-turbo.git /tmp/libjpeg-turbo
+          cmake -S /tmp/libjpeg-turbo -B /tmp/jpeg-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DCMAKE_INSTALL_PREFIX=/tmp/android-deps \
+            -DENABLE_SHARED=OFF -DENABLE_STATIC=ON \
+            -DWITH_TURBOJPEG=OFF -DWITH_TOOLS=OFF -DWITH_TESTS=OFF \
+            -DWITH_SIMD=OFF
+          cmake --build /tmp/jpeg-build --parallel 4
+          cmake --install /tmp/jpeg-build
+          test -f /tmp/android-deps/include/jpeglib.h
+          find /tmp/android-deps -name 'libjpeg*.a' -print
+          file /tmp/android-deps/lib/libjpeg.a
       - name: Probe pinned Blender source configure against Android NDK
         run: |
           set -uo pipefail
@@ -52,6 +70,9 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DWITH_HEADLESS=ON -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             -DWITH_CYCLES=OFF -DWITH_PYTHON=OFF -DWITH_AUDASPACE=OFF \
+            -DWITH_LIBS_PRECOMPILED=OFF \
+            -DJPEG_INCLUDE_DIR=/tmp/android-deps/include \
+            -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a \
             > native-results/blender-configure.log 2>&1
           rc=$?
           echo "blender_configure_exit=$rc" >> native-results/summary.txt
