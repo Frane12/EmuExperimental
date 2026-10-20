@@ -32,11 +32,11 @@ class R64LabSelectorTests(unittest.TestCase):
 
     def test_arm64_isolation_options_are_explicit_and_keep_existing_dialog(self):
         code = dialog_source()
-        for label in ("CMD BEZ BOOTSTRAP", "CMD SA BOOTSTRAP", "BLENDER HEADLESS"):
+        for label in ("CMD BEZ BOOTSTRAP", "CMD SA BOOTSTRAP", "BLENDER HEADLESS", "BLENDER --VERSION"):
             self.assertIn(label, code)
         for mode in ("R64Arm64Isolation.CMD_NORMAL",
                      "R64Arm64Isolation.CMD_BOOTSTRAP",
-                     "R64Arm64Isolation.HEADLESS"):
+                     "R64Arm64Isolation.HEADLESS", "R64Arm64Isolation.VERSION"):
             self.assertIn(mode, code)
         self.assertNotIn(".setMessage(", code)
 
