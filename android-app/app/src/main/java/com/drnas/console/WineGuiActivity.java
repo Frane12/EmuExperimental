@@ -53,6 +53,7 @@ public final class WineGuiActivity extends Activity {
     private volatile boolean verboseLogs; // OFF by default, live menu toggle
     private boolean r64WinecfgBaseline;
     private boolean r64BlenderBackground, r64BlenderVulkan;
+    private String r64CpuMode="";
     private VirtualStickView virtualStick;
     private XInputSharedState xinputState;
     private DrnasPadLayoutView gamepadLayer;
@@ -282,6 +283,7 @@ public final class WineGuiActivity extends Activity {
                 getIntent().getBooleanExtra("DRNAS_R64_WINECFG_BASELINE",false));
         r64BlenderBackground=r64Lab && "background".equals(r64Mode);
         r64BlenderVulkan=r64Lab && "vulkan".equals(r64Mode);
+        r64CpuMode=r64Lab && R64Arm64Isolation.isCpuOnly(r64Mode)?r64Mode:"";
         if(blenderShell) {
             BlenderDisplayProfile.Resolution resolution=BlenderDisplayProfile.choose(
                     NativeHost.vulkanDeviceName(),getSharedPreferences("blender-display",MODE_PRIVATE)
@@ -632,8 +634,8 @@ public final class WineGuiActivity extends Activity {
 
         session=new WineGuiSession();
         session.setR64WinecfgBaseline(r64WinecfgBaseline);
-        session.setR64BlenderLabMode(r64BlenderBackground?"background":
-                r64BlenderVulkan?"vulkan":"");
+        session.setR64BlenderLabMode(!r64CpuMode.isEmpty()?r64CpuMode:
+                r64BlenderBackground?"background":r64BlenderVulkan?"vulkan":"");
         session.setDiagnosticsEnabled(verboseLogs);
         session.setDxvkVariant(appProfile.dxvk(DxvkVariants.selected(this)));
         String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
@@ -646,7 +648,7 @@ public final class WineGuiActivity extends Activity {
             // Keep the low-frequency fullscreen bridge, but NEVER launch
             // the 2s stack/watchdog diagnostics in normal usage.
             if(verboseLogs)startInputDiagnostics();
-            if(!r64WinecfgBaseline && !r64BlenderBackground)
+            if(!r64WinecfgBaseline && !r64BlenderBackground && r64CpuMode.isEmpty())
                 startBlenderFullscreenBridge();
         }
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
@@ -687,7 +689,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null || desktopFailed)return;
-                if(!desktopFailed && !r64BlenderBackground && desktopLaunchRequested &&
+                if(!desktopFailed && !r64BlenderBackground && r64CpuMode.isEmpty() && desktopLaunchRequested &&
                         (blenderShell && !r64WinecfgBaseline?
                                 xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0)) {
                     if(blenderShell && !r64WinecfgBaseline)updateBlenderBootProgress(100);
@@ -734,7 +736,7 @@ public final class WineGuiActivity extends Activity {
         },700);
         // Report absence of a mapped window only to the private session log.
         xserver.getScreen().postDelayed(()->{
-            if(!destroyed && !desktopFailed && !r64BlenderBackground &&
+            if(!destroyed && !desktopFailed && !r64BlenderBackground && r64CpuMode.isEmpty() &&
                     (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
                 log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
                 // Preserve the actual startup phase, including long installer waits.
@@ -1249,6 +1251,9 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("DRNAS_BLENDER_VULKAN_BRIDGE_MODE") ||
                 line.startsWith("DRNAS_R64_BASELINE") ||
                 line.startsWith("DRNAS_R64_BACKGROUND") ||
+                line.startsWith("DRNAS_R64_CPU_") ||
+                line.startsWith("DRNAS_R64_CMD_") ||
+                line.startsWith("DRNAS_R64_HEADLESS_") ||
                 line.startsWith("DRNAS_R64_VULKAN") ||
                 line.startsWith("DRNAS_R64_LAB_") ||
                 line.startsWith("DRNAS_R64_SEH ") ||
@@ -1289,13 +1294,16 @@ public final class WineGuiActivity extends Activity {
                 },delay);
             }
         }
-        if(r64BlenderBackground && line.startsWith("DRNAS_R64_BACKGROUND_RESULT=")) {
+        if((r64BlenderBackground && line.startsWith("DRNAS_R64_BACKGROUND_RESULT=")) ||
+                (!r64CpuMode.isEmpty() && (line.startsWith("DRNAS_R64_CMD_RESULT=") ||
+                        line.startsWith("DRNAS_R64_HEADLESS_RESULT=")))) {
             runOnUiThread(()->{
                 if(destroyed)return;
                 startupAnimation.stop();
                 startupAnimation.setVisibility(View.GONE);
                 if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
-                startupStatus.setText("Blender background test: "+
+                startupStatus.setText((r64CpuMode.isEmpty()?"Blender background test: ":
+                        "R64 ARM64 "+r64CpuMode+" test: ")+
                         (line.contains("=PASS")?"PROŠAO":"NIJE PROŠAO")+
                         ". Pošalji DRNAS TXT log.");
                 startupStatus.setVisibility(View.VISIBLE);
