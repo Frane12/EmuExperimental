@@ -8,13 +8,15 @@ import java.util.zip.*;
 import static org.junit.Assert.*;
 
 public class BundledBlenderArchiveTest {
-    private byte[] archive(String extra) throws Exception {
+    private byte[] archive(String extra) throws Exception {return archive(extra,false);}
+    private byte[] archive(String extra,boolean flat) throws Exception {
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();
         try(ZipOutputStream zip=new ZipOutputStream(bytes)) {
+            String prefix=flat?"":"blender-4.5.14-windows-arm64/";
             byte[] pe=new byte[128];pe[0]='M';pe[1]='Z';pe[60]=64;
             pe[64]='P';pe[65]='E';pe[68]=0x64;pe[69]=(byte)0xaa;
-            zip.putNextEntry(new ZipEntry("blender-4.5.14-windows-arm64/blender.exe"));zip.write(pe);zip.closeEntry();
-            zip.putNextEntry(new ZipEntry("blender-4.5.14-windows-arm64/"+extra));zip.write(42);zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(prefix+"blender.exe"));zip.write(pe);zip.closeEntry();
+            zip.putNextEntry(new ZipEntry(prefix+extra));zip.write(42);zip.closeEntry();
         }
         return bytes.toByteArray();
     }
@@ -55,5 +57,50 @@ public class BundledBlenderArchiveTest {
         try{BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});fail();}catch(IOException expected){}
         assertFalse(Files.exists(root.resolve("escape.txt")));assertFalse(Files.exists(target));
     }
-}
 
+    @Test public void flatR64ArchiveInstallsWithVerifiedHash() throws Exception {
+        byte[] zip=archive("4.5/scripts/example.py",true);
+        Path root=Files.createTempDirectory("blender-r64-flat"),target=root.resolve("Blender");
+        BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});
+        assertTrue(Files.isRegularFile(target.resolve("blender.exe")));
+        assertTrue(Files.isRegularFile(target.resolve("4.5/scripts/example.py")));
+        assertEquals(hash(zip),new String(Files.readAllBytes(target.resolve(".drnas-bundle-sha256")),
+                java.nio.charset.StandardCharsets.US_ASCII));
+    }
+    @Test public void mixedLayoutsAreRejectedAndRolledBack() throws Exception {
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        try(ZipOutputStream zip=new ZipOutputStream(bytes)) {
+            zip.putNextEntry(new ZipEntry("blender-4.5.14-windows-arm64/blender.exe"));
+            zip.write(0);zip.closeEntry();
+            zip.putNextEntry(new ZipEntry("4.5/scripts/main.py"));
+            zip.write(1);zip.closeEntry();
+        }
+        byte[] zip=bytes.toByteArray();
+        Path root=Files.createTempDirectory("blender-r64-mixed"),target=root.resolve("Blender");
+        try {
+            BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});
+            fail("Must reject mixed wrapped/flat roots");
+        } catch(IOException expected) {
+            assertTrue(expected.getMessage().contains("Mixed Blender archive roots"));
+        }
+        assertFalse(Files.exists(target));
+        try(java.util.stream.Stream<Path> remaining=Files.list(root)) {
+            assertEquals(0,remaining.count());
+        }
+    }
+    @Test public void flatArchiveTraversalRollsBack() throws Exception {
+        byte[] zip=archive("../../escape.txt",true);
+        Path root=Files.createTempDirectory("blender-r64-traversal"),target=root.resolve("Blender");
+        try {
+            BundledBlenderArchive.extract(new ByteArrayInputStream(zip),target,hash(zip),s->{});
+            fail("Traversal must be rejected");
+        } catch(IOException expected) {}
+        assertFalse(Files.exists(target));
+        assertFalse(Files.exists(root.resolve("escape.txt")));
+    }
+    @Test public void pinnedNativeR64ZipHash() {
+        assertEquals("8802767f9ac63a6e8054e6e37b3ba994b49c2fb6d37d34cfc50ae48491851d6f",
+                BundledBlenderArchive.SHA256);
+    }
+
+}
