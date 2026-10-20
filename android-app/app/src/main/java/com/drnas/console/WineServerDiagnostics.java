@@ -83,7 +83,7 @@ public final class WineServerDiagnostics {
                         log.accept("DRNAS_R64_SEH "+line.substring(0,Math.min(800,line.length())));
                     else if(lab && line.contains(":trace:process:") && labProcessEvents++<30)
                         log.accept("DRNAS_R64_PROCESS "+line.substring(0,Math.min(700,line.length())));
-                    if(lab && line.contains("DRNAS_R64_BACKGROUND_PYTHON_OK"))
+                    if(lab && line.trim().startsWith("DRNAS_R64_BACKGROUND_PYTHON_OK"))
                         log.accept("DRNAS_R64_BACKGROUND_PYTHON_OK "+line.substring(0,Math.min(250,line.length())));
                     // Always drain stdout/stderr: guest processes otherwise stall
                     // when pipe buffers fill. No frame-related writes in quiet mode.
