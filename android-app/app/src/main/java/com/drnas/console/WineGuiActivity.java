@@ -35,6 +35,8 @@ public final class WineGuiActivity extends Activity {
     private XServer xserver;
     private WineGuiSession session;
     private RawWineTrace raw;
+    private final AsyncDiagnosticQueue diagnosticIo=new AsyncDiagnosticQueue();
+    private android.os.HandlerThread startupMonitor;
     private volatile boolean started;
     private volatile boolean destroyed;
     private TextView startupStatus;
@@ -622,17 +624,27 @@ public final class WineGuiActivity extends Activity {
                         });
                     } finally {
                         session.close();
+                        diagnosticIo.close();
                         try {raw.close();}catch(IOException ignored){}
                     }
                 },"drnas-desktop").start();
             }
         });
         // Hide the status as soon as real Wine windows are mapped.
-        xserver.getScreen().postDelayed(new Runnable() {
+        startupMonitor=new android.os.HandlerThread("drnas-startup-monitor");
+        startupMonitor.start();
+        final android.os.Handler startupWorker=new android.os.Handler(startupMonitor.getLooper());
+        startupWorker.postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null || desktopFailed)return;
-                if(!desktopFailed && desktopLaunchRequested &&
-                        (blenderShell?xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0)) {
+                final boolean mapped=desktopLaunchRequested &&
+                        (blenderShell?xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0);
+                if(destroyed)return;
+                runOnUiThread(()->handleMapping(mapped));
+            }
+            private void handleMapping(boolean mapped) {
+                if(destroyed || desktopFailed)return;
+                if(mapped) {
                     if(blenderShell)updateBlenderBootProgress(100);
                     else startupStatus.setVisibility(View.GONE);
                     dependencyPanel.setVisibility(View.GONE);
@@ -664,16 +676,16 @@ public final class WineGuiActivity extends Activity {
                         if(blenderShell && shareLog!=null)shareLog.setVisibility(View.VISIBLE);
                         log("DRNAS_DESKTOP_NOT_CONFIRMED: 90s since Explorer request; X11 mapped window absent. Session kept for log/reset or late window mapping.");
                     }
-                    xserver.getScreen().postDelayed(this,700);
+                    startupWorker.postDelayed(this,700);
                 }
             }
         },700);
         // Report absence of a mapped window only to the private session log.
-        xserver.getScreen().postDelayed(()->{
+        startupWorker.postDelayed(()->{
             if(!destroyed && !desktopFailed && (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
                 log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
                 // Preserve the actual startup phase, including long installer waits.
-                startupStatus.setVisibility(View.VISIBLE);
+                runOnUiThread(()->{if(!destroyed)startupStatus.setVisibility(View.VISIBLE);});
             }
         },20000);
         // Start directly with the saved cap. The configuration menu is the only editor.
@@ -1020,7 +1032,7 @@ public final class WineGuiActivity extends Activity {
                 .setMessage(path+"\n\nIn Blender Save/Open, select D:\\. Files are saved directly to this Android folder.\n\nSave your project before changing the folder; Blender will close and restart.")
                 .setPositiveButton("OK",null)
                 .setNeutralButton("Promijeni mapu",(d,w)->{
-                    if(session!=null)session.close();
+                    // onDestroy shuts the session down on its existing worker.
                     startActivity(new Intent(this,BlenderLauncherActivity.class)
                             .putExtra("choose_project_folder",true));finish();
                 }).show();
@@ -1156,7 +1168,7 @@ public final class WineGuiActivity extends Activity {
         android.util.Log.i("DRNAS-HWUI","Trying Android GPU Canvas + split cursor; Wine Vulkan WSI is not yet supported");
     }
 
-    private synchronized void log(String line) {
+    private void log(String line) {
         // UI progress + fatal evidence are independent of optional verbose IO.
         // In quiet mode do not block the rendering or X11 event paths on disk.
         boolean critical=InputDiagnosticPolicy.keep(line) || line.startsWith("DRNAS_BLENDER_WINDOW_") || line.startsWith("DRNAS_DRIVER_AUTO") ||
@@ -1175,30 +1187,34 @@ public final class WineGuiActivity extends Activity {
                 line.contains("fatal IO error") || line.startsWith("Audio unavailable:") || line.startsWith("[Startup] ") ||
                 line.startsWith("[Dependencies] ") || line.startsWith("DRNAS_DEPENDENCY_RESULT") ||
                 line.startsWith("DRNAS_DESKTOP_CONFIRMED") || line.startsWith("DRNAS_DESKTOP_NOT_CONFIRMED") || line.startsWith("Desktop stopped:");
-        if(raw!=null) {
-            if(verboseLogs)raw.write("GUI",line);
-            else if(critical)raw.writeEssential("GUI",line);
-        }
-        if(!destroyed && AutomaticLogTrigger.matches(line)) {
-            try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
-            AutomaticCrashLog.request(this,line);
-        }
+        final boolean verbose=verboseLogs;
+        final boolean automatic=AutomaticLogTrigger.matches(line);
+        if(verbose || critical || automatic)diagnosticIo.submit(()->{
+            if(raw!=null) {
+                if(verbose)raw.writeEssential("GUI",line);
+                else if(critical)raw.writeEssential("GUI",line);
+            }
+            if(!destroyed && automatic) {
+                try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
+                AutomaticCrashLog.request(this,line);
+            }
+        });
         if(WineGuiSession.isLaunchMarker(line)){
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
         }
-        if(blenderShell) {
+        if(blenderShell && !desktopLaunchRequested) {
             final int stage=blenderBootStage(line);
             if(stage>=0)runOnUiThread(()->{
                 if(!destroyed)updateBlenderBootProgress(stage);
             });
         }
-        if(line.startsWith("[Startup] "))runOnUiThread(()->{
+        if(!blenderShell && line.startsWith("[Startup] "))runOnUiThread(()->{
             if(!destroyed && !blenderShell){
                 startupStatus.setText(AppLanguage.t(this,line.substring(10)));
                 dependencyPanel.setVisibility(View.GONE);
             }
         });
-        if(line.startsWith("[Dependencies] ")) {
+        if(!blenderShell && line.startsWith("[Dependencies] ")) {
             int separator=line.indexOf('|',15);
             if(separator>0) {
                 try {
@@ -1575,7 +1591,7 @@ public final class WineGuiActivity extends Activity {
     }
     @Override public void onWindowFocusChanged(boolean focused) {
         super.onWindowFocusChanged(focused);
-        if(blenderShell)log("DRNAS_X11_CRITICAL_ANDROID_FOCUS focused="+focused+
+        if(blenderShell && verboseLogs)log("DRNAS_X11_CRITICAL_ANDROID_FOCUS focused="+focused+
                 " timeMs="+android.os.SystemClock.uptimeMillis());
         if(!focused && blenderKeys!=null)blenderKeys.releaseAll();
         if(!focused && xserver!=null)xserver.getScreen().cancelPointerGestures();
@@ -1612,6 +1628,7 @@ public final class WineGuiActivity extends Activity {
                 " changingConfigurations="+isChangingConfigurations()+
                 " session="+(session!=null)+" xserver="+(xserver!=null));
         destroyed=true;
+        if(startupMonitor!=null)startupMonitor.quitSafely();
         if(diagnosticThread!=null)diagnosticThread.quitSafely();
         if(blenderFullscreenBridgeThread!=null)blenderFullscreenBridgeThread.quitSafely();
         if(blenderSmoothZoom!=null)blenderSmoothZoom.stop();

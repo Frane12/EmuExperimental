@@ -25,7 +25,7 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
         versionCode = 129
-        versionName = "1.1"
+        versionName = "1.1-performance-test"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -49,6 +49,7 @@ android {
     }
     buildTypes {
         getByName("debug") {
+            isDebuggable = false
             // Default Android debug signing is unique to each ephemeral CI runner.
             // Use the SAME private secret-backed key on EVERY downloadable build.
             if (drnasStableSigning) {
@@ -56,8 +57,8 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".prealpha01r4lab"
-                manifestPlaceholders["appLabel"] = "Blender DRNAS LAB"
+                applicationIdSuffix = ".performance.v11lab"
+                manifestPlaceholders["appLabel"] = "Blender Performance LAB"
             }
         }
         release {

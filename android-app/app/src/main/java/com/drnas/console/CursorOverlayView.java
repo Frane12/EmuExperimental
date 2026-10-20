@@ -19,9 +19,10 @@ import android.view.View;
 final class CursorOverlayView extends View {
     private static final class Frame {
         final Bitmap bitmap;
-        final int x,y,hotX,hotY;
+        final int x,y,hotX,hotY,generation;
         Frame(Bitmap bitmap,int x,int y,int hotX,int hotY) {
             this.bitmap=bitmap;this.x=x;this.y=y;this.hotX=hotX;this.hotY=hotY;
+            this.generation=bitmap==null || bitmap.isRecycled()?0:bitmap.getGenerationId();
         }
     }
     private volatile Frame frame;
@@ -33,6 +34,7 @@ final class CursorOverlayView extends View {
     private Bitmap fallbackArrow;
     private Bitmap lastAuditedBitmap;
     private boolean lastAuditedWasBlank;
+    private int lastAuditedGeneration;
     private int previousCursorState=-1;
     private int cursorStateLogs;
     private Consumer<String> diagnosticSink;
@@ -41,7 +43,9 @@ final class CursorOverlayView extends View {
 
     private boolean transparentCursor(Bitmap bitmap) {
         if(bitmap==null)return true;
-        if(bitmap==lastAuditedBitmap)return lastAuditedWasBlank;
+        int generation=bitmap.isRecycled()?0:bitmap.getGenerationId();
+        if(bitmap==lastAuditedBitmap && generation==lastAuditedGeneration)return lastAuditedWasBlank;
+        lastAuditedGeneration=generation;
         lastAuditedBitmap=bitmap;
         lastAuditedWasBlank=false;
         if(bitmap.isRecycled() || bitmap.getWidth()>64 || bitmap.getHeight()>64)
@@ -125,6 +129,10 @@ final class CursorOverlayView extends View {
                 hotspotX=1;hotspotY=1;
             }
         }
+        Frame previous=frame;
+        int generation=bitmap==null || bitmap.isRecycled()?0:bitmap.getGenerationId();
+        if(previous!=null && previous.bitmap==bitmap && previous.generation==generation &&
+                previous.x==x && previous.y==y && previous.hotX==hotspotX && previous.hotY==hotspotY)return;
         frame=new Frame(bitmap,x,y,hotspotX,hotspotY);
         postInvalidateOnAnimation();
     }
