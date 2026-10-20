@@ -74,7 +74,9 @@ public final class WineServerDiagnostics {
                 String line;int n=0,priority=0,processEvents=0,quietErrors=0;
                 int labSehEvents=0,labProcessEvents=0;
                 boolean lab=prefix.startsWith("[Blender background] ") ||
-                        prefix.startsWith("[Blender Vulkan] ");
+                        prefix.startsWith("[Blender Vulkan] ") ||
+                        prefix.startsWith("[Blender headless] ") ||
+                        prefix.startsWith("[R64 CMD] ");
                 while((line=br.readLine())!=null) {
                     // R64 LAB opts into SEH/process traces, but default app
                     // logging must stay quiet. Keep the first bounded exception
