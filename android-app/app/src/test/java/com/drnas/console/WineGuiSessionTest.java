@@ -10,6 +10,8 @@ public class WineGuiSessionTest {
     @Test public void directBlenderLaunchStartsTheWindowMappingWatchdog() {
         assertTrue(WineGuiSession.isLaunchMarker("Launching Blender directly without Explorer desktop/taskbar"));
         assertTrue(WineGuiSession.isLaunchMarker("Launching R64 Winecfg baseline without Blender or Explorer"));
+        assertTrue(WineGuiSession.isLaunchMarker("Launching R64 Blender Vulkan GUI without Explorer"));
+        assertFalse(WineGuiSession.isLaunchMarker("DRNAS_R64_BACKGROUND_LAUNCH: no X11 window expected"));
         assertTrue(WineGuiSession.isLaunchMarker("Launching Wine explorer.exe virtual desktop"));
         assertFalse(WineGuiSession.isLaunchMarker("Blender archive staged"));
         assertFalse(WineGuiSession.isLaunchMarker(null));
@@ -28,6 +30,31 @@ public class WineGuiSessionTest {
                 BundledBlenderArchive.WINDOWS_EXE,"--gpu-backend","vulkan","--window-fullscreen"),args);
         assertFalse(args.contains("explorer.exe"));
         assertFalse(args.stream().anyMatch(a->a.startsWith("/desktop=")));
+    }
+
+    @Test public void r64BackgroundUsesHeadlessCPUAndOneBoundedPythonMarker() {
+        List<String> flags=WineGuiSession.r64BackgroundArgs();
+        List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,flags);
+        assertEquals("/system/bin/linker64",args.get(0));
+        assertEquals(BundledBlenderArchive.WINDOWS_EXE,args.get(2));
+        assertEquals("--background",args.get(3));
+        assertTrue(args.contains("--factory-startup"));
+        assertTrue(args.contains("--python-expr"));
+        assertTrue(args.stream().anyMatch(a->a.contains("DRNAS_R64_BACKGROUND_PYTHON_OK")));
+        assertFalse(args.contains("--gpu-backend"));
+        assertFalse(args.contains("vulkan"));
+        assertFalse(args.contains(BundledBlenderArchive.WINDOWS_SETUP));
+        assertFalse(args.contains("explorer.exe"));
+    }
+    @Test public void r64VulkanGuiIsCleanFromUserScriptsAndOptions() {
+        List<String> flags=WineGuiSession.r64VulkanGuiArgs();
+        assertEquals(Arrays.asList("--gpu-backend","vulkan","--factory-startup"),flags);
+        List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,flags);
+        assertEquals(BundledBlenderArchive.WINDOWS_EXE,args.get(2));
+        assertFalse(args.contains("--background"));
+        assertFalse(args.contains("--python-expr"));
+        assertFalse(args.contains(BundledBlenderArchive.WINDOWS_SETUP));
+        assertFalse(args.contains("explorer.exe"));
     }
 
     @Test public void isolatedR64WinecfgBaselineDoesNotRunBlenderOrExplorer() {
