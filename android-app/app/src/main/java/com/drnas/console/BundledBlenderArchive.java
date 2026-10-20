@@ -15,7 +15,11 @@ final class BundledBlenderArchive {
     static final String DIRECTORY="Blender-"+VERSION;
     static final String WINDOWS_EXE="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\blender.exe";
     static final String WINDOWS_SETUP="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\drnas-startup.py";
-    static final long MAX_EXPANDED=1024L*1024*1024;
+    // Default safe bound for the larger compiled r64 payload. CI pins this
+    // to verified ZIP metadata at APK packaging time.
+    static final long MAX_EXPANDED=3L*1024*1024*1024;
+    static final long EXPECTED_EXPANDED=707171882L;
+    static final long REQUIRED_FREE_BYTES=900L*1024*1024;
     static final String SETUP="import bpy, os\n"+
             // A/B r48: preserve D: startup; do not load the experimental r46 Win32 window hook.
             "# Filter Blender's Volumes panel only; Wine still needs its internal C: disk.\n"+
@@ -276,12 +280,13 @@ final class BundledBlenderArchive {
                                 total+=n;
                                 if(total>MAX_EXPANDED)throw new IOException("Blender unpacked size exceeds limit");
                                 out.write(buffer,0,n);
+                                // Report progress even for a single huge Blender DLL.
+                                int percent=(int)Math.min(99,total*100/EXPECTED_EXPANDED);
+                                if(percent/10!=lastPercent/10 || lastPercent<0) {
+                                    lastPercent=percent;log.accept("[Startup] Blender unpacking "+percent+"%");
+                                }
                             }
                         }
-                    }
-                    int percent=(int)Math.min(99,total*100/707171882L);
-                    if(percent/10!=lastPercent/10 || lastPercent<0) {
-                        lastPercent=percent;log.accept("[Startup] Blender unpacking "+percent+"%");
                     }
                 }
                 // ZipInputStream stops at the central directory. Hash its remaining
