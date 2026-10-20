@@ -929,7 +929,7 @@ public final class WineGuiActivity extends Activity {
                         if(raw!=null)raw.setVerbose(verboseLogs);
                         if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
                         if(xserver!=null) {
-                            xserver.setFrameDiagnosticsEnabled(verboseLogs);
+                            xserver.setFrameDiagnosticsEnabled(verboseLogs || r64BlenderVulkan);
                             xserver.getScreen().setInputDebugEnabled(verboseLogs);
                         }
                         if(desktopCursorOverlay!=null)
