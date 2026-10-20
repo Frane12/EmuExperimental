@@ -10,15 +10,25 @@ final class R64Arm64Isolation {
     static final String CMD_NORMAL="cmd-normal";
     static final String CMD_BOOTSTRAP="cmd-bootstrap";
     static final String HEADLESS="headless";
+    static final String VERSION="version";
     static final int CMD_TIMEOUT_SECONDS=25;
+    static final int VERSION_TIMEOUT_SECONDS=40;
     static boolean isCpuOnly(String mode) {
-        return CMD_NORMAL.equals(mode) || CMD_BOOTSTRAP.equals(mode) || HEADLESS.equals(mode);
+        return CMD_NORMAL.equals(mode) || CMD_BOOTSTRAP.equals(mode) ||
+                HEADLESS.equals(mode) || VERSION.equals(mode);
     }
     static boolean isCommand(String mode) {
         return CMD_NORMAL.equals(mode) || CMD_BOOTSTRAP.equals(mode);
     }
     static String newMarker() {
         return "DRNAS_R64_CMD_OK_"+UUID.randomUUID().toString().replace("-","");
+    }
+    static boolean isBlenderVersionLine(String line) {
+        return line!=null && line.matches("^Blender 4\\.5\\.14(?:[ \\(].*)?$");
+    }
+    static boolean cmdPassed(boolean ended,int exit,boolean markerSeen,
+                             boolean serverAlive) {
+        return ended && exit==0 && markerSeen && serverAlive;
     }
     static boolean matchesMarker(String line,String expected) {
         return expected!=null && line!=null && line.trim().equals(expected);
