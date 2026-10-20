@@ -1254,6 +1254,8 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("DRNAS_R64_CPU_") ||
                 line.startsWith("DRNAS_R64_CMD_") ||
                 line.startsWith("DRNAS_R64_HEADLESS_") ||
+                line.startsWith("DRNAS_R64_VERSION_") ||
+                line.startsWith("DRNAS_R64_MODULE ") ||
                 line.startsWith("DRNAS_R64_VULKAN") ||
                 line.startsWith("DRNAS_R64_LAB_") ||
                 line.startsWith("DRNAS_R64_SEH ") ||
@@ -1296,7 +1298,8 @@ public final class WineGuiActivity extends Activity {
         }
         if((r64BlenderBackground && line.startsWith("DRNAS_R64_BACKGROUND_RESULT=")) ||
                 (!r64CpuMode.isEmpty() && (line.startsWith("DRNAS_R64_CMD_RESULT=") ||
-                        line.startsWith("DRNAS_R64_HEADLESS_RESULT=")))) {
+                        line.startsWith("DRNAS_R64_HEADLESS_RESULT=") ||
+                        line.startsWith("DRNAS_R64_VERSION_RESULT=")))) {
             runOnUiThread(()->{
                 if(destroyed)return;
                 startupAnimation.stop();
