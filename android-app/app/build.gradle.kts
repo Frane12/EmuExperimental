@@ -8,6 +8,7 @@ val drnasStableSigning = listOf(
 // Deliberately separate from installed public Blender; a recovery LAB build
 // owns its own private storage and cannot overwrite user projects.
 val drnasPrefixRecoveryLab = System.getenv("DRNAS_PREFIX_RECOVERY_LAB") == "1"
+val drnasEmuLab = System.getenv("DRNAS_EMU_LAB") == "1"
 
 // Build jobs that distribute APKs must never silently fall back to a one-off
 // Android debug certificate. Local debug/test builds remain possible.
@@ -57,7 +58,10 @@ android {
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
             }
-            if (drnasPrefixRecoveryLab) {
+            if (drnasEmuLab) {
+                applicationIdSuffix = ".lab"
+                manifestPlaceholders["appLabel"] = "DRNAS EMU LAB"
+            } else if (drnasPrefixRecoveryLab) {
                 applicationIdSuffix = ".prefixfixlab"
                 manifestPlaceholders["appLabel"] = "Blender PrefixFix LAB"
             } else if (!drnasStableSigning) {
