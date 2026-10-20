@@ -33,7 +33,10 @@ def package(assets, source=None):
         if actual != (os.environ.get('DRNAS_BLENDER_SHA256') or SHA256):
             raise ValueError('Blender distribution SHA-256 mismatch')
         with zipfile.ZipFile(temporary) as z:
-            exe = z.read(f'blender-{VERSION}-windows-arm64/blender.exe')
+            exe_path = f'blender-{VERSION}-windows-arm64/blender.exe'
+            if exe_path not in z.namelist():
+                exe_path = 'blender.exe'
+            exe = z.read(exe_path)
             pe = int.from_bytes(exe[60:64], 'little')
             if exe[pe:pe+6] != b'PE\0\0\x64\xaa':
                 raise ValueError('Expected native ARM64 Blender PE')
