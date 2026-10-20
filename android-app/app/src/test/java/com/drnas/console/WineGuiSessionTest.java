@@ -150,6 +150,16 @@ public class WineGuiSessionTest {
                 WineGuiSession.command(LINKER,WINE,"linkwin:"+link,
                         LaunchArguments.forLink(link,"",false)));
     }
+    @Test public void r64VersionProbeCannotLaunchGuiOrPython() {
+        List<String> flags=WineGuiSession.r64VersionArgs();
+        assertEquals(List.of("--version"),flags);
+        List<String> args=WineGuiSession.blenderCommand(LINKER,WINE,flags);
+        assertEquals(BundledBlenderArchive.WINDOWS_EXE,args.get(2));
+        assertFalse(args.contains("--python-expr"));
+        assertFalse(args.contains("--gpu-backend"));
+        assertFalse(args.contains("explorer.exe"));
+    }
+
 }
 
 
