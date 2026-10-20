@@ -16,6 +16,7 @@ public final class BlenderLauncherActivity extends Activity {
     private static final int PICK_FOLDER=3401, STORAGE_ACCESS=3402, LEGACY_STORAGE=3403;
     private boolean preparing, checking;
     private boolean labChoiceMade, r64WinecfgBaseline;
+    private String r64LabMode="";
     private android.net.Uri pickedTree;
 
     @Override public void onCreate(Bundle state) {
@@ -59,11 +60,12 @@ public final class BlenderLauncherActivity extends Activity {
             if(pending!=null)pickedTree=android.net.Uri.parse(pending);
             labChoiceMade=state.getBoolean("r64LabChoiceMade",false);
             r64WinecfgBaseline=state.getBoolean("r64WinecfgBaseline",false);
+            r64LabMode=state.getString("r64LabMode","");
             // The external picker/settings activity will return its result to us.
             if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
         }
         if(isR64Lab() && !labChoiceMade) showR64LabChoice();
-        else if(r64WinecfgBaseline) prepareRuntime();
+        else if(r64WinecfgBaseline || "background".equals(r64LabMode)) prepareRuntime();
         else checkStartupAccess();
     }
     /**
@@ -75,23 +77,22 @@ public final class BlenderLauncherActivity extends Activity {
         return "com.drnas.console.mali.r64.lab".equals(getPackageName());
     }
     private void showR64LabChoice() {
-        new AppDialogBuilder(this).setTitle("DRNAS R64 LAB · odabir testa")
-                .setMessage("Za izoliranje Wine stack overflowa prvo možemo pokrenuti "+
-                        "Winecfg (obični Windows prozor) bez Blendera. "+
-                        "Koristi isti Wine ARM64, X11 i Vulkan/Mesa runtime, "+
-                        "ali ne raspakirava Blender. "+
-                        "Nakon 20–30 sekundi pošalji DRNAS log. "+
-                        "Ili odaberi normalan Blender test.")
-                .setPositiveButton("TEST WINECFG",(dialog,which)->{
+        new AppDialogBuilder(this).setTitle("DRNAS R64 LAB · izolirani testovi")
+                .setMessage("Winecfg je potvrđen. Sada zasebno testiramo Blender bez "+
+                        "grafičkog prozora i Blenderov Vulkan GUI. "+
+                        "Background ne traži mapu projekata; Vulkan koristi disk D:. "+
+                        "Pošalji DRNAS TXT log nakon svakog testa.")
+                .setItems(new CharSequence[]{
+                        "1 · TEST WINECFG (referenca)",
+                        "2 · TEST BLENDER BACKGROUND (bez GUI-ja)",
+                        "3 · TEST BLENDER VULKAN (GUI + Wine SEH)"},(dialog,index)->{
                     labChoiceMade=true;
-                    r64WinecfgBaseline=true;
-                    status.setText("R64 Winecfg dijagnostika…");
-                    prepareRuntime();
-                })
-                .setNegativeButton("POKRENI BLENDER",(dialog,which)->{
-                    labChoiceMade=true;
-                    r64WinecfgBaseline=false;
-                    checkStartupAccess();
+                    r64LabMode=index==0?"winecfg":index==1?"background":"vulkan";
+                    r64WinecfgBaseline="winecfg".equals(r64LabMode);
+                    status.setText("R64 LAB test: "+r64LabMode+"…");
+                    if(r64WinecfgBaseline || "background".equals(r64LabMode))
+                        prepareRuntime();
+                    else checkStartupAccess();
                 })
                 .setCancelable(false).show();
     }
@@ -198,6 +199,7 @@ public final class BlenderLauncherActivity extends Activity {
         out.putBoolean("waitingExternal",waitingExternal);
         out.putBoolean("r64LabChoiceMade",labChoiceMade);
         out.putBoolean("r64WinecfgBaseline",r64WinecfgBaseline);
+        out.putString("r64LabMode",r64LabMode);
         super.onSaveInstanceState(out);
     }
     private void prepareRuntime() {
@@ -235,7 +237,8 @@ public final class BlenderLauncherActivity extends Activity {
         opened=true;
         startActivity(new Intent(this,WineGuiActivity.class)
                 .putExtra("DRNAS_GUI_APP",BlenderShellLaunch.ID)
-                .putExtra("DRNAS_R64_WINECFG_BASELINE",isR64Lab() && r64WinecfgBaseline));
+                .putExtra("DRNAS_R64_WINECFG_BASELINE",isR64Lab() && r64WinecfgBaseline)
+                .putExtra("DRNAS_R64_LAB_MODE",isR64Lab()?r64LabMode:""));
         finish();
     }
     @Override protected void onDestroy(){destroyed=true;super.onDestroy();}
