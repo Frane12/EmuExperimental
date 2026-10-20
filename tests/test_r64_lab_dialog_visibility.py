@@ -30,5 +30,15 @@ class R64LabSelectorTests(unittest.TestCase):
                       "TEST BLENDER VULKAN"):
             self.assertIn(label, code)
 
+    def test_arm64_isolation_options_are_explicit_and_keep_existing_dialog(self):
+        code = dialog_source()
+        for label in ("CMD BEZ BOOTSTRAP", "CMD SA BOOTSTRAP", "BLENDER HEADLESS"):
+            self.assertIn(label, code)
+        for mode in ("R64Arm64Isolation.CMD_NORMAL",
+                     "R64Arm64Isolation.CMD_BOOTSTRAP",
+                     "R64Arm64Isolation.HEADLESS"):
+            self.assertIn(mode, code)
+        self.assertNotIn(".setMessage(", code)
+
 if __name__ == "__main__":
     unittest.main()
