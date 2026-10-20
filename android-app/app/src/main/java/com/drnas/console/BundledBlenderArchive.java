@@ -10,7 +10,7 @@ import java.util.zip.*;
 /** Transactional first-use extraction. No Android or Wine APIs; tested on JVM. */
 final class BundledBlenderArchive {
     static final String VERSION="4.5.14";
-    static final String SHA256="8802767f9ac63a6e8054e6e37b3ba994b49c2fb6d37d34cfc50ae48491851d6f";
+    static final String SHA256="0153ecefc96a0e23985e6edcdbe04e909ba2078258f4ff6a05c21d4b7c756911";
     static final String NAME="blender-"+VERSION+"-windows-arm64.zip";
     static final String DIRECTORY="Blender-"+VERSION;
     static final String WINDOWS_EXE="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\blender.exe";
