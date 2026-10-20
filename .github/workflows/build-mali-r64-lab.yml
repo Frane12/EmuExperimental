@@ -13,7 +13,7 @@ permissions:
   contents: write
 concurrency:
   group: drnas-mali-r64-lab-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   lab:
     if: github.ref == 'refs/heads/experiment/blender-4514-mali-vulkan-native-r64'
@@ -80,7 +80,7 @@ jobs:
               exe = z.read("blender.exe" if flat else root+"blender.exe")[:4096]
               assert exe[:2] == b"MZ", "Invalid embedded Blender PE"
               pe = int.from_bytes(exe[60:64], "little")
-              assert exe[pe:pe+6] == b"PE\\0\\0\\x64\\xaa", "Not Windows ARM64 Blender"
+              assert exe[pe:pe+6] == b"PE\0\0\x64\xaa", "Not Windows ARM64 Blender"
               print("DRNAS_MALI_R64_ARCHIVE_VERIFIED", "flat" if flat else "wrapped")
           PY
       - name: Bundle Android X11 and OpenGL runtime
