@@ -72,7 +72,19 @@ public final class WineServerDiagnostics {
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
                 String line;int n=0,priority=0,processEvents=0,quietErrors=0;
+                int labSehEvents=0,labProcessEvents=0;
+                boolean lab=prefix.startsWith("[Blender background] ") ||
+                        prefix.startsWith("[Blender Vulkan] ");
                 while((line=br.readLine())!=null) {
+                    // R64 LAB opts into SEH/process traces, but default app
+                    // logging must stay quiet. Keep the first bounded exception
+                    // frames and process lifecycle events for offline diagnosis.
+                    if(lab && line.contains(":trace:seh:") && labSehEvents++<36)
+                        log.accept("DRNAS_R64_SEH "+line.substring(0,Math.min(800,line.length())));
+                    else if(lab && line.contains(":trace:process:") && labProcessEvents++<30)
+                        log.accept("DRNAS_R64_PROCESS "+line.substring(0,Math.min(700,line.length())));
+                    if(lab && line.contains("DRNAS_R64_BACKGROUND_PYTHON_OK"))
+                        log.accept("DRNAS_R64_BACKGROUND_PYTHON_OK "+line.substring(0,Math.min(250,line.length())));
                     // Always drain stdout/stderr: guest processes otherwise stall
                     // when pipe buffers fill. No frame-related writes in quiet mode.
                     if(!verbose.getAsBoolean()) {
