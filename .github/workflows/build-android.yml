@@ -46,6 +46,7 @@ on:
       - experiment/blender-window-unforced-r49
       - experiment/blender-window-frames-r50
       - release/blender-v1.1-review
+      - experiment/blender-v11-loading-dots-private
     paths:
       - "android-app/**"
       - "tools/package_gui_runtime.py"
