@@ -52,6 +52,7 @@ public final class WineGuiActivity extends Activity {
     private boolean cpuCanvasFallback;
     private volatile boolean verboseLogs; // OFF by default, live menu toggle
     private boolean r64WinecfgBaseline;
+    private boolean r64BlenderBackground, r64BlenderVulkan;
     private VirtualStickView virtualStick;
     private XInputSharedState xinputState;
     private DrnasPadLayoutView gamepadLayer;
@@ -275,8 +276,12 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
         blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
-        r64WinecfgBaseline=blenderShell && getPackageName().equals("com.drnas.console.mali.r64.lab")
-                && getIntent().getBooleanExtra("DRNAS_R64_WINECFG_BASELINE",false);
+        boolean r64Lab=blenderShell && "com.drnas.console.mali.r64.lab".equals(getPackageName());
+        String r64Mode=r64Lab?getIntent().getStringExtra("DRNAS_R64_LAB_MODE"):null;
+        r64WinecfgBaseline=r64Lab && ("winecfg".equals(r64Mode) ||
+                getIntent().getBooleanExtra("DRNAS_R64_WINECFG_BASELINE",false));
+        r64BlenderBackground=r64Lab && "background".equals(r64Mode);
+        r64BlenderVulkan=r64Lab && "vulkan".equals(r64Mode);
         if(blenderShell) {
             BlenderDisplayProfile.Resolution resolution=BlenderDisplayProfile.choose(
                     NativeHost.vulkanDeviceName(),getSharedPreferences("blender-display",MODE_PRIVATE)
@@ -320,7 +325,7 @@ public final class WineGuiActivity extends Activity {
                 .getBoolean("x11_presentation_mask",false));
         // Keep cheap PutImage frame accounting available even in quiet Blender
         // sessions. A mapped HWND by itself does not prove a Vulkan frame.
-        xserver.setFrameDiagnosticsEnabled(verboseLogs);
+        xserver.setFrameDiagnosticsEnabled(verboseLogs || r64BlenderVulkan);
         xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
@@ -627,6 +632,8 @@ public final class WineGuiActivity extends Activity {
 
         session=new WineGuiSession();
         session.setR64WinecfgBaseline(r64WinecfgBaseline);
+        session.setR64BlenderLabMode(r64BlenderBackground?"background":
+                r64BlenderVulkan?"vulkan":"");
         session.setDiagnosticsEnabled(verboseLogs);
         session.setDxvkVariant(appProfile.dxvk(DxvkVariants.selected(this)));
         String requested=getIntent().getStringExtra("DRNAS_GUI_APP");
@@ -639,7 +646,8 @@ public final class WineGuiActivity extends Activity {
             // Keep the low-frequency fullscreen bridge, but NEVER launch
             // the 2s stack/watchdog diagnostics in normal usage.
             if(verboseLogs)startInputDiagnostics();
-            if(!r64WinecfgBaseline) startBlenderFullscreenBridge();
+            if(!r64WinecfgBaseline && !r64BlenderBackground)
+                startBlenderFullscreenBridge();
         }
         xserver.setOnStartListener(new XServer.OnXSeverStartListener(){
             @Override public void onStart() {
@@ -679,7 +687,7 @@ public final class WineGuiActivity extends Activity {
         xserver.getScreen().postDelayed(new Runnable() {
             @Override public void run() {
                 if(destroyed || startupStatus==null || desktopFailed)return;
-                if(!desktopFailed && desktopLaunchRequested &&
+                if(!desktopFailed && !r64BlenderBackground && desktopLaunchRequested &&
                         (blenderShell && !r64WinecfgBaseline?
                                 xserver.hasMappedBlenderPrimary():xserver.mappedWindowCount()>0)) {
                     if(blenderShell && !r64WinecfgBaseline)updateBlenderBootProgress(100);
@@ -726,7 +734,8 @@ public final class WineGuiActivity extends Activity {
         },700);
         // Report absence of a mapped window only to the private session log.
         xserver.getScreen().postDelayed(()->{
-            if(!destroyed && !desktopFailed && (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
+            if(!destroyed && !desktopFailed && !r64BlenderBackground &&
+                    (!desktopLaunchRequested || xserver.mappedWindowCount()==0)) {
                 log("No Wine desktop confirmed after 20 seconds. On-screen log sharing remains available.");
                 // Preserve the actual startup phase, including long installer waits.
                 startupStatus.setVisibility(View.VISIBLE);
@@ -1239,6 +1248,12 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
                 line.startsWith("DRNAS_BLENDER_VULKAN_BRIDGE_MODE") ||
                 line.startsWith("DRNAS_R64_BASELINE") ||
+                line.startsWith("DRNAS_R64_BACKGROUND") ||
+                line.startsWith("DRNAS_R64_VULKAN") ||
+                line.startsWith("DRNAS_R64_LAB_") ||
+                line.startsWith("DRNAS_R64_SEH ") ||
+                line.startsWith("DRNAS_R64_PROCESS ") ||
+                line.contains("DRNAS_R64_BACKGROUND_PYTHON_OK") ||
                 line.contains("DRNAS_BLENDER_LIBGL_PROBE") ||
                 line.startsWith("DRNAS_OPENGL_MESA_BUNDLE_VERIFIED") ||
                 line.startsWith("DRNAS_BLENDER_LIBGL_LINKER_READY") ||
@@ -1259,17 +1274,33 @@ public final class WineGuiActivity extends Activity {
             try {if(raw!=null)raw.checkpoint();}catch(IOException ignored){}
             AutomaticCrashLog.request(this,line);
         }
-        if(r64WinecfgBaseline && line.startsWith("Launching R64 Winecfg baseline")) {
-            // Passive X11 state samples; avoid renderer/input interference.
-            for(int delay:new int[]{5000,15000,30000}) {
-                android.os.Handler main=new android.os.Handler(android.os.Looper.getMainLooper());
-                main.postDelayed(()->{
+        if((r64WinecfgBaseline && line.startsWith("Launching R64 Winecfg baseline")) ||
+                (r64BlenderVulkan && line.startsWith("Launching R64 Blender Vulkan GUI"))) {
+            // Passive, bounded X11 samples. Vulkan tests have frame accounting
+            // enabled; Winecfg quiet-mode counters remain disabled.
+            final String test=r64BlenderVulkan?"DRNAS_R64_VULKAN_X11_SAMPLE":
+                    "DRNAS_R64_BASELINE_X11_SAMPLE";
+            for(int delay:new int[]{5000,15000,30000,60000}) {
+                new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(()->{
                     if(!destroyed && xserver!=null)
-                        log("DRNAS_R64_BASELINE_X11_SAMPLE ms="+delay+
-                                " windows="+xserver.mappedWindowCount()+
+                        log(test+" ms="+delay+" windows="+xserver.mappedWindowCount()+
+                                " primary="+xserver.hasMappedBlenderPrimary()+
                                 " "+xserver.diagnosticProgressSnapshot());
                 },delay);
             }
+        }
+        if(r64BlenderBackground && line.startsWith("DRNAS_R64_BACKGROUND_RESULT=")) {
+            runOnUiThread(()->{
+                if(destroyed)return;
+                startupAnimation.stop();
+                startupAnimation.setVisibility(View.GONE);
+                if(blenderStartupPanel!=null)blenderStartupPanel.setVisibility(View.GONE);
+                startupStatus.setText("Blender background test: "+
+                        (line.contains("=PASS")?"PROŠAO":"NIJE PROŠAO")+
+                        ". Pošalji DRNAS TXT log.");
+                startupStatus.setVisibility(View.VISIBLE);
+                if(shareLog!=null)shareLog.setVisibility(View.VISIBLE);
+            });
         }
         if(WineGuiSession.isLaunchMarker(line)){
             desktopLaunchStarted=android.os.SystemClock.uptimeMillis();desktopLaunchRequested=true;
