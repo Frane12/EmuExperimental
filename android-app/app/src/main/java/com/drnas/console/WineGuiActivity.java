@@ -82,7 +82,7 @@ public final class WineGuiActivity extends Activity {
     private void setToolbarExpanded(boolean expanded) {
         toolbarExpanded=expanded;
         int visibility=expanded?View.VISIBLE:View.GONE;
-        if(shareLog!=null)shareLog.setVisibility(visibility);
+        if(shareLog!=null)shareLog.setVisibility(blenderShell?View.GONE:visibility);
         if(toolbarKeyboard!=null)toolbarKeyboard.setVisibility(visibility);
         if(toolbarTasks!=null)toolbarTasks.setVisibility(visibility);
         if(toolbarOptions!=null)toolbarOptions.setVisibility(visibility);
@@ -190,7 +190,12 @@ public final class WineGuiActivity extends Activity {
     // The percentage is a conservative, monotonic *boot milestone*, not a
     // guessed countdown or timed animation. 100% means Blender itself mapped.
     private void updateBlenderBootProgress(int milestone) {
-        if(!blenderShell || blenderStartupBar==null || desktopFailed)return;
+        if(!blenderShell || desktopFailed)return;
+        // Modern EmuDRNAS spinner needs no artificial milestone bar.
+        if(blenderStartupBar==null) {
+            blenderBootMilestone=Math.max(blenderBootMilestone,Math.min(100,Math.max(0,milestone)));
+            return;
+        }
         int p=Math.max(blenderBootMilestone,Math.min(100,Math.max(0,milestone)));
         if(p==blenderBootMilestone && blenderStartupPercent!=null)return;
         blenderBootMilestone=p;
@@ -277,7 +282,8 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
         blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
-        boolean r64Lab=blenderShell && "com.drnas.console.mali.r64.lab".equals(getPackageName());
+        boolean r64Lab=blenderShell && ("com.drnas.console.mali.r64.lab".equals(getPackageName()) ||
+                "com.drnas.console.mali.r64.gui.lab".equals(getPackageName()));
         String r64Mode=r64Lab?getIntent().getStringExtra("DRNAS_R64_LAB_MODE"):null;
         r64WinecfgBaseline=r64Lab && ("winecfg".equals(r64Mode) ||
                 getIntent().getBooleanExtra("DRNAS_R64_WINECFG_BASELINE",false));
@@ -327,7 +333,7 @@ public final class WineGuiActivity extends Activity {
                 .getBoolean("x11_presentation_mask",false));
         // Keep cheap PutImage frame accounting available even in quiet Blender
         // sessions. A mapped HWND by itself does not prove a Vulkan frame.
-        xserver.setFrameDiagnosticsEnabled(verboseLogs || r64BlenderVulkan);
+        xserver.setFrameDiagnosticsEnabled(verboseLogs);
         xserver.setExperimentalBulkDecode(getPreferences(MODE_PRIVATE)
                 .getBoolean("x11_bulk_decoder",false));
         xserver.getScreen().setGuestResolution(
@@ -393,32 +399,12 @@ public final class WineGuiActivity extends Activity {
         startupStatus.setGravity(Gravity.CENTER);
         startupStatus.setBackgroundColor(0x00000000);
         if(blenderShell) {
-            blenderStartupPanel=new LinearLayout(this);
-            blenderStartupPanel.setOrientation(LinearLayout.VERTICAL);
-            blenderStartupPanel.setGravity(Gravity.CENTER);
-            blenderStartupPanel.setPadding(dp(18),dp(12),dp(18),dp(12));
-            blenderStartupPanel.addView(startupStatus);
-            blenderStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-            blenderStartupBar.setIndeterminate(false);
-            blenderStartupBar.setMax(100);
-            blenderStartupBar.setProgress(0);
-            blenderStartupBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff8cf5d0));
-            LinearLayout.LayoutParams barParams=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,dp(8));
-            barParams.topMargin=dp(10);
-            blenderStartupPanel.addView(blenderStartupBar,barParams);
-            blenderStartupPercent=new TextView(this);
-            blenderStartupPercent.setText("0%");
-            blenderStartupPercent.setTextColor(0xffc7dedf);
-            blenderStartupPercent.setTextSize(13);
-            blenderStartupPercent.setGravity(Gravity.CENTER);
-            LinearLayout.LayoutParams percentParams=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-            percentParams.topMargin=dp(9);
-            blenderStartupPanel.addView(blenderStartupPercent,percentParams);
+            // Identical EmuDRNAS modern startup on every Blender boot.
+            // No percentages, benchmark data, log lines or progress-diagnostic I/O.
+            blenderStartupPanel=StartupAnimationView.blenderPanel(this,startupStatus);
             layout.addView(blenderStartupPanel,new FrameLayout.LayoutParams(
-                    Math.min(dp(420),getResources().getDisplayMetrics().widthPixels-dp(36)),
-                    ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
             LinearLayout brand=new LinearLayout(this);
             brand.setGravity(Gravity.CENTER_VERTICAL);brand.setAlpha(0.72f);
             android.widget.ImageView badge=new android.widget.ImageView(this);
@@ -616,6 +602,8 @@ public final class WineGuiActivity extends Activity {
                     Gravity.END|Gravity.CENTER_VERTICAL);
             zoomLayout.rightMargin=dp(8);
             layout.addView(blenderZoom,zoomLayout);
+            // Same draggable LMB/RMB/smooth zoom panel as latest EmuDRNAS.
+            blenderKeys.moveMouseButtonsTo(blenderZoom);
             blenderZoom.setVisibility(View.GONE);
         } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
         AppLanguage.tree(layout);
@@ -675,7 +663,7 @@ public final class WineGuiActivity extends Activity {
                                 startupAnimation.stop();
                                 startupStatus.setVisibility(View.VISIBLE);
                                 // On failure the diagnostic export must be accessible.
-                                if(blenderShell && shareLog!=null)shareLog.setVisibility(View.VISIBLE);
+                                if(blenderShell && shareLog!=null)shareLog.setVisibility(View.GONE);
                             }
                         });
                     } finally {
@@ -721,11 +709,11 @@ public final class WineGuiActivity extends Activity {
                     if(desktopLaunchRequested && desktopLaunchStarted>0 && !desktopWindowWarning &&
                             android.os.SystemClock.uptimeMillis()-desktopLaunchStarted>=90000){
                         desktopWindowWarning=true;startupAnimation.stop();
-                        startupStatus.setText(r64WinecfgBaseline?"Winecfg test timed out. Export log.":
-                                blenderShell?"Blender startup timed out. Open log to inspect.":
+                        startupStatus.setText(r64WinecfgBaseline?"Winecfg test timed out.":
+                                blenderShell?"Blender startup timed out. Close and retry.":
                                 "Windows prozor nije potvrđen nakon 90 s.\n"+
                                 "⋮ → Pošalji log ili Reset Wine. Provjera dodataka nije potvrda desktopa.");
-                        if(blenderShell && shareLog!=null)shareLog.setVisibility(View.VISIBLE);
+                        if(blenderShell && shareLog!=null)shareLog.setVisibility(View.GONE);
                         log("DRNAS_DESKTOP_NOT_CONFIRMED: 90s since "+
                                 (r64WinecfgBaseline?"Winecfg":blenderShell?"Blender":"Explorer")+
                                 " request; expected X11 window absent. Session kept for log/reset.");
@@ -931,7 +919,7 @@ public final class WineGuiActivity extends Activity {
                         if(raw!=null)raw.setVerbose(verboseLogs);
                         if(session!=null)session.setDiagnosticsEnabled(verboseLogs);
                         if(xserver!=null) {
-                            xserver.setFrameDiagnosticsEnabled(verboseLogs || r64BlenderVulkan);
+                            xserver.setFrameDiagnosticsEnabled(verboseLogs);
                             xserver.getScreen().setInputDebugEnabled(verboseLogs);
                         }
                         if(desktopCursorOverlay!=null)
@@ -1033,37 +1021,27 @@ public final class WineGuiActivity extends Activity {
     }
 
     private void showBlenderMenu() {
+        // Clean GUI menu; diagnostic export, FPS benchmark and trace toggles
+        // are intentionally absent from the isolated R64 edition.
         new AppDialogBuilder(this).setTitle("Blender")
-                .setItems(new String[]{"Puna tipkovnica","Izvezi .blend iz Wine C:",
-                        "Test performansi · 20 sekundi","Pošalji log",
-                        "Postavke i dijagnostika","O ovom izdanju","Zatvori Blender","Android mapa · disk D:","FPS brojač ON/OFF","Language","Resolution","Android Fullscreen ON/OFF","Return from Render"},(d,which)->{
+                .setItems(new String[]{"Tipkovnica","Izvezi .blend na Android",
+                        "Android mapa · disk D:","Resolution",
+                        "Android Fullscreen ON/OFF","Return from Render",
+                        "Language","O ovom izdanju","Zatvori Blender"},(d,which)->{
                     if(which==0){keyboardPending=true;keyboardAttempts=0;showKeyboard();}
                     else if(which==1)startBlenderAndroidExport();
-                    else if(which==2)captureRenderSample(20000L,true);
-                    else if(which==3)shareGuiLog();
-                    else if(which==4)showGlassControls();
-                    else if(which==5)new AppDialogBuilder(this).setTitle("Blender v1.1 · DRNAS preview")
-                            .setMessage("Blender 4.5.14 Windows ARM64 preko DRNAS Wine okruženja.\nNeslužbeni Blender Android preview; kompatibilnost ovisi o GPU-u i Vulkan driveru.")
-                            .setPositiveButton("OK",null).show();
-                    else if(which==7)showBlenderProjectFolder();
-                    else if(which==8) {
-                        boolean enable=!performanceHud.isActive();
-                        getPreferences(MODE_PRIVATE).edit().putBoolean("blender_perf_hud",enable).apply();
-                        performanceHud.setActive(enable);
-                        xserver.getScreen().setFpsCounterEnabled(enable);
-                        performanceHud.removeCallbacks(hudTicker);
-                        if(enable)performanceHud.post(hudTicker);
-                    }
-                    else if(which==9)new AppDialogBuilder(this).setTitle("Language")
-                            .setItems(new String[]{"English","Hrvatski"},(languageDialog,index)->{
+                    else if(which==2)showBlenderProjectFolder();
+                    else if(which==3)showBlenderResolution();
+                    else if(which==4)toggleBlenderHostFullscreen();
+                    else if(which==5)returnFromBlenderRender();
+                    else if(which==6)new AppDialogBuilder(this).setTitle("Language")
+                            .setItems(new String[]{"English","Hrvatski"},(dialog,index)->{
                                 AppLanguage.set(this,index==0?"en":"hr");
-                                new AppDialogBuilder(this).setTitle("Language")
-                                        .setMessage("Language saved. The full interface updates the next time you open Blender.")
-                                        .setPositiveButton("OK",null).show();
                             }).show();
-                    else if(which==10)showBlenderResolution();
-                    else if(which==11)toggleBlenderHostFullscreen();
-                    else if(which==12)returnFromBlenderRender();
+                    else if(which==7)new AppDialogBuilder(this)
+                            .setTitle("DRNAS R64 · Blender 4.5.14")
+                            .setMessage("Experimental Windows ARM64 Blender with Mali Vulkan via DRNAS Wine.")
+                            .setPositiveButton("OK",null).show();
                     else exitConfirmation.confirm(this);
                 }).show();
     }
@@ -1310,7 +1288,7 @@ public final class WineGuiActivity extends Activity {
                         (line.contains("=PASS")?"PROŠAO":"NIJE PROŠAO")+
                         ". Pošalji DRNAS TXT log.");
                 startupStatus.setVisibility(View.VISIBLE);
-                if(shareLog!=null)shareLog.setVisibility(View.VISIBLE);
+                if(shareLog!=null)shareLog.setVisibility(blenderShell?View.GONE:View.VISIBLE);
             });
         }
         if(WineGuiSession.isLaunchMarker(line)){
