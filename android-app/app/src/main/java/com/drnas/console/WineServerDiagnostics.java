@@ -72,10 +72,11 @@ public final class WineServerDiagnostics {
             try(BufferedReader br=new BufferedReader(new InputStreamReader(
                     process.getInputStream(),StandardCharsets.UTF_8))) {
                 String line;int n=0,priority=0,processEvents=0,quietErrors=0;
-                int labSehEvents=0,labProcessEvents=0;
+                int labSehEvents=0,labProcessEvents=0,labModuleEvents=0;
                 boolean lab=prefix.startsWith("[Blender background] ") ||
                         prefix.startsWith("[Blender Vulkan] ") ||
                         prefix.startsWith("[Blender headless] ") ||
+                        prefix.startsWith("[Blender version] ") ||
                         prefix.startsWith("[R64 CMD] ");
                 while((line=br.readLine())!=null) {
                     // R64 LAB opts into SEH/process traces, but default app
@@ -85,6 +86,14 @@ public final class WineServerDiagnostics {
                         log.accept("DRNAS_R64_SEH "+line.substring(0,Math.min(800,line.length())));
                     else if(lab && line.contains(":trace:process:") && labProcessEvents++<30)
                         log.accept("DRNAS_R64_PROCESS "+line.substring(0,Math.min(700,line.length())));
+                    if(lab && (prefix.startsWith("[Blender version] ") ||
+                            prefix.startsWith("[Blender headless] ")) &&
+                            (line.contains(":trace:module:") ||
+                             line.contains(":trace:loaddll:")) && labModuleEvents++<48)
+                        log.accept("DRNAS_R64_MODULE "+line.substring(0,Math.min(700,line.length())));
+                    if(prefix.startsWith("[Blender version] ") &&
+                            R64Arm64Isolation.isBlenderVersionLine(line.trim()))
+                        log.accept(line.trim());
                     if(lab && line.trim().matches("DRNAS_R64_CMD_OK_[0-9a-f]{32}"))
                         log.accept(line.trim());
                     if(lab && line.trim().startsWith("DRNAS_R64_BACKGROUND_PYTHON_OK"))
