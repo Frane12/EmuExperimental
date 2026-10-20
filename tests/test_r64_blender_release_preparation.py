@@ -67,7 +67,7 @@ class BlenderReleasePreparationTests(unittest.TestCase):
         # Real 4.5.14 Blender sculpt/geometry assets start 28 b5 2f fd,
         # not plaintext BLENDER. The upstream LFS smoke test confirmed it.
         source=self.source_tree()
-        compressed=b"\\x28\\xb5\\x2f\\xfd" + b"compressed-resource".ljust(2048,b"x")
+        compressed=bytes.fromhex("28b52ffd") + b"compressed-resource".ljust(2048,b"x")
         self.write(source/"assets/brushes/essentials_brushes-mesh_sculpt.blend",compressed)
         self.write(source/"assets/geometry_nodes/procedural_hair_node_assets.blend",compressed)
         self.assertEqual(prep.source_scan(source)["critical_resources_valid"],4)
