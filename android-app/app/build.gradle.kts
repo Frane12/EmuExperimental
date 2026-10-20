@@ -24,8 +24,8 @@ android {
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
         manifestPlaceholders["appLabel"] = "Blender"
-        versionCode = 129
-        versionName = "1.1-performance-test"
+        versionCode = 130
+        versionName = "1.1-performance-inputfix"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -57,8 +57,8 @@ android {
             } else {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
-                applicationIdSuffix = ".performance.v11lab"
-                manifestPlaceholders["appLabel"] = "Blender Performance LAB"
+                applicationIdSuffix = ".performance.v11route"
+                manifestPlaceholders["appLabel"] = "Blender Input Fix LAB"
             }
         }
         release {

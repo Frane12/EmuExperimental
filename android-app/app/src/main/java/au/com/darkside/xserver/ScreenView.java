@@ -330,6 +330,34 @@ public class ScreenView extends View {
         return true;
     }
 
+
+    /** Explicit overlay-only activation, always serialized with existing input. */
+    public void sendBlenderOverlayKey(int keycode,boolean pressed) {
+        if(nonBlockingInputEnabled && onAndroidUiThread()) {
+            queueInput("blender_overlay_key_"+keycode,
+                    ()->sendBlenderOverlayKey(keycode,pressed));
+            return;
+        }
+        synchronized(_xServer) {
+            if(_rootWindow==null)return;
+            if(pressed && _grabKeyboardWindow==null) {
+                Window target=_rootWindow.blenderOverlayTarget();
+                if(target!=null && ( _focusWindow==null ||
+                        !(_focusWindow==target || target.isInferior(_focusWindow)))) {
+                    Window.focusInOutNotify(_focusWindow,target,
+                            _rootWindow.windowAtPoint(_motionX,_motionY),_rootWindow,0);
+                    _focusWindow=target;
+                    _focusRevertTo=2;
+                    _focusLastChangeTime=_xServer.getTimestamp();
+                    if(inputDebugEnabled)traceInputState("blender_overlay_focus_"+target.getId());
+                }
+            }
+            KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,keycode);
+            if(pressed)onKeyDown(keycode,event);
+            else onKeyUp(keycode,event);
+        }
+    }
+
     /** Overlay presses are independent of tap-to-click touchpad gestures. */
     public void setOverlayPointerButton(int button,boolean pressed) {
         if(nonBlockingInputEnabled && onAndroidUiThread()) {
@@ -1218,6 +1246,9 @@ public class ScreenView extends View {
         _currentCursorY = y;
 
         Bitmap bm=cursor==null ? null : cursor.getBitmap();
+        // The inherited X11 root cursor is an X, not Blender's chosen crosshair.
+        // Let Blender's overlay use its arrow fallback only for that default ID.
+        if(nonBlockingInputEnabled && cursor==_xServer.getResource(2))bm=null;
         CursorOverlayListener listener=cursorOverlayListener;
         if (listener!=null)listener.onCursorUpdated(bm,x,y,
                 cursor==null?0:cursor.getHotspotX(),cursor==null?0:cursor.getHotspotY());

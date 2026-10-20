@@ -532,9 +532,7 @@ public final class WineGuiActivity extends Activity {
             blenderKeys=new BlenderKeyPanel(this,(key,pressed)->{
                 if(destroyed||xserver==null)return;
                 xserver.getScreen().requestFocus();
-                KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,key);
-                if(pressed)xserver.getScreen().onKeyDown(key,event);
-                else xserver.getScreen().onKeyUp(key,event);
+                xserver.getScreen().sendBlenderOverlayKey(key,pressed);
             },(button,pressed)->{
                 if(destroyed||xserver==null)return;
                 // Send a regular X11 click at the current pointer coordinates;

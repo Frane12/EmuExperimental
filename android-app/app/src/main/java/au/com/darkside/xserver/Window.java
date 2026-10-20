@@ -578,6 +578,27 @@ public class Window extends Resource {
         return owner;
     }
 
+
+    // Overlay shortcuts have no guest pointer event to activate a new Wine window.
+    // Resolve only mapped, usable siblings of a positively identified Blender main.
+    Window blenderOverlayTarget() {
+        Window root=_screen.getRootWindow();
+        return root==null?null:BlenderOverlayTargetPolicy.choose(root._children,BLENDER_OVERLAY_INFO);
+    }
+    private static final BlenderOverlayTargetPolicy.Info<Window> BLENDER_OVERLAY_INFO=
+            new BlenderOverlayTargetPolicy.Info<Window>() {
+        public boolean eligible(Window w) {
+            return w._client!=null && !w._inputOnly && !w._isServerWindow &&
+                    w.isViewable() && w._irect.width()>=160 && w._irect.height()>=100;
+        }
+        public boolean primary(Window w) {
+            Window root=w._screen.getRootWindow();
+            return root!=null && BlenderPopupPolicy.primary(w.titleForStackAudit(),
+                    w._irect.width(),w._irect.height(),root._irect.width(),root._irect.height());
+        }
+        public Object client(Window w) {return w._client;}
+    };
+
     boolean isBlenderPrimary() {
         Window root=_screen.getRootWindow();
         boolean ready=BlenderPopupPolicy.startupPrimary(_isMapped,_inputOnly,
