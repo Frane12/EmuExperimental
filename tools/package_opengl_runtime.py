@@ -16,6 +16,13 @@ from pathlib import Path
 COMMIT = "5865486d275ca00758d592f6221f35f9956ff2fb"
 ORIGIN = "https://github.com/The412Banner/Bannerlator"
 RAW = "https://raw.githubusercontent.com/The412Banner/Bannerlator/" + COMMIT + "/app/src/main/assets/x11/egl/"
+# The exact upstream EGL bundle also depends on two Bionic runtime libraries
+# shipped as ELF jniLibs by the SAME immutable upstream revision.
+RAW_NATIVE = "https://raw.githubusercontent.com/The412Banner/Bannerlator/" + COMMIT + "/app/src/main/jniLibs/arm64-v8a/"
+NATIVE_FILES = {
+    "libandroid-support.so": "eaa4a4baef6c1fbb93b9b2a5ecaee666970ad609",
+    "libffi.so": "eceb85edf5da4613cfebe759c18d1b65766f7cf9",
+}
 # Git blob identities from that exact upstream revision.
 FILES = {
     "libEGL.so.1": "0566e1990667449f9c6ed63fcbb54db2bc440376",
@@ -24,6 +31,7 @@ FILES = {
     "libarchive.so": "c648a2630e27b3827d84a0a5bf439a2297a6c736",
     "libgallium-26.3.0-devel.so": "4ef1d4390f70ac5f65fe892d35e0a835cd80b2c4",
     "libwayland-client.so": "292f5c2ca601ff66e55ab2a5e867f3d4582bcb96",
+    **NATIVE_FILES,
 }
 
 def git_blob_id(data):
@@ -113,7 +121,8 @@ def package(out, gui_bundle=None):
         for name, expected_blob in FILES.items():
             dest = folder / name
             subprocess.run(["curl", "-fsSL", "--retry", "3", "--max-time", "180",
-                            RAW + name, "-o", str(dest)], check=True)
+                            (RAW_NATIVE if name in NATIVE_FILES else RAW) + name,
+                            "-o", str(dest)], check=True)
             data = dest.read_bytes()
             if git_blob_id(data) != expected_blob:
                 raise RuntimeError("Pinned Git blob SHA mismatch: " + name)
