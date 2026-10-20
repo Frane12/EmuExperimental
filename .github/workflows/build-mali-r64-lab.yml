@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - experiment/blender-4514-mali-vulkan-native-r64
+      - fix/blender-r64-unpacked-size-preflight
     paths:
       - ".github/workflows/build-mali-r64-lab.yml"
       - "tools/package_blender.py"
@@ -16,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   lab:
-    if: github.ref == 'refs/heads/experiment/blender-4514-mali-vulkan-native-r64'
+    if: github.ref == 'refs/heads/experiment/blender-4514-mali-vulkan-native-r64' || github.ref == 'refs/heads/fix/blender-r64-unpacked-size-preflight'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
