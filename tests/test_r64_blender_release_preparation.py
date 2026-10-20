@@ -38,13 +38,13 @@ class BlenderReleasePreparationTests(unittest.TestCase):
         self.write(root/"blender.pdb", b"private symbols only")
         self.write(root/"4.5/scripts/startup/good.py", b"print('ready')")
         for name, magic in prep.IMPORTANT.items():
-            self.write(root/name, magic + b"REAL_RESOURCE_CONTENT")
+            self.write(root/name, magic + b"REAL_RESOURCE_CONTENT".ljust(2048, b"x"))
         return root
 
     def source_tree(self):
         root=self.root/"source"
         for name,magic in prep.SOURCE_IMPORTANT.items():
-            self.write(root/name,magic+b"FULL_ASSET")
+            self.write(root/name,magic+b"FULL_ASSET".ljust(2048,b"x"))
         return root
 
     def test_fail_closed_on_source_lfs_pointer_even_if_small(self):
@@ -59,9 +59,27 @@ class BlenderReleasePreparationTests(unittest.TestCase):
         root=self.source_tree()
         self.assertEqual(prep.source_scan(root)["unresolved_lfs_pointers"],0)
         self.write(root/"release/datafiles/studiolights/world/forest.exr",
-                   b"not an exr")
+                   b"not an exr".ljust(2048,b"x"))
         with self.assertRaisesRegex(ValueError, "Incorrect Blender resource signature"):
             prep.source_scan(root)
+
+    def test_real_blender_zstd_assets_are_accepted_not_misclassified_as_broken(self):
+        # Real 4.5.14 Blender sculpt/geometry assets start 28 b5 2f fd,
+        # not plaintext BLENDER. The upstream LFS smoke test confirmed it.
+        source=self.source_tree()
+        compressed=b"\\x28\\xb5\\x2f\\xfd" + b"compressed-resource".ljust(2048,b"x")
+        self.write(source/"assets/brushes/essentials_brushes-mesh_sculpt.blend",compressed)
+        self.write(source/"assets/geometry_nodes/procedural_hair_node_assets.blend",compressed)
+        self.assertEqual(prep.source_scan(source)["critical_resources_valid"],4)
+        root=self.install_tree()
+        for p in ("4.5/datafiles/assets/brushes/essentials_brushes-mesh_sculpt.blend",
+                  "4.5/datafiles/assets/geometry_nodes/procedural_hair_node_assets.blend"):
+            self.write(root/p,compressed)
+        with mock.patch.object(prep,"MIN_INSTALLED_FILES",1):
+            runtime,symbols=prep.inspect_installed(root)
+            self.assertGreater(len(runtime),4)
+            prep.package(root,self.root/"compressed-out")
+        self.assertTrue((self.root/"compressed-out"/"DISTRIBUTION-MANIFEST.json").exists())
 
     def test_no_blender_pdb_in_runtime_but_kept_in_private_symbols(self):
         root=self.install_tree()
@@ -101,7 +119,7 @@ class BlenderReleasePreparationTests(unittest.TestCase):
     def test_broken_critical_resource_blocks_even_if_rest_exist(self):
         root=self.install_tree()
         name=list(prep.IMPORTANT)[0]
-        self.write(root/name,b"invalid placeholder")
+        self.write(root/name,b"invalid placeholder".ljust(2048,b"x"))
         with self.assertRaisesRegex(ValueError,"Incorrect Blender resource signature"):
             prep.inspect_installed(root)
 
