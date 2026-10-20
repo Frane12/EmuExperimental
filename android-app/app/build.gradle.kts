@@ -9,6 +9,7 @@ val drnasStableSigning = listOf(
 // owns its own private storage and cannot overwrite user projects.
 val drnasPrefixRecoveryLab = System.getenv("DRNAS_PREFIX_RECOVERY_LAB") == "1"
 val drnasMaliR64Lab = System.getenv("DRNAS_MALI_R64_LAB") == "1"
+val drnasMaliR64GuiLab = System.getenv("DRNAS_MALI_R64_GUI_LAB") == "1"
 
 // Build jobs that distribute APKs must never silently fall back to a one-off
 // Android debug certificate. Local debug/test builds remain possible.
@@ -58,7 +59,10 @@ android {
             if (drnasStableSigning) {
                 signingConfig = signingConfigs.getByName("drnasStable")
             }
-            if (drnasMaliR64Lab) {
+            if (drnasMaliR64GuiLab) {
+                applicationIdSuffix = ".mali.r64.gui.lab"
+                manifestPlaceholders["appLabel"] = "DRNAS Mali r64 GUI"
+            } else if (drnasMaliR64Lab) {
                 applicationIdSuffix = ".mali.r64.lab"
                 manifestPlaceholders["appLabel"] = "DRNAS Mali r64 LAB"
             } else if (drnasPrefixRecoveryLab) {
