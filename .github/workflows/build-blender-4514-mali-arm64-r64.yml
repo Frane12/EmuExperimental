@@ -46,7 +46,13 @@ jobs:
         shell: pwsh
         run: |
           Get-PSDrive -PSProvider FileSystem | Select-Object Name, Free, Used | Format-Table
-          clang-cl --version | Select-Object -First 1
+          # Never prematurely close the native clang-cl stdout pipe:
+          # a previous R64 runner could return a spurious exit code here.
+          $clangBanner=@(clang-cl --version 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $clangBanner.Count -eq 0) {
+            throw 'clang-cl --version failed during host preflight'
+          }
+          Write-Host ([string]$clangBanner[0])
           cmake --version | Select-Object -First 1
           git --version
           git lfs version
