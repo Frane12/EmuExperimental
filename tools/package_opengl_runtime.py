@@ -29,7 +29,46 @@ FILES = {
 def git_blob_id(data):
     return hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
 
-def package(out):
+# Android platform libraries provided by the Bionic runtime. Every other
+# link-time dependency must be bundled in either the GL or GUI native ZIP.
+BIONIC_SYSTEM = {
+    "libc.so", "libdl.so", "libm.so", "liblog.so", "libandroid.so",
+    "libnativewindow.so", "libz.so", "libstdc++.so", "libc++.so",
+    "libc++_shared.so", "libGLESv1_CM.so", "libGLESv2.so",
+}
+
+def verify_blender_glx_closure(gui_bundle, mesa_manifest):
+    """Reject a broken Wine libGL dependency closure BEFORE compiling an APK.
+
+    The GUI bundle originates from the pinned, checksum-verified GameNative
+    Bionic imagefs and recursively follows readelf DT_NEEDED dependencies.
+    This check does not assert that the embedded Java X11 server supports
+    GLX or that Wine/Blender can create a rendered frame.
+    """
+    with zipfile.ZipFile(gui_bundle) as z:
+        gui_libs = {Path(n).name for n in z.namelist()
+                    if n.startswith("lib/") and not n.endswith("/")}
+        if "libxcb-glx.so" not in gui_libs:
+            raise RuntimeError("R64 GLX dependency closure missing libxcb-glx.so")
+        if z.getinfo("lib/libxcb-glx.so").file_size < 4096:
+            raise RuntimeError("R64 libxcb-glx.so is implausibly small")
+    mesa_libs = set(mesa_manifest)
+    for soname, meta in mesa_manifest.items():
+        for needed in meta["needed"]:
+            if needed not in gui_libs | mesa_libs | BIONIC_SYSTEM:
+                raise RuntimeError(
+                    f"R64 Bionic native dependency unbundled: {soname} "+
+                    f"DT_NEEDED={needed}")
+    gl_needs = set(mesa_manifest["libGL.so.1"]["needed"])
+    if "libxcb-glx.so" not in gl_needs:
+        raise RuntimeError(
+            "Pinned Mesa libGL.so.1 unexpectedly changed GLX DT_NEEDED; "+
+            "re-audit dependency model")
+    print("DRNAS_R64_BLENDER_OPENGL_DEP_CLOSURE_VALIDATED",
+          "Mesa libs",len(mesa_libs),"GUI libs",len(gui_libs),
+          "libxcb-glx.so=present")
+
+def package(out, gui_bundle=None):
     out = Path(out)
     manifest = {}
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -51,6 +90,8 @@ def package(out):
                 raise RuntimeError("glibc library must never enter Bionic runtime: " + name)
             manifest[name] = {"sha256": hashlib.sha256(data).hexdigest(),
                               "blob": expected_blob, "size": len(data), "needed": needed}
+        if gui_bundle is not None:
+            verify_blender_glx_closure(gui_bundle, manifest)
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             for name in sorted(FILES):
                 z.write(folder / name, "lib/" + name)
@@ -61,6 +102,6 @@ def package(out):
     print("DRNAS_OPENGL_BUNDLE_WRITTEN", out, out.stat().st_size, "bytes")
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: package_opengl_runtime.py OUTPUT.zip")
-    package(sys.argv[1])
+    if len(sys.argv) not in (2,3):
+        raise SystemExit("usage: package_opengl_runtime.py OUTPUT.zip [GUI_RUNTIME.zip]")
+    package(sys.argv[1], sys.argv[2] if len(sys.argv)==3 else None)

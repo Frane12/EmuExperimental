@@ -10,7 +10,12 @@ SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
 ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        'libXcursor.so.1','libXi.so.6','libXinerama.so.1','libXfixes.so.3',
        'libXcomposite.so.1','libXxf86vm.so.1','libfreetype.so.6','libfontconfig.so.1',
-       'libvulkan.so.1']
+       'libvulkan.so.1',
+       # Mesa's pinned libGL.so.1 has a hard DT_NEEDED dependency on
+       # libxcb-glx.so. This must be the REAL AArch64/Bionic XCB GLX
+       # library plus its recursively collected ELF dependencies, never a
+       # GLES shim. The earlier R64 APK shipped libGL but omitted this edge.
+       'libxcb-glx.so']
 SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so','libnativewindow.so'}
 # Immutable upstream Mesa Bionic WSI wrapper + AdrenoTools hooks. Keep the
 # Khronos loader separate: its ICD is this wrapper, whose backend is Turnip.
@@ -101,6 +106,11 @@ def package(archive,output):
             dynamic=subprocess.check_output(['readelf','-d',str(path)],text=True)
             deps=re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic)
             libs[soname]=data;pending.extend(deps)
+        if 'libxcb-glx.so' not in libs:
+            raise RuntimeError('R64 GLX dependency missing in pinned imagefs: libxcb-glx.so')
+        print('DRNAS_R64_LIBXCB_GLX_CLOSURE_VERIFIED',
+              'libxcb-glx.so',len(libs['libxcb-glx.so']),
+              'bytes; transitive DT_NEEDED staged in GUI runtime')
         output=Path(output);output.parent.mkdir(parents=True,exist_ok=True)
         manifest={name:hashlib.sha256(data).hexdigest() for name,data in sorted(libs.items())}
         with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as z:
