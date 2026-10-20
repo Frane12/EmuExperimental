@@ -1,0 +1,151 @@
+name: DRNAS FreeCAD - Private OCCT ARM64 Kernel (Stage 1)
+
+on:
+  push:
+    branches: [feature/private-freecad-occt-arm64-lab]
+    paths:
+      - "native-freecad-lab/**"
+      - ".github/workflows/freecad-private-occt-arm64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  occt-android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - name: Checkout PRIVATE DRNAS FreeCAD LAB source
+        uses: actions/checkout@v4
+
+      - name: Prepare Android NDK and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build cmake binutils git
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;27.2.12479018" "platforms;android-35"
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          cmake --version
+          df -h /
+
+      - name: Fetch pinned upstream OCCT 7.9.3
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --depth 1 --single-branch --branch V7_9_3 \
+            https://github.com/Open-Cascade-SAS/OCCT.git "$RUNNER_TEMP/occt-src"
+          test "$(git -C "$RUNNER_TEMP/occt-src" rev-parse HEAD)" = a016080bf6738d6aeae020badee4e888ad1540a5
+          test -f "$RUNNER_TEMP/occt-src/src/BRepPrimAPI/BRepPrimAPI_MakeBox.hxx"
+
+      - name: Configure Android ARM64 OCCT geometry kernel (no desktop GUI)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          cmake -S "$RUNNER_TEMP/occt-src" -B "$RUNNER_TEMP/occt-android-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=c++_shared -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/occt-install" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" \
+            -DBUILD_LIBRARY_TYPE=Shared \
+            -DBUILD_MODULE_FoundationClasses=ON \
+            -DBUILD_MODULE_ModelingData=ON \
+            -DBUILD_MODULE_ModelingAlgorithms=ON \
+            -DBUILD_MODULE_Visualization=OFF \
+            -DBUILD_MODULE_ApplicationFramework=OFF \
+            -DBUILD_MODULE_DataExchange=OFF \
+            -DBUILD_MODULE_DETools=OFF \
+            -DBUILD_MODULE_Draw=OFF \
+            -DUSE_TK=OFF -DUSE_FREETYPE=OFF -DUSE_TBB=OFF -DUSE_VTK=OFF \
+            -DUSE_FREEIMAGE=OFF -DUSE_FFMPEG=OFF -DUSE_RAPIDJSON=OFF \
+            -DBUILD_DOC_Overview=OFF -DBUILD_DOC_RefMan=OFF \
+            -DBUILD_USE_VCPKG=OFF -DBUILD_USE_PCH=OFF
+          grep -F 'CMAKE_SYSTEM_NAME' "$RUNNER_TEMP/occt-android-build/CMakeCache.txt" || true
+
+      - name: Cross-compile OCCT native ARM64 kernel
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cmake --build "$RUNNER_TEMP/occt-android-build" --parallel 3
+          cmake --install "$RUNNER_TEMP/occt-android-build"
+          find "$RUNNER_TEMP/occt-install" -name 'libTKPrim.so*' -o -name 'BRepPrimAPI_MakeBox.hxx'
+
+      - name: Link genuine Android ARM64 OCCT solid geometry probe
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64"
+          INST="$RUNNER_TEMP/occt-install"
+          INCLUDE_HEADER="$(find "$INST" -type f -name BRepPrimAPI_MakeBox.hxx -print -quit)"
+          LIB="$(find "$INST" -type f -name libTKPrim.so -print -quit)"
+          if [ -z "$LIB" ]; then
+            LIB="$(find -L "$INST" -name libTKPrim.so -print -quit)"
+          fi
+          test -f "$INCLUDE_HEADER"
+          test -f "$LIB"
+          INCLUDE="$(dirname "$INCLUDE_HEADER")"
+          LIBDIR="$(dirname "$LIB")"
+          echo "Headers: $INCLUDE"
+          echo "Libraries: $LIBDIR"
+          mkdir -p build-results/arm64-v8a
+          "$NDK/bin/aarch64-linux-android26-clang++" \
+            -std=c++17 -O2 -fPIC -shared \
+            -I"$INCLUDE" native-freecad-lab/src/drnas_occt_probe.cpp \
+            -L"$LIBDIR" -lTKPrim -lTKTopAlgo -lTKBRep -lTKGeomBase \
+            -lTKG3d -lTKMath -lTKernel \
+            -Wl,--no-undefined -Wl,-z,max-page-size=16384 \
+            -o build-results/arm64-v8a/libdrnas_freecad_probe.so
+          mkdir -p build-results/arm64-v8a/occt-libs
+          find "$LIBDIR" -maxdepth 1 -name 'libTK*.so' -type l -exec cp -L '{}' build-results/arm64-v8a/occt-libs/ \;
+          find "$LIBDIR" -maxdepth 1 -name 'libTK*.so' -type f -exec cp '{}' build-results/arm64-v8a/occt-libs/ \;
+          test -s build-results/arm64-v8a/libdrnas_freecad_probe.so
+          test -s build-results/arm64-v8a/occt-libs/libTKPrim.so
+          cp "$NDK/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+            build-results/arm64-v8a/occt-libs/
+
+      - name: Verify ARM64 ELF, native functions and 16 KiB page compatibility
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat > /tmp/check_occt_elf.py <<'PY'
+          import glob, re, subprocess, os
+          paths = glob.glob("build-results/arm64-v8a/**/*.so", recursive=True)
+          assert len(paths) >= 10, f"Expected several OCCT shared objects, got {len(paths)}"
+          for p in paths:
+              header = subprocess.check_output(["readelf", "-h", p], text=True)
+              assert "AArch64" in header, f"Not Android ARM64: {p}"
+              program = subprocess.check_output(["readelf", "-lW", p], text=True)
+              load = [line for line in program.splitlines() if re.match(r"\s*LOAD\s+", line)]
+              assert load, p
+              for line in load:
+                  assert int(line.split()[-1], 16) >= 16384, f"Not 16KiB ELF aligned: {p}: {line}"
+          probe = "build-results/arm64-v8a/libdrnas_freecad_probe.so"
+          symbols = subprocess.check_output(["nm", "-D", probe], text=True)
+          for name in ["drnas_occt_probe", "drnas_occt_version", "drnas_occt_export_brep"]:
+              assert name in symbols, f"Missing real OCCT API export: {name}"
+          print(f"PASS: {len(paths)} real arm64-v8a ELF libraries, 16KB LOAD align, geometry/BREP exports")
+          PY
+          python3 /tmp/check_occt_elf.py | tee build-results/VERIFICATION.txt
+          cp native-freecad-lab/README.md build-results/README.txt
+          cat > build-results/UPSTREAM.txt <<'EOF'
+          Open CASCADE Technology 7.9.3, tag V7_9_3
+          Commit: a016080bf6738d6aeae020badee4e888ad1540a5
+          https://github.com/Open-Cascade-SAS/OCCT
+          License: LGPL-2.1 with OCCT exception.
+          Stage 1 only: genuine OCCT kernel, no FreeCAD GUI or complete FreeCAD executable.
+          OCCT libraries and DRNAS bridge are built natively for Android ARM64.
+          EOF
+          (cd build-results && find . -type f \( -name '*.so' -o -name '*.txt' \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)
+          du -sh build-results
+
+      - name: Upload PRIVATE Android ARM64 CAD kernel lab artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRNAS-Private-FreeCAD-OCCT-ARM64-Stage1-${{ github.run_id }}
+          path: build-results/
+          retention-days: 7
+          if-no-files-found: error
