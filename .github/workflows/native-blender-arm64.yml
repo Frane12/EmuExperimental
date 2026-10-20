@@ -1,0 +1,63 @@
+name: Native Blender ARM64 - NDK feasibility
+on:
+  push:
+    branches: [experiment/drnas-native-arm64-blender]
+    paths:
+      - ".github/workflows/native-blender-arm64.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install NDK and build tools
+        run: |
+          set -euxo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ninja-build cmake
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;27.2.12479018"
+      - name: Compile real Android AArch64 ELF smoke test
+        run: |
+          set -euxo pipefail
+          mkdir -p native-results
+          cat > native-results/arm64_smoke.c <<'EOF'
+          #include <stdio.h>
+          int main(void) { puts("DRNAS Android ARM64 native ELF"); return 0; }
+          EOF
+          CC="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+          "$CC" -fPIE -pie native-results/arm64_smoke.c -o native-results/drnas-arm64-smoke
+          file native-results/drnas-arm64-smoke | tee native-results/elf-file.txt
+          readelf -h native-results/drnas-arm64-smoke | tee native-results/elf-header.txt
+          grep -q 'Machine:.*AArch64' native-results/elf-header.txt
+      - name: Probe pinned Blender source configure against Android NDK
+        run: |
+          set -uo pipefail
+          mkdir -p native-results
+          git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src > native-results/clone.log 2>&1
+          clone_rc=$?
+          echo "clone_exit=$clone_rc" | tee native-results/summary.txt
+          if [ "$clone_rc" -ne 0 ]; then exit 0; fi
+          git -C /tmp/blender-src rev-parse HEAD >> native-results/summary.txt
+          cmake -S /tmp/blender-src -B /tmp/blender-build -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
+            -DWITH_HEADLESS=ON -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
+            -DWITH_CYCLES=OFF -DWITH_PYTHON=OFF -DWITH_AUDASPACE=OFF \
+            > native-results/blender-configure.log 2>&1
+          rc=$?
+          echo "blender_configure_exit=$rc" >> native-results/summary.txt
+          tail -n 100 native-results/blender-configure.log
+          # Configure failures are expected at this feasibility stage; retain diagnostic logs.
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: drnas-native-arm64-feasibility
+          path: native-results/
+          retention-days: 7
