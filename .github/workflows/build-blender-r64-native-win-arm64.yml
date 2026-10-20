@@ -125,7 +125,7 @@ jobs:
           $cache=Get-Content (Join-Path $build 'CMakeCache.txt') -Raw
           if ($cache -notmatch '(?m)^CMAKE_GENERATOR_PLATFORM:INTERNAL=ARM64\r?$') { throw 'CMake generator is not ARM64' }
           if ($cache -notmatch '(?m)^LIBDIR:PATH=.+windows_arm64\r?$') { throw 'CMake using wrong library architecture' }
-          if (!(Test-Path (Join-Path $build 'Blender.sln'))) { throw 'Blender.sln missing' }
+          if (!(Test-Path (Join-Path $build 'Blender.sln')) -and !(Test-Path (Join-Path $build 'Blender.slnx'))) { throw 'Blender solution (.sln or .slnx) missing' }
           "DRNAS_BLENDER_BUILD=$build" >> $env:GITHUB_ENV
           Write-Host 'PASS: native Windows ARM64 Blender CMake configuration'
       - name: Compile and INSTALL full native Windows ARM64 Blender
