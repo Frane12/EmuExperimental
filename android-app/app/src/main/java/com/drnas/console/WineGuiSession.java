@@ -216,13 +216,16 @@ final class WineGuiSession implements AutoCloseable {
         // other Mali chips use their own system Vulkan driver. Driver loads
         // are accepted only after bounded native Vulkan preflight.
         final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
-        final boolean nativeOpenGl=appProfile.nativeOpenGl();
+        // Diagnostic modes are deterministic: a saved user OpenGL profile must
+        // not silently change the Vulkan GUI experiment.
+        final boolean nativeOpenGl=(r64BlenderBackground || r64BlenderVulkan)?
+                false:appProfile.nativeOpenGl();
         // Blender's default CLI explicitly requests --gpu-backend vulkan.
         // The normal default app profile is not marked Native Vulkan, which
         // previously skipped winevulkan.dll's bridge / override on Adreno.
         // The isolated OpenGL profile remains an explicit opt-out.
-        final boolean nativeVulkan=needsNativeWineVulkan(blenderShell,
-                appProfile.nativeVulkan() || maliBlender,nativeOpenGl);
+        final boolean nativeVulkan=!r64BlenderBackground && needsNativeWineVulkan(
+                blenderShell,appProfile.nativeVulkan() || maliBlender,nativeOpenGl);
         if(blenderShell)log.accept("DRNAS_BLENDER_VULKAN_BRIDGE_MODE requested="+nativeVulkan+
                 " selectedOpenGL="+nativeOpenGl+
                 " (Wine bridge checked before launch; first rendered frame not yet verified)");
@@ -435,7 +438,11 @@ final class WineGuiSession implements AutoCloseable {
             else WineOpenGlRuntime.exposeBlenderLibGl(mesa,env,log);
             if(blenderShell)blenderMesaLib=mesa;
         }
-        if(blenderShell&&!nativeOpenGl) {
+        if(r64BlenderBackground) {
+            log.accept("DRNAS_R64_BACKGROUND_VULKAN_PREFLIGHT=SKIPPED; no Vulkan context, "+
+                    "no GPU first-present test for this CPU/Python-only isolation");
+        }
+        else if(blenderShell&&!nativeOpenGl) {
             // The Java X server already exists at this point. Check it before
             // asking native Mesa WSI to create its bounded test swapchain.
             X11Probe.check(6012);
@@ -445,9 +452,12 @@ final class WineGuiSession implements AutoCloseable {
         }
         else TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
-        audio=new PulseAudioRuntime();
-        try {audio.start(context,env,log,raw);}
-        catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+"; desktop remains available.");}
+        if(!r64BlenderBackground) {
+            audio=new PulseAudioRuntime();
+            try {audio.start(context,env,log,raw);}
+            catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+
+                    "; desktop remains available.");}
+        } else log.accept("DRNAS_R64_BACKGROUND_AUDIO=SKIPPED; CPU/Python smoke only");
         File linker=new File("/system/bin/linker64");
         X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
