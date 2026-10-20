@@ -40,8 +40,6 @@ public final class WineGuiActivity extends Activity {
     private TextView startupStatus;
     private StartupAnimationView startupAnimation;
     private LinearLayout blenderStartupPanel;
-    private ProgressBar blenderStartupBar;
-    private TextView blenderStartupPercent;
     private int blenderBootMilestone;
     private final ExitConfirmation exitConfirmation=new ExitConfirmation();
     private LinearLayout dependencyPanel;
@@ -185,12 +183,8 @@ public final class WineGuiActivity extends Activity {
     // The percentage is a conservative, monotonic *boot milestone*, not a
     // guessed countdown or timed animation. 100% means Blender itself mapped.
     private void updateBlenderBootProgress(int milestone) {
-        if(!blenderShell || blenderStartupBar==null || desktopFailed)return;
-        int p=Math.max(blenderBootMilestone,Math.min(100,Math.max(0,milestone)));
-        if(p==blenderBootMilestone && blenderStartupPercent!=null)return;
-        blenderBootMilestone=p;
-        blenderStartupBar.setProgress(p);
-        if(blenderStartupPercent!=null)blenderStartupPercent.setText(p+"%");
+        if(!blenderShell || desktopFailed)return;
+        blenderBootMilestone=Math.max(blenderBootMilestone,Math.min(100,Math.max(0,milestone)));
     }
     private int blenderBootStage(String message) {
         if(message.startsWith("[Startup] Blender unpacking ")) {
@@ -381,32 +375,10 @@ public final class WineGuiActivity extends Activity {
         startupStatus.setGravity(Gravity.CENTER);
         startupStatus.setBackgroundColor(0x00000000);
         if(blenderShell) {
-            blenderStartupPanel=new LinearLayout(this);
-            blenderStartupPanel.setOrientation(LinearLayout.VERTICAL);
-            blenderStartupPanel.setGravity(Gravity.CENTER);
-            blenderStartupPanel.setPadding(dp(18),dp(12),dp(18),dp(12));
-            blenderStartupPanel.addView(startupStatus);
-            blenderStartupBar=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-            blenderStartupBar.setIndeterminate(false);
-            blenderStartupBar.setMax(100);
-            blenderStartupBar.setProgress(0);
-            blenderStartupBar.setProgressTintList(android.content.res.ColorStateList.valueOf(0xff8cf5d0));
-            LinearLayout.LayoutParams barParams=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,dp(8));
-            barParams.topMargin=dp(10);
-            blenderStartupPanel.addView(blenderStartupBar,barParams);
-            blenderStartupPercent=new TextView(this);
-            blenderStartupPercent.setText("0%");
-            blenderStartupPercent.setTextColor(0xffc7dedf);
-            blenderStartupPercent.setTextSize(13);
-            blenderStartupPercent.setGravity(Gravity.CENTER);
-            LinearLayout.LayoutParams percentParams=new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT);
-            percentParams.topMargin=dp(9);
-            blenderStartupPanel.addView(blenderStartupPercent,percentParams);
+            blenderStartupPanel=StartupAnimationView.blenderPanel(this,startupStatus);
             layout.addView(blenderStartupPanel,new FrameLayout.LayoutParams(
-                    Math.min(dp(420),getResources().getDisplayMetrics().widthPixels-dp(36)),
-                    ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
         } else {
             layout.addView(startupStatus,new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.CENTER));

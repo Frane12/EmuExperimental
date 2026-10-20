@@ -21,6 +21,51 @@ final class StartupAnimationView extends View {
         flag=blender?context.getDrawable(R.drawable.ic_blender):new RetroWindowsDrawable(96);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
+
+    /** Shared by initial setup and every subsequent Blender launch. */
+    static android.widget.LinearLayout blenderPanel(Context context, android.widget.TextView status) {
+        float density=context.getResources().getDisplayMetrics().density;
+        android.widget.LinearLayout panel=new android.widget.LinearLayout(context);
+        panel.setOrientation(android.widget.LinearLayout.VERTICAL);
+        panel.setGravity(android.view.Gravity.CENTER);
+        panel.setBackgroundColor(0xff202024);
+        android.widget.ImageView logo=new android.widget.ImageView(context);
+        logo.setImageResource(R.drawable.ic_blender);
+        int size=Math.round(100*density);
+        panel.addView(logo,new android.widget.LinearLayout.LayoutParams(size,size));
+        android.widget.TextView name=new android.widget.TextView(context);
+        name.setText("Blender");name.setTextSize(25);name.setTextColor(0xffeeeeee);
+        panel.addView(name);
+        View dots=new View(context) {
+            final Paint dotPaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+            final long start=SystemClock.uptimeMillis();
+            @Override protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                float d=getResources().getDisplayMetrics().density;
+                float cx=getWidth()/2f,cy=getHeight()/2f;
+                float phase=((SystemClock.uptimeMillis()-start)%1500L)/1500f;
+                dotPaint.setColor(0xffeeeeee);
+                for(int i=0;i<6;i++) {
+                    float angle=(float)(2*Math.PI*(phase-i*0.085f)-Math.PI/2);
+                    dotPaint.setAlpha(255-i*31);
+                    canvas.drawCircle(cx+13f*d*(float)Math.cos(angle),
+                            cy+13f*d*(float)Math.sin(angle),2.2f*d,dotPaint);
+                }
+                if(isShown())postInvalidateOnAnimation();
+            }
+            @Override protected void onWindowVisibilityChanged(int visibility) {
+                super.onWindowVisibilityChanged(visibility);
+                if(visibility==VISIBLE)invalidate();
+            }
+        };
+        panel.addView(dots,new android.widget.LinearLayout.LayoutParams(
+                Math.round(60*density),Math.round(52*density)));
+        status.setTextSize(13);status.setTextColor(0xffaaaab2);
+        status.setPadding(16,20,16,20);status.setGravity(android.view.Gravity.CENTER);
+        panel.addView(status);
+        return panel;
+    }
+
     void stop(){running=false;invalidate();}
     @Override protected void onSizeChanged(int w,int h,int ow,int oh){
         paint.setShader(new LinearGradient(0,0,w,h,

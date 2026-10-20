@@ -20,43 +20,9 @@ public final class BlenderLauncherActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().getDecorView().setSystemUiVisibility(5894 | 1024 | 512);
-        LinearLayout panel=new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER);
-        panel.setBackgroundColor(0xff202024);
-        ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.ic_blender);
-        int size=Math.round(100*getResources().getDisplayMetrics().density);
-        panel.addView(logo,new LinearLayout.LayoutParams(size,size));
-        TextView name=new TextView(this);name.setText("Blender");
-        name.setTextSize(25);name.setTextColor(0xffeeeeee);
-        panel.addView(name);
-        // Lightweight Windows-style orbiting dots; purely visual, no bootstrap changes.
-        View loadingDots = new View(this) {
-            final android.graphics.Paint paint = new android.graphics.Paint(3);
-            final long start = android.os.SystemClock.uptimeMillis();
-            @Override protected void onDraw(android.graphics.Canvas canvas) {
-                super.onDraw(canvas);
-                float d = getResources().getDisplayMetrics().density;
-                float cx = getWidth() / 2f, cy = getHeight() / 2f;
-                float radius = 13f * d;
-                float phase = ((android.os.SystemClock.uptimeMillis() - start) % 1500L) / 1500f;
-                for (int i = 0; i < 6; i++) {
-                    float angle = (float)(2 * Math.PI * (phase - i * 0.085f) - Math.PI / 2);
-                    paint.setColor(0xffeeeeee);
-                    paint.setAlpha(255 - i * 31);
-                    canvas.drawCircle(cx + radius * (float)Math.cos(angle),
-                            cy + radius * (float)Math.sin(angle), 2.2f * d, paint);
-                }
-                postInvalidateDelayed(16L);
-            }
-        };
-        panel.addView(loadingDots, new LinearLayout.LayoutParams(
-                Math.round(60 * getResources().getDisplayMetrics().density),
-                Math.round(52 * getResources().getDisplayMetrics().density)));
-        status=new TextView(this);status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Pripremam Blender…"));
-        status.setTextSize(13);status.setTextColor(0xffaaaab2);status.setPadding(16,20,16,20);
-        status.setGravity(Gravity.CENTER);panel.addView(status);
+        status=new TextView(this);
+        status.setText(AppLanguage.t(this,"Pripremam Blender…"));
+        LinearLayout panel=StartupAnimationView.blenderPanel(this,status);
         setContentView(panel);
         if(state!=null) {
             String pending=state.getString("pickedTree");
