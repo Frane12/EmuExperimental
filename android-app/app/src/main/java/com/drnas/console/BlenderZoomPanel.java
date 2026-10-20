@@ -29,6 +29,11 @@ final class BlenderZoomPanel extends LinearLayout {
     private final Button expandButton;
     private final View minus,plus;
     private boolean expanded;
+    private boolean dragging;
+    private float dragX,dragY,startX,startY;
+    private final View.OnLayoutChangeListener parentResize=(v,l,t,r,b,ol,ot,or,ob)->{
+        if(r-l!=or-ol || b-t!=ob-ot)post(this::restorePosition);
+    };
 
     BlenderZoomPanel(Context context,WheelSink wheelSink,SmoothSink smoothSink) {
         super(context);
@@ -48,6 +53,28 @@ final class BlenderZoomPanel extends LinearLayout {
         setBackground(bg);
         setElevation(dp(6));
         setFocusable(false);
+        setMotionEventSplittingEnabled(true);
+        Button grip=button("⠿",30);
+        grip.setContentDescription("Drag to move mouse buttons and zoom");
+        addView(grip,new LayoutParams(dp(30),dp(40)));
+        grip.setOnTouchListener((v,e)->{
+            switch(e.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    dragging=true;
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    dragX=e.getRawX();dragY=e.getRawY();
+                    startX=getX();startY=getY();return true;
+                case android.view.MotionEvent.ACTION_MOVE:
+                    place(startX+e.getRawX()-dragX,startY+e.getRawY()-dragY);return true;
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL:
+                    dragging=false;
+                    savePosition();
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                    return true;
+                default:return true;
+            }
+        });
         expandButton=button("ZOOM",45);
         expandButton.setTextSize(11);
         expandButton.setContentDescription("Show or hide Blender 3D viewport zoom slider");
@@ -98,6 +125,50 @@ final class BlenderZoomPanel extends LinearLayout {
         setExpanded(prefs.getBoolean("expanded",true));
         updateModeLabel();
     }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if(getParent() instanceof View)((View)getParent()).addOnLayoutChangeListener(parentResize);
+        post(this::restorePosition);
+    }
+    @Override protected void onDetachedFromWindow() {
+        dragging=false;
+        if(getParent() instanceof View)((View)getParent()).removeOnLayoutChangeListener(parentResize);
+        super.onDetachedFromWindow();
+    }
+    @Override protected void onSizeChanged(int w,int h,int oldW,int oldH) {
+        super.onSizeChanged(w,h,oldW,oldH);
+        if(w>0 && h>0)post(this::restorePosition);
+    }
+    private void restorePosition() {
+        if(dragging || getVisibility()!=VISIBLE || !(getParent() instanceof View))return;
+        View parent=(View)getParent();
+        if(getWidth()<=0 || getHeight()<=0 || parent.getWidth()<=0 || parent.getHeight()<=0)return;
+        float inset=dp(4);
+        float rangeX=Math.max(0,parent.getWidth()-getWidth()-2*inset);
+        float rangeY=Math.max(0,parent.getHeight()-getHeight()-2*inset);
+        place(inset+prefs.getFloat("position_x",1f)*rangeX,
+                inset+prefs.getFloat("position_y",.5f)*rangeY);
+    }
+    private void place(float x,float y) {
+        if(!(getParent() instanceof View))return;
+        View parent=(View)getParent();
+        float inset=dp(4);
+        float maxX=Math.max(inset,parent.getWidth()-getWidth()-inset);
+        float maxY=Math.max(inset,parent.getHeight()-getHeight()-inset);
+        setX(Math.max(inset,Math.min(x,maxX)));
+        setY(Math.max(inset,Math.min(y,maxY)));
+    }
+    private void savePosition() {
+        if(!(getParent() instanceof View))return;
+        View parent=(View)getParent();
+        float inset=dp(4);
+        prefs.edit().putFloat("position_x",Math.max(0,Math.min(1,
+                (getX()-inset)/Math.max(1,parent.getWidth()-getWidth()-2*inset))))
+                .putFloat("position_y",Math.max(0,Math.min(1,
+                (getY()-inset)/Math.max(1,parent.getHeight()-getHeight()-2*inset)))).apply();
+    }
+
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private Button button(String title,int width) {
         Button b=new Button(getContext());

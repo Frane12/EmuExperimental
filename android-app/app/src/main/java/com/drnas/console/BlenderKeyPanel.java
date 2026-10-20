@@ -231,6 +231,17 @@ final class BlenderKeyPanel extends LinearLayout {
             mouse.send(x11Button,false);
         });
     }
+    /** Keep the original press/release handlers and lifecycle release ownership. */
+    void moveMouseButtonsTo(LinearLayout destination) {
+        releaseAll();
+        int index=1; // After the zoom panel's dedicated drag handle.
+        for(Button button:heldMouse.values()) {
+            removeView(button);
+            LayoutParams params=new LayoutParams(dp(56),dp(48));
+            params.setMargins(dp(2),dp(2),dp(2),dp(2));
+            destination.addView(button,index++,params);
+        }
+    }
     private LinearLayout row() {
         LinearLayout r=new LinearLayout(getContext());r.setOrientation(HORIZONTAL);
         rows.addView(r,new LayoutParams(LayoutParams.WRAP_CONTENT,dp(44)));return r;

@@ -556,11 +556,11 @@ public final class WineGuiActivity extends Activity {
                 if(destroyed||blenderSmoothZoom==null)return;
                 blenderSmoothZoom.offerDelta(delta);
             });
+            blenderKeys.moveMouseButtonsTo(blenderZoom);
             FrameLayout.LayoutParams zoomLayout=new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
-                    Gravity.END|Gravity.CENTER_VERTICAL);
-            zoomLayout.rightMargin=dp(8);
+                    Gravity.TOP|Gravity.START);
             layout.addView(blenderZoom,zoomLayout);
             blenderZoom.setVisibility(View.GONE);
         } else if(getPreferences(MODE_PRIVATE).getBoolean("desktop_keys",true))addDesktopKeys(layout);
