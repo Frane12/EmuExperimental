@@ -71,6 +71,8 @@ final class WineGuiSession implements AutoCloseable {
                 "--python-expr",
                 "import bpy; print('DRNAS_R64_BACKGROUND_PYTHON_OK version=' + bpy.app.version_string, flush=True)");
     }
+    /** Read-only Blender loader check: no GUI, GPU, Python, or user scripts. */
+    static List<String> r64VersionArgs() { return Collections.singletonList("--version"); }
     /** Isolate actual Vulkan GUI without user CLI flags and Python startup. */
     static List<String> r64VulkanGuiArgs() {
         return Arrays.asList("--gpu-backend","vulkan","--factory-startup");
@@ -398,8 +400,13 @@ final class WineGuiSession implements AutoCloseable {
         if(r64WinecfgBaseline || r64BlenderBackground || r64BlenderVulkan || cpuOnly) {
             // Trace only the opted-in LAB run. This exposes guest process
             // exits and SEH exception frames without penalizing Blender runs.
-            env.put("WINEDEBUG","-all,err+all,+seh,+process");
-            log.accept("DRNAS_R64_LAB_WINEDEBUG=seh,process,errors; bounded session capture");
+            boolean moduleTrace=R64Arm64Isolation.HEADLESS.equals(r64CpuMode) ||
+                    R64Arm64Isolation.VERSION.equals(r64CpuMode);
+            env.put("WINEDEBUG",moduleTrace?
+                    "-all,err+all,+seh,+process,+module,+loaddll":
+                    "-all,err+all,+seh,+process");
+            log.accept("DRNAS_R64_LAB_WINEDEBUG=seh,process,errors"+
+                    (moduleTrace?",module,loaddll":"")+"; bounded session capture");
         }
         log.accept("DRNAS_DIAGNOSTICS="+(diagnosticsEnabled?"ON":"OFF")+
                 " | Wine/DXVK verbosity changes require restarting the Wine desktop.");
@@ -533,7 +540,9 @@ final class WineGuiSession implements AutoCloseable {
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
             log.accept("DRNAS_GUEST_LAUNCH_REQUEST="+(app.startsWith("user:")?
                     "user-shortcut":app)+" target="+launchMode);
-            log.accept(r64WinecfgBaseline?"Launching R64 Winecfg baseline without Blender or Explorer":
+            log.accept(R64Arm64Isolation.VERSION.equals(r64CpuMode)?
+                    "DRNAS_R64_VERSION_LAUNCH: blender.exe --version, no guest X11":
+                    r64WinecfgBaseline?"Launching R64 Winecfg baseline without Blender or Explorer":
                     r64BlenderBackground?"DRNAS_R64_BACKGROUND_LAUNCH: headless Blender Python check":
                     r64BlenderVulkan?"Launching R64 Blender Vulkan GUI without Explorer":
                     blenderShell?"Launching Blender directly without Explorer desktop/taskbar":
@@ -554,6 +563,8 @@ final class WineGuiSession implements AutoCloseable {
             final String cmdMarker=cmdProbe?R64Arm64Isolation.newMarker():null;
             ProcessBuilder pb=new ProcessBuilder(cmdProbe?
                     R64Arm64Isolation.cmdCommand(linker,wine,cmdMarker):
+                    R64Arm64Isolation.VERSION.equals(r64CpuMode)?
+                            blenderCommand(linker,wine,r64VersionArgs()):
                     r64WinecfgBaseline?
                     winecfgBaselineCommand(linker,wine):
                     (r64BlenderBackground || R64Arm64Isolation.HEADLESS.equals(r64CpuMode))?
@@ -565,7 +576,9 @@ final class WineGuiSession implements AutoCloseable {
                             blenderFolder:proton)
                     .redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
-            log.accept(cmdProbe?"[Startup] R64 CMD ARM64 · čekam marker":
+            log.accept(R64Arm64Isolation.VERSION.equals(r64CpuMode)?
+                    "[Startup] R64 Blender --version · čekam rezultat":
+                    cmdProbe?"[Startup] R64 CMD ARM64 · čekam marker":
                     R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?
                     "[Startup] R64 Blender headless bez X11 · čekam Python test":
                     r64WinecfgBaseline?"[Startup] R64 test Winecfg · čekam Windows prozor":
@@ -584,13 +597,17 @@ final class WineGuiSession implements AutoCloseable {
                     new java.util.concurrent.atomic.AtomicBoolean();
             final java.util.concurrent.atomic.AtomicBoolean cmdSeen=
                     new java.util.concurrent.atomic.AtomicBoolean();
+            final java.util.concurrent.atomic.AtomicBoolean versionSeen=
+                    new java.util.concurrent.atomic.AtomicBoolean();
             Consumer<String> capture=line->{
                 if(line.startsWith("DRNAS_R64_BACKGROUND_PYTHON_OK "))
                     backgroundPythonSeen.set(true);
                 if(R64Arm64Isolation.matchesMarker(line,cmdMarker))cmdSeen.set(true);
+                if(R64Arm64Isolation.isBlenderVersionLine(line))versionSeen.set(true);
                 log.accept(line);
             };
             Thread output=WineServerDiagnostics.pipe(launcher,
+                    R64Arm64Isolation.VERSION.equals(r64CpuMode)?"[Blender version] ":
                     cmdProbe?"[R64 CMD] ":
                     R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?"[Blender headless] ":
                     r64WinecfgBaseline?"[Winecfg baseline] ":
@@ -605,11 +622,26 @@ final class WineGuiSession implements AutoCloseable {
                     output.join(1500);
                     int exit=ended?launcher.exitValue():-1;
                     boolean drained=!output.isAlive(),serverAlive=server.alive();
-                    boolean pass=ended && exit==0 && cmdSeen.get() && drained && serverAlive;
+                    boolean pass=R64Arm64Isolation.cmdPassed(ended,exit,cmdSeen.get(),serverAlive);
                     log.accept("DRNAS_R64_CMD_RESULT="+(!ended?"TIMEOUT":pass?"PASS":"FAIL")+
                             " mode="+r64CpuMode+" exit="+exit+" marker="+cmdSeen.get()+
-                            " streamDrained="+drained+" wineserverAlive="+serverAlive+
+                            " streamDrained="+drained+" (informationalOnly) wineserverAlive="+serverAlive+
                             " bootstrap="+env.containsKey("WINEBOOTSTRAPMODE"));
+                    return;
+                }
+                if(R64Arm64Isolation.VERSION.equals(r64CpuMode)) {
+                    boolean ended=launcher.waitFor(R64Arm64Isolation.VERSION_TIMEOUT_SECONDS,
+                            TimeUnit.SECONDS);
+                    if(!ended){launcher.destroyForcibly();launcher.waitFor(3,TimeUnit.SECONDS);}
+                    output.join(1500);
+                    int exit=ended?launcher.exitValue():-1;
+                    boolean serverAlive=server.alive(),drained=!output.isAlive();
+                    boolean pass=ended && exit==0 && versionSeen.get() && serverAlive;
+                    log.accept("DRNAS_R64_VERSION_RESULT="+(!ended?"TIMEOUT":pass?"PASS":"FAIL")+
+                            " exit="+exit+" versionLine="+versionSeen.get()+
+                            " wineserverAlive="+serverAlive+" streamDrained="+drained+
+                            " timeoutSec="+R64Arm64Isolation.VERSION_TIMEOUT_SECONDS+
+                            "; GPU and Blender Python not implied");
                     return;
                 }
                 if(r64BlenderBackground || R64Arm64Isolation.HEADLESS.equals(r64CpuMode)) {
