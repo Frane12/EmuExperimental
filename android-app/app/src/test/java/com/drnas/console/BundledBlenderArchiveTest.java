@@ -103,4 +103,11 @@ public class BundledBlenderArchiveTest {
                 BundledBlenderArchive.SHA256);
     }
 
+    @Test public void compiledNativeR64NeedsMoreThanLegacyOneGiBCeiling() {
+        assertTrue("r64 extraction must allow compiled binaries larger than 1 GiB",
+                BundledBlenderArchive.MAX_EXPANDED > 1024L*1024*1024);
+        assertTrue(BundledBlenderArchive.EXPECTED_EXPANDED > 0);
+        assertTrue(BundledBlenderArchive.REQUIRED_FREE_BYTES >= 900L*1024*1024);
+    }
+
 }
