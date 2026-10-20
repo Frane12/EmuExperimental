@@ -38,8 +38,12 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p native-results
-          git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src > native-results/clone.log 2>&1
-          clone_rc=$?
+          if git clone --depth 1 --branch v4.5.4 https://github.com/blender/blender.git /tmp/blender-src > native-results/clone.log 2>&1; then
+            clone_rc=0
+          else
+            clone_rc=$?
+          fi
+          tail -n 35 native-results/clone.log
           echo "clone_exit=$clone_rc" | tee native-results/summary.txt
           if [ "$clone_rc" -ne 0 ]; then exit 0; fi
           git -C /tmp/blender-src rev-parse HEAD >> native-results/summary.txt
@@ -54,10 +58,9 @@ jobs:
           tail -n 100 native-results/blender-configure.log
           # Configure failures are expected at this feasibility stage; retain diagnostic logs.
           exit 0
-      - uses: actions/upload-artifact@v4
+      - name: Print feasibility summary in job log (artifact quota independent)
         if: always()
-        continue-on-error: true
-        with:
-          name: drnas-native-arm64-feasibility
-          path: native-results/
-          retention-days: 7
+        run: |
+          cat native-results/summary.txt 2>/dev/null || true
+          tail -n 70 native-results/clone.log 2>/dev/null || true
+          tail -n 100 native-results/blender-configure.log 2>/dev/null || true
