@@ -22,20 +22,11 @@ public final class BlenderLauncherActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().getDecorView().setSystemUiVisibility(5894 | 1024 | 512);
-        LinearLayout panel=new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setGravity(Gravity.CENTER);
-        panel.setBackgroundColor(0xff202024);
-        ImageView logo=new ImageView(this);
-        logo.setImageResource(R.drawable.ic_blender);
-        int size=Math.round(100*getResources().getDisplayMetrics().density);
-        panel.addView(logo,new LinearLayout.LayoutParams(size,size));
-        TextView name=new TextView(this);name.setText("Blender");
-        name.setTextSize(25);name.setTextColor(0xffeeeeee);
-        panel.addView(name);
-        status=new TextView(this);status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Pripremam Blender…"));
-        status.setTextSize(13);status.setTextColor(0xffaaaab2);status.setPadding(16,20,16,20);
-        status.setGravity(Gravity.CENTER);panel.addView(status);
+        // Match the latest EmuDRNAS Blender launch screen on EVERY launch.
+        // Animated orbiting dots do not depend on debug output or installation.
+        status=new TextView(this);
+        status.setText(AppLanguage.t(this,"Pripremam Blender…"));
+        LinearLayout panel=StartupAnimationView.blenderPanel(this,status);
         FrameLayout root=new FrameLayout(this);
         root.addView(panel,new FrameLayout.LayoutParams(-1,-1));
         LinearLayout brand=new LinearLayout(this);
@@ -64,8 +55,15 @@ public final class BlenderLauncherActivity extends Activity {
             // The external picker/settings activity will return its result to us.
             if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
         }
-        if(isR64Lab() && !labChoiceMade) showR64LabChoice();
-        else if(r64WinecfgBaseline || "background".equals(r64LabMode) ||
+        // The device-tested R64 GUI is the default. No seven-mode
+        // diagnostic selection dialog, background/Vulkan probe or benchmark.
+        // Retain the existing Vulkan-Wine path that mapped the real Blender GUI.
+        if(isR64Lab()) {
+            labChoiceMade=true;
+            r64WinecfgBaseline=false;
+            r64LabMode="vulkan";
+        }
+        if(r64WinecfgBaseline || "background".equals(r64LabMode) ||
                 R64Arm64Isolation.isCpuOnly(r64LabMode)) prepareRuntime();
         else checkStartupAccess();
     }
@@ -75,7 +73,8 @@ public final class BlenderLauncherActivity extends Activity {
      * the isolated R64 LAB application; never alter published Blender builds.
      */
     private boolean isR64Lab() {
-        return "com.drnas.console.mali.r64.lab".equals(getPackageName());
+        return "com.drnas.console.mali.r64.lab".equals(getPackageName())
+                || "com.drnas.console.mali.r64.gui.lab".equals(getPackageName());
     }
     private void showR64LabChoice() {
         // AlertDialog message and list are mutually exclusive in Android's
@@ -216,7 +215,7 @@ public final class BlenderLauncherActivity extends Activity {
         if(ready())open();
         else new ContainerBootstrap(this,new ContainerBootstrap.Callback() {
             public void onLog(String line) {
-                android.util.Log.i("DRNAS-Blender",line);
+                // Quiet GUI LAB: no per-line diagnostic Logcat flood.
                 runOnUiThread(()->{if(!destroyed)status.setText(AppLanguage.t(BlenderLauncherActivity.this,"Prva priprema Blender okruženja…"));});
             }
             public void onComplete(boolean started,String result) {
