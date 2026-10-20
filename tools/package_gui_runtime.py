@@ -4,6 +4,7 @@ No Wine, Microsoft fonts, GPU drivers or redirect shims are copied.
 """
 import hashlib,io,json,re,shutil,subprocess,sys,tarfile,tempfile,zipfile
 from pathlib import Path
+from package_opengl_runtime import BIONIC_SYSTEM, gui_loader_names, mesa_required_sonames
 URL='https://downloads.gamenative.app/imagefs_bionic.txz'
 FALLBACK_URL='https://pub-9fcd5294bd0d4b85a9d73615bf98f3b5.r2.dev/imagefs_bionic.txz'
 SHA256='368db62bfc58b72c97e5169bda9aa64d4246f07964c447e27c79a065e7e9c48b'
@@ -16,7 +17,7 @@ ROOTS=['libX11.so.6','libXext.so.6','libXrender.so.1','libXrandr.so.2',
        # library plus its recursively collected ELF dependencies, never a
        # GLES shim. The earlier R64 APK shipped libGL but omitted this edge.
        'libxcb-glx.so']
-SYSTEM={'libc.so','libdl.so','libm.so','liblog.so','libandroid.so','libnativewindow.so'}
+SYSTEM=BIONIC_SYSTEM
 # Immutable upstream Mesa Bionic WSI wrapper + AdrenoTools hooks. Keep the
 # Khronos loader separate: its ICD is this wrapper, whose backend is Turnip.
 WRAPPER_URL='https://raw.githubusercontent.com/The412Banner/Bannerlator/e91d93bb23b0f2dde953864484b6f620f72d9cad/app/src/main/assets/graphics_driver/wrapper.tzst'
@@ -38,7 +39,17 @@ def wrapper_libraries():
         expected={'libvulkan_wrapper.so','libadrenotools.so','libmain_hook.so','libhook_impl.so','libfile_redirect_hook.so','libgsl_alloc_hook.so'}
         if set(result)!=expected:raise RuntimeError('Unexpected wrapper payload')
         return result
-def package(archive,output):
+def package(archive,output,mesa_bundle=None):
+    extra=[]
+    if mesa_bundle is not None:
+        with zipfile.ZipFile(mesa_bundle) as mesa:
+            manifest=json.loads(mesa.read('manifest.json'))['files']
+            embedded={Path(p).name for p in mesa.namelist()
+                      if p.startswith('lib/') and not p.endswith('/')}
+            if set(manifest)!=embedded:
+                raise RuntimeError('Mesa manifest does not match actual packaged libraries')
+        extra=mesa_required_sonames(manifest)
+        print('DRNAS_R64_MESA_DEPENDENCY_ROOTS',','.join(extra))
     archive=Path(archive)
     if not archive.exists():
         part=archive.with_suffix('.download')
@@ -95,10 +106,17 @@ def package(archive,output):
                 optional_gl=['libGL.so.1']
         else:
             print('WARNING: upstream Bionic libGL.so.1 absent; GLX remains unavailable.')
-        libs={};pending=list(ROOTS)+list(wrapped)+optional_gl
+        # Process pinned X11 roots first, then automatically include *all*
+        # dependencies of the exact packaged Mesa ELF set (including
+        # libandroid-support.so and libffi.so if this Mesa requires them).
+        # Never copy these from a random source or claim they're Android
+        # system libraries when the linker cannot supply them.
+        libs={};pending=list(reversed(extra))+list(ROOTS)+list(wrapped)+optional_gl
         while pending:
             soname=pending.pop()
-            if soname in SYSTEM or soname in libs:continue
+            if soname in SYSTEM or soname in gui_loader_names(libs):continue
+            if soname not in members:
+                raise RuntimeError('Pinned Bionic rootfs missing DT_NEEDED: '+soname)
             data=content(soname)
             if data[:5]!=b'\x7fELF\x02' or int.from_bytes(data[18:20],'little')!=183:
                 raise RuntimeError('not AArch64 ELF: '+soname)
@@ -106,8 +124,13 @@ def package(archive,output):
             dynamic=subprocess.check_output(['readelf','-d',str(path)],text=True)
             deps=re.findall(r'\(NEEDED\).*?\[(.*?)\]',dynamic)
             libs[soname]=data;pending.extend(deps)
-        if 'libxcb-glx.so' not in libs:
+        if 'libxcb-glx.so' not in gui_loader_names(libs):
             raise RuntimeError('R64 GLX dependency missing in pinned imagefs: libxcb-glx.so')
+        if extra:
+            missing=sorted(set(extra)-gui_loader_names(libs))
+            if missing:
+                raise RuntimeError('R64 Mesa dependencies absent after GUI bundling: '+
+                                   ','.join(missing))
         print('DRNAS_R64_LIBXCB_GLX_CLOSURE_VERIFIED',
               'libxcb-glx.so',len(libs['libxcb-glx.so']),
               'bytes; transitive DT_NEEDED staged in GUI runtime')
@@ -118,6 +141,9 @@ def package(archive,output):
             z.writestr('manifest.json',json.dumps({'source':URL,'source_sha256':SHA256,
                 'wrapper_source':WRAPPER_URL,'wrapper_sha256':WRAPPER_SHA256,'files':manifest},indent=2))
         print('GUI runtime: '+str(len(libs))+' ARM64 libraries, '+str(output.stat().st_size)+' bytes')
-if __name__=='__main__':package(sys.argv[1],sys.argv[2])
+if __name__=='__main__':
+    if len(sys.argv) not in (3,4):
+        raise SystemExit('usage: package_gui_runtime.py IMAGEFS.txz GUI.zip [MESA.zip]')
+    package(sys.argv[1],sys.argv[2],sys.argv[3] if len(sys.argv)==4 else None)
 
 

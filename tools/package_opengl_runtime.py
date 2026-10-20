@@ -37,6 +37,36 @@ BIONIC_SYSTEM = {
     "libc++_shared.so", "libGLESv1_CM.so", "libGLESv2.so",
 }
 
+def gui_loader_names(libraries):
+    """Match WineGuiRuntime.installAliases(): libX11.so.6 exposes libX11.so.
+
+    An alias is only valid when precisely one versioned SONAME claims it.
+    Never silently choose between two different major ABI versions.
+    """
+    names = set(libraries)
+    aliases = {}
+    for soname in sorted(names):
+        if soname.endswith(".so"):
+            continue
+        if not re.fullmatch(r"lib[A-Za-z0-9_+-]+\.so(?:\.[A-Za-z0-9_.+-]+)?", soname):
+            raise RuntimeError("Unsafe Bionic GUI soname: " + soname)
+        base = soname[:soname.index(".so") + 3]
+        old = aliases.setdefault(base, soname)
+        if old != soname:
+            raise RuntimeError(
+                f"Conflicting native GUI linker alias {base}: {old} and {soname}")
+    return names | set(aliases)
+
+def mesa_required_sonames(mesa_manifest):
+    """Get every non-Android DT_NEEDED edge from this exact Mesa package."""
+    mesa_provided = gui_loader_names(mesa_manifest)
+    return sorted({
+        needed
+        for meta in mesa_manifest.values()
+        for needed in meta["needed"]
+        if needed not in mesa_provided and needed not in BIONIC_SYSTEM
+    })
+
 def verify_blender_glx_closure(gui_bundle, mesa_manifest):
     """Reject a broken Wine libGL dependency closure BEFORE compiling an APK.
 
@@ -52,21 +82,27 @@ def verify_blender_glx_closure(gui_bundle, mesa_manifest):
             raise RuntimeError("R64 GLX dependency closure missing libxcb-glx.so")
         if z.getinfo("lib/libxcb-glx.so").file_size < 4096:
             raise RuntimeError("R64 libxcb-glx.so is implausibly small")
-    mesa_libs = set(mesa_manifest)
-    for soname, meta in mesa_manifest.items():
-        for needed in meta["needed"]:
-            if needed not in gui_libs | mesa_libs | BIONIC_SYSTEM:
-                raise RuntimeError(
-                    f"R64 Bionic native dependency unbundled: {soname} "+
-                    f"DT_NEEDED={needed}")
+    # GUI runtime produces its unversioned symlinks on-device, e.g.
+    # libX11.so.6 -> libX11.so. Raw ZIP entries don't contain those aliases.
+    # Previous preflight falsely rejected libEGL.so.1 -> libX11.so.
+    supplied = gui_loader_names(gui_libs) | gui_loader_names(mesa_manifest) | BIONIC_SYSTEM
+    missing = sorted({
+        (soname, needed)
+        for soname, meta in mesa_manifest.items()
+        for needed in meta["needed"]
+        if needed not in supplied
+    })
+    if missing:
+        raise RuntimeError("R64 Bionic DT_NEEDED closure incomplete: " +
+                           "; ".join(f"{src} needs {dep}" for src,dep in missing))
     gl_needs = set(mesa_manifest["libGL.so.1"]["needed"])
     if "libxcb-glx.so" not in gl_needs:
         raise RuntimeError(
             "Pinned Mesa libGL.so.1 unexpectedly changed GLX DT_NEEDED; "+
             "re-audit dependency model")
     print("DRNAS_R64_BLENDER_OPENGL_DEP_CLOSURE_VALIDATED",
-          "Mesa libs",len(mesa_libs),"GUI libs",len(gui_libs),
-          "libxcb-glx.so=present")
+          "Mesa libs",len(mesa_manifest),"GUI libs",len(gui_libs),
+          "unversioned_aliases=checked", "libxcb-glx.so=present")
 
 def package(out, gui_bundle=None):
     out = Path(out)
@@ -101,7 +137,20 @@ def package(out, gui_bundle=None):
                  "files": manifest}, indent=2))
     print("DRNAS_OPENGL_BUNDLE_WRITTEN", out, out.stat().st_size, "bytes")
 
+def verify_archives(gui_bundle, mesa_bundle):
+    with zipfile.ZipFile(mesa_bundle) as z:
+        indexed = json.loads(z.read("manifest.json"))["files"]
+        actual = {Path(n).name for n in z.namelist()
+                  if n.startswith("lib/") and not n.endswith("/")}
+        if set(indexed) != actual:
+            raise RuntimeError("Mesa archive and manifest SONAMEs differ")
+    verify_blender_glx_closure(gui_bundle, indexed)
+
 if __name__ == "__main__":
-    if len(sys.argv) not in (2,3):
-        raise SystemExit("usage: package_opengl_runtime.py OUTPUT.zip [GUI_RUNTIME.zip]")
-    package(sys.argv[1], sys.argv[2] if len(sys.argv)==3 else None)
+    if len(sys.argv)==4 and sys.argv[1]=="--verify":
+        verify_archives(sys.argv[2],sys.argv[3])
+    elif len(sys.argv) in (2,3):
+        package(sys.argv[1], sys.argv[2] if len(sys.argv)==3 else None)
+    else:
+        raise SystemExit("usage: package_opengl_runtime.py OUTPUT.zip [GUI_RUNTIME.zip]\n"
+                         "   or: package_opengl_runtime.py --verify GUI.zip MESA.zip")
