@@ -72,12 +72,36 @@ def peinfo(z, filename):
         if start+40 > len(head):
             break
         name = head[start:start+8].split(b"\0")[0].decode("ascii", errors="replace")
-        virtual, rawsize, rawptr = struct.unpack_from("<III", head, start+8)
+        virtual, virtual_address, rawsize, rawptr = struct.unpack_from("<IIII", head, start+8)
         segments.append({"section": name, "virtual_size": virtual,
+                         "virtual_address": virtual_address,
                          "raw_size": rawsize, "raw_ptr": rawptr})
     return {"machine": hex(machine), "size_of_image": image, "pe_magic": hex(magic),
             "coff_characteristics": hex(flags), "debug_stripped_flag": bool(flags & 0x200),
             "section_count": sections, "sections": segments}
+
+def detect_lfs_pointers(archive, entries):
+    found = []
+    with zipfile.ZipFile(archive) as z:
+        for entry in entries.values():
+            if entry["size"] > 400:
+                continue
+            with z.open(entry["archive_path"]) as stream:
+                content = stream.read(400)
+            if not content.startswith(b"version https://git-lfs.github.com/spec/v1"):
+                continue
+            fields = content.decode("utf-8",errors="replace").splitlines()
+            declared = None
+            for line in fields:
+                if line.startswith("size "):
+                    try:
+                        declared = int(line[5:])
+                    except ValueError:
+                        pass
+            found.append({"path":entry["path"],"actual_bytes":entry["size"],
+                          "intended_lfs_bytes":declared,
+                          "reference_prefix":fields[0] if fields else ""})
+    return sorted(found,key=lambda e:e["intended_lfs_bytes"] or 0,reverse=True)
 
 def fmt(n):
     return f"{n / 1048576:,.2f} MiB"
@@ -128,6 +152,8 @@ def main(official_path, mali_path, dest):
                     if info:
                         pe.setdefault(p,{})[label] = info
 
+    lfs = {"official":detect_lfs_pointers(official_path,official),
+           "mali":detect_lfs_pointers(mali_path,mali)}
     totals = {label: {"archive_bytes":path.stat().st_size,
                       "expanded_bytes":sum(e["size"] for e in tbl.values()),
                       "file_count":len(tbl),
@@ -143,7 +169,7 @@ def main(official_path, mali_path, dest):
     result={"hashes":hashes,"totals":totals,"status_counts":dict(statuses),
             "folder_delta_bytes":dict(folderdiff.most_common()),
             "extension_delta_bytes":dict(extdiff.most_common()),
-            "blender_exe_pe":pe_blender,
+            "blender_exe_pe":pe_blender,"lfs_pointers":lfs,
             "largest_delta":sorted_delta[:45],
             "largest_mali_only":largest_custom[:35],
             "largest_changed":largest_changed[:40],
@@ -180,6 +206,13 @@ def main(official_path, mali_path, dest):
         a=pe_blender.get("official",{}).get(key,"missing")
         b=pe_blender.get("mali",{}).get(key,"missing")
         head.append(f"| PE {key} | {a} | {b} |")
+    head.extend(["", "## Git LFS pointer files accidentally shipped instead of real assets",
+                 "| | Official | Mali R64 |", "|---|---:|---:|",
+                 f"| LFS pointer entries | {len(lfs['official'])} | {len(lfs['mali'])} |",
+                 f"| Total original asset bytes referenced by pointers | {fmt(sum(x['intended_lfs_bytes'] or 0 for x in lfs['official']))} | {fmt(sum(x['intended_lfs_bytes'] or 0 for x in lfs['mali']))} |",
+                 "", "### Largest unresolved Git LFS resource placeholders (Mali)",
+                 "| Path | Actual bytes | Intended asset size |","|---|---:|---:|"])
+    head.extend(f"| \`{x['path']}\` | {x['actual_bytes']} | {fmt(x['intended_lfs_bytes'] or 0)} |" for x in lfs['mali'][:28])
     head.extend(["", "## Difference by top-level folder",
                  "| Folder | Size difference |","|---|---:|"])
     head.extend("| `"+f+"` | "+fmt(delta)+" |" for f,delta in folderdiff.most_common(30))
