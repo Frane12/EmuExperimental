@@ -236,6 +236,19 @@ final class BlenderKeyPanel extends LinearLayout {
             mouse.send(x11Button,false);
         });
     }
+    /** Reparent the existing LMB/RMB controls beside movable ZOOM.
+     *  Keep MouseButtonHold ownership here so two-finger drags and lifecycle
+     *  release semantics remain identical to the working R64 build. */
+    void moveMouseButtonsTo(LinearLayout destination) {
+        releaseAll();
+        int index=1; // Dedicated drag handle belongs to the zoom panel.
+        for(Button button:heldMouse.values()) {
+            removeView(button);
+            LayoutParams params=new LayoutParams(dp(56),dp(48));
+            params.setMargins(dp(2),dp(2),dp(2),dp(2));
+            destination.addView(button,index++,params);
+        }
+    }
     private LinearLayout row() {
         LinearLayout r=new LinearLayout(getContext());r.setOrientation(HORIZONTAL);
         rows.addView(r,new LayoutParams(LayoutParams.WRAP_CONTENT,dp(44)));return r;
