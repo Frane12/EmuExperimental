@@ -351,15 +351,13 @@ final class WineGuiSession implements AutoCloseable {
                     "WineVulkan -> Khronos -> X11 wrapper -> Turnip. "+
                     "Actual GPU and Present remain unverified.");
         }
-        File gl=new File(guiRuntime,"lib/libGL.so.1");
         if(nativeOpenGl)
-            log.accept("DRNAS_OPENGL_PROFILE: GLX still unavailable on Java X11 server; "+
-                    "isolated Mesa EGL/Zink Wine11 route will be staged AFTER Turnip.");
-        else
-            log.accept(gl.isFile()
-                    ? "Wine X11 OpenGL libGL.so.1 packaged (runtime load still subject to device test)."
-                    : "DRNAS_GLX_UNAVAILABLE: pinned Bionic runtime lacks libGL.so.1; "+
-                      "GLX fallback disabled. This does not affect Vulkan/DXVK.");
+            log.accept("DRNAS_OPENGL_PROFILE: GLX remains unavailable on Java X11; "+
+                    "staging an isolated Mesa EGL/Zink Wine11 route after Vulkan selection.");
+        else if(blenderShell)
+            log.accept("DRNAS_BLENDER_LIBGL_PREFLIGHT: Wine winex11 WGL requires "+
+                    "libGL.so.1 even with Vulkan requested; staging bundled Bionic Mesa "+
+                    "linker libraries without changing Vulkan mode.");
         BlenderDisplayProfile.Resolution display=blenderShell?BlenderDisplayProfile.choose(
                 NativeHost.vulkanDeviceName(),context.getSharedPreferences("blender-display",Context.MODE_PRIVATE)
                         .getString("resolution","auto")):BlenderDisplayProfile.HD;
@@ -381,11 +379,16 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
                     "STAGED_NOT_DEVICE_VERIFIED":"UNAVAILABLE_SYSTEM_VULKAN_ONLY"));
         }
-        // Only the app that explicitly selects OpenGL gets these Mesa host
-        // libraries. Other games retain the identical r24 Wine/DXVK path.
-        if(nativeOpenGl) {
+        // Wine's WGL initialization can dlopen libGL.so.1 independently of
+        // Blender's --gpu-backend vulkan flag. The previous Vulkan-only R64
+        // route omitted this dependency and Wine logged OpenGL disabled.
+        // This is loader repair, NOT a silent change to Blender's Vulkan CLI
+        // or a claim that our X11 server implements GLX/DRI3.
+        // All non-Blender apps retain their existing Wine/DXVK environment.
+        if(blenderShell || nativeOpenGl) {
             File mesa = WineOpenGlRuntime.install(context,log);
-            WineOpenGlRuntime.configure(mesa,env,log);
+            if(nativeOpenGl) WineOpenGlRuntime.configure(mesa,env,log);
+            else WineOpenGlRuntime.exposeBlenderLibGl(mesa,env,log);
         }
         if(blenderShell&&!nativeOpenGl) {
             // The Java X server already exists at this point. Check it before

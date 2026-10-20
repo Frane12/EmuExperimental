@@ -93,14 +93,32 @@ final class WineOpenGlRuntime {
         return lib;
     }
 
+    /**
+     * Blender's Vulkan launch still initializes winex11 WGL. Supply the real
+     * libGL.so.1 and its Mesa dependencies to the Wine child linker without
+     * changing its Vulkan ICD, renderer, or GALLIUM/EGL backend selection.
+     * This validates packaged files, not a working GLX/EGL context.
+     */
+    static void exposeBlenderLibGl(File lib, Map<String,String> env,
+                                    Consumer<String> log) throws IOException {
+        for(String name:new String[]{"libGL.so.1","libEGL.so.1",
+                "libgallium-26.3.0-devel.so"}) {
+            File component=new File(lib,name);
+            if(!component.isFile() || !component.canRead())
+                throw new IOException("Wine host OpenGL linker dependency missing: "+name);
+        }
+        String path=lib.getCanonicalPath();
+        String prior=env.getOrDefault("LD_LIBRARY_PATH","");
+        if(!Arrays.asList(prior.split(":")).contains(path))
+            env.put("LD_LIBRARY_PATH",prior.isEmpty()?path:prior+":"+path);
+        log.accept("DRNAS_BLENDER_LIBGL_LINKER_READY libGL.so.1 + EGL/Zink staged; "+
+                "Vulkan ICD unchanged; dlopen/context/first frame still unverified");
+    }
+
     static void configure(File lib, Map<String,String> env, Consumer<String> log) throws IOException {
-        if(!new File(lib,"libEGL.so.1").isFile() ||
-           !new File(lib,"libgallium-26.3.0-devel.so").isFile())
-            throw new IOException("Mesa EGL/Zink runtime incomplete");
-        // Wine 11 ARM64 winex11 uses its EGL path instead of the unsupported
-        // GLX path in our Java X server. Use the selected Turnip Vulkan ICD.
-        env.put("LD_LIBRARY_PATH",lib.getAbsolutePath()+":"+
-                env.getOrDefault("LD_LIBRARY_PATH",""));
+        exposeBlenderLibGl(lib,env,log);
+        // Explicit OpenGL mode only. Native Vulkan Blender must never inherit
+        // these overrides merely to satisfy Wine's auxiliary WGL dlopen.
         env.put("WINE_USE_EGL","1");
         env.put("EGL_PLATFORM","x11");
         env.put("MESA_LOADER_DRIVER_OVERRIDE","zink");

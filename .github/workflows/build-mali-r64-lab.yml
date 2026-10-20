@@ -9,6 +9,10 @@ on:
       - "tools/package_blender.py"
       - "android-app/app/src/main/java/com/drnas/console/BundledBlenderArchive.java"
       - "android-app/app/src/test/java/com/drnas/console/BundledBlenderArchiveTest.java"
+      - "android-app/app/src/main/java/com/drnas/console/WineGuiSession.java"
+      - "android-app/app/src/main/java/com/drnas/console/WineOpenGlRuntime.java"
+      - "android-app/app/src/test/java/com/drnas/console/WineOpenGlRuntimeTest.java"
+      - "tools/package_opengl_runtime.py"
   workflow_dispatch:
 permissions:
   contents: write
