@@ -50,4 +50,21 @@ public class R64Arm64IsolationTest {
         assertThrows(IllegalArgumentException.class,()->R64Arm64Isolation.configure(e,"vulkan"));
         assertEquals("original",e.get("DISPLAY"));
     }
+    @Test public void headlessAndVersionAreCpuOnlyAndVersionIsExact() {
+        assertTrue(R64Arm64Isolation.isCpuOnly(R64Arm64Isolation.VERSION));
+        assertFalse(R64Arm64Isolation.isCommand(R64Arm64Isolation.VERSION));
+        assertEquals(40,R64Arm64Isolation.VERSION_TIMEOUT_SECONDS);
+        assertTrue(R64Arm64Isolation.isBlenderVersionLine("Blender 4.5.14"));
+        assertTrue(R64Arm64Isolation.isBlenderVersionLine("Blender 4.5.14 (hash abcdef)"));
+        assertFalse(R64Arm64Isolation.isBlenderVersionLine("trace loaded Blender 4.5.14"));
+        assertFalse(R64Arm64Isolation.isBlenderVersionLine("Blender 4.5.13"));
+    }
+    @Test public void cmdSuccessDoesNotDependOnInheritedStreamClosure() {
+        assertTrue(R64Arm64Isolation.cmdPassed(true,0,true,true));
+        assertFalse(R64Arm64Isolation.cmdPassed(true,1,true,true));
+        assertFalse(R64Arm64Isolation.cmdPassed(true,0,false,true));
+        assertFalse(R64Arm64Isolation.cmdPassed(false,0,true,true));
+        assertFalse(R64Arm64Isolation.cmdPassed(true,0,true,false));
+    }
+
 }
