@@ -546,7 +546,7 @@ final class WineGuiSession implements AutoCloseable {
             final java.util.concurrent.atomic.AtomicBoolean backgroundPythonSeen=
                     new java.util.concurrent.atomic.AtomicBoolean();
             Consumer<String> capture=line->{
-                if(line.contains("DRNAS_R64_BACKGROUND_PYTHON_OK"))
+                if(line.startsWith("DRNAS_R64_BACKGROUND_PYTHON_OK "))
                     backgroundPythonSeen.set(true);
                 log.accept(line);
             };
