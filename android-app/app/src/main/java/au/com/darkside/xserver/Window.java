@@ -585,6 +585,13 @@ public class Window extends Resource {
         Window root=_screen.getRootWindow();
         return root==null?null:BlenderOverlayTargetPolicy.choose(root._children,BLENDER_OVERLAY_INFO);
     }
+    Window blenderPointerTarget(Window hit) {
+        Window root=_screen.getRootWindow();
+        if(root==null || hit==null)return null;
+        while(hit._parent!=null && hit._parent!=root)hit=hit._parent;
+        if(hit.titleForStackAudit().isEmpty())return null; // Wine menus retain their grab.
+        return BlenderOverlayTargetPolicy.atPointer(root._children,BLENDER_OVERLAY_INFO,hit);
+    }
     private static final BlenderOverlayTargetPolicy.Info<Window> BLENDER_OVERLAY_INFO=
             new BlenderOverlayTargetPolicy.Info<Window>() {
         public boolean eligible(Window w) {
@@ -876,8 +883,8 @@ public class Window extends Resource {
         psc = _parent.getSelectingClients(EventCode.MaskSubstructureNotify);
 
         if (_isMapped) {
-            _screen.revertFocus(this);
             _isMapped = false;
+            _screen.revertFocus(this);
             _xServer.windowUnmapped(getId());
 
             if (sc != null) {

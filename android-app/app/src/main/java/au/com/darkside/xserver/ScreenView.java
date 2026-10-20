@@ -331,6 +331,23 @@ public class ScreenView extends View {
     }
 
 
+    // Accessed only while holding the X server monitor, on the input worker.
+    private final java.util.Set<Integer> heldInputKeys=new java.util.HashSet<>();
+    private boolean blenderMayActivate() {
+        return BlenderOverlayTargetPolicy.mayActivate(_grabKeyboardWindow!=null,
+                _grabPointerWindow!=null,(_buttons&0xff00)!=0,!heldInputKeys.isEmpty());
+    }
+    private void activateBlenderWindow(Window target) {
+        if(target==null || _focusWindow==target ||
+                (_focusWindow!=null && target.isInferior(_focusWindow)))return;
+        Window.focusInOutNotify(_focusWindow,target,
+                _rootWindow.windowAtPoint(_motionX,_motionY),_rootWindow,0);
+        _focusWindow=target;
+        _focusRevertTo=2;
+        _focusLastChangeTime=_xServer.getTimestamp();
+        if(inputDebugEnabled)traceInputState("blender_focus_"+target.getId());
+    }
+
     /** Explicit overlay-only activation, always serialized with existing input. */
     public void sendBlenderOverlayKey(int keycode,boolean pressed) {
         if(nonBlockingInputEnabled && onAndroidUiThread()) {
@@ -340,18 +357,8 @@ public class ScreenView extends View {
         }
         synchronized(_xServer) {
             if(_rootWindow==null)return;
-            if(pressed && _grabKeyboardWindow==null) {
-                Window target=_rootWindow.blenderOverlayTarget();
-                if(target!=null && ( _focusWindow==null ||
-                        !(_focusWindow==target || target.isInferior(_focusWindow)))) {
-                    Window.focusInOutNotify(_focusWindow,target,
-                            _rootWindow.windowAtPoint(_motionX,_motionY),_rootWindow,0);
-                    _focusWindow=target;
-                    _focusRevertTo=2;
-                    _focusLastChangeTime=_xServer.getTimestamp();
-                    if(inputDebugEnabled)traceInputState("blender_overlay_focus_"+target.getId());
-                }
-            }
+            if(pressed && blenderMayActivate())
+                activateBlenderWindow(_rootWindow.blenderOverlayTarget());
             KeyEvent event=new KeyEvent(pressed?KeyEvent.ACTION_DOWN:KeyEvent.ACTION_UP,keycode);
             if(pressed)onKeyDown(keycode,event);
             else onKeyUp(keycode,event);
@@ -991,51 +998,75 @@ public class ScreenView extends View {
      *
      * @param w The window being deleted.
      */
-    public void deleteWindow(Window w) {
-        if (_grabPointerWindow == w || _grabConfineWindow == w) {
-            _grabPointerClient = null;
-            _grabPointerWindow = null;
-            _grabCursor = null;
-            _grabConfineWindow = null;
-            updatePointer(2);
-        } else {
-            updatePointer(0);
-        }
-
-        revertFocus(w);
+    private static boolean within(Window ancestor,Window candidate) {
+        return candidate!=null && (ancestor==candidate || ancestor.isInferior(candidate));
     }
 
-    /**
-     * Called when the window is unmapped.
-     * If the window had keyboard focus, update the focus window.
-     *
-     * @param w
-     */
+    public void deleteWindow(Window w) {
+        revertFocus(w);
+        updatePointer(0);
+    }
+
+    /** Release grabs when their window OR an ancestor becomes unavailable. */
     public void revertFocus(Window w) {
         traceInputState("revert_focus_window_"+w.getId());
-        if (w == _grabKeyboardWindow) {
-            Window pw = _rootWindow.windowAtPoint(_motionX, _motionY);
-
-            Window.focusInOutNotify(_grabKeyboardWindow, _focusWindow, pw, _rootWindow, 2);
-            _grabKeyboardClient = null;
-            _grabKeyboardWindow = null;
+        boolean pointerLost=within(w,_grabPointerWindow) || within(w,_grabConfineWindow);
+        boolean keyboardLost=within(w,_grabKeyboardWindow);
+        if(pointerLost) {
+            _grabPointerClient=null;
+            _grabPointerWindow=null;
+            _grabConfineWindow=null;
+            _grabCursor=null;
+            _grabPointerAutomatic=false;
+            _grabPointerPassive=false;
+            _grabPointerSynchronous=false;
+            _grabPointerFreezeNextEvent=false;
+            mPendingPointerEvents.mQueue.clear();
         }
-
-        if (w == _focusWindow) {
-            Window pw = _rootWindow.windowAtPoint(_motionX, _motionY);
-
-            if (_focusRevertTo == 0) {
-                _focusWindow = null;
-            } else if (_focusRevertTo == 1) {
-                _focusWindow = _rootWindow;
-            } else {
-                _focusWindow = w.getParent();
-                while (!_focusWindow.isViewable()) _focusWindow = _focusWindow.getParent();
+        if(keyboardLost) {
+            Window.focusInOutNotify(_grabKeyboardWindow,_focusWindow,
+                    _rootWindow.windowAtPoint(_motionX,_motionY),_rootWindow,2);
+            _grabKeyboardClient=null;
+            _grabKeyboardWindow=null;
+            _grabKeyboardPassiveGrab=null;
+            _grabKeyboardSynchronous=false;
+            _grabKeyboardFreezeNextEvent=false;
+            mPendingKeyboardEvents.mQueue.clear();
+        }
+        if(within(w,_focusWindow)) {
+            Window old=_focusWindow;
+            if(_focusRevertTo==0)_focusWindow=null;
+            else if(_focusRevertTo==1)_focusWindow=_rootWindow;
+            else {
+                _focusWindow=w.getParent();
+                while(_focusWindow!=null && !_focusWindow.isViewable())
+                    _focusWindow=_focusWindow.getParent();
+                // LAB-only fallback after a Blender window closes, never while
+                // another viewable window or an explicit None focus is active.
+                if(nonBlockingInputEnabled && _focusWindow==_rootWindow) {
+                    Window target=_rootWindow.blenderOverlayTarget();
+                    if(target!=null && !within(w,target) && target.getClient()==w.getClient())
+                        _focusWindow=target;
+                }
             }
-
-            _focusRevertTo = 0;
-            Window.focusInOutNotify(w, _focusWindow, pw, _rootWindow, _grabKeyboardWindow == null ? 0 : 3);
+            _focusRevertTo=0;
+            Window.focusInOutNotify(old,_focusWindow,
+                    _rootWindow.windowAtPoint(_motionX,_motionY),_rootWindow,
+                    _grabKeyboardWindow==null?0:3);
         }
+        // A grab can freeze the other device too; thaw only if it has no
+        // surviving grab of its own. Never replay events to a removed window.
+        if(pointerLost && _grabKeyboardWindow==null) {
+            _grabKeyboardSynchronous=false;
+            _grabKeyboardFreezeNextEvent=false;
+            flushPendingKeyboardEvents();
+        }
+        if(keyboardLost && _grabPointerWindow==null) {
+            _grabPointerSynchronous=false;
+            _grabPointerFreezeNextEvent=false;
+            flushPendingPointerEvents();
+        }
+        if(pointerLost)updatePointer(2);
         traceInputState("revert_focus_done");
     }
 
@@ -1374,6 +1405,12 @@ public class ScreenView extends View {
         button = p.mapButton(button);
         if (button == 0) return;
 
+        // Activate before the first press, only when no menu, drag, chord or
+        // explicit grab owns input. Hit testing and drawing use the same stack.
+        if(nonBlockingInputEnabled && pressed && blenderMayActivate())
+            activateBlenderWindow(_rootWindow.blenderPointerTarget(
+                    _rootWindow.windowAtPoint(_motionX,_motionY)));
+
         int mask = 0x80 << button;
 
         if (pressed) {
@@ -1491,9 +1528,16 @@ public class ScreenView extends View {
      * @param pressed True if pressed, false if released.
      */
     public void notifyKeyPressedReleased(int keycode, boolean pressed) {
-        if (_grabKeyboardWindow == null && _focusWindow == null) return;
-
         Keyboard kb = _xServer.getKeyboard();
+        if (_grabKeyboardWindow == null && _focusWindow == null) {
+            // A window can disappear between key down and key up.
+            if(!pressed) {
+                int released=kb.translateToXKeycode(keycode);
+                kb.updateKeymap(released,false);
+                heldInputKeys.remove(released);
+            }
+            return;
+        }
 
         keycode = kb.translateToXKeycode(keycode);
 
@@ -1533,6 +1577,8 @@ public class ScreenView extends View {
         }
 
         kb.updateKeymap(keycode, pressed);
+        if(pressed)heldInputKeys.add(keycode);
+        else heldInputKeys.remove(keycode);
 
         if (!pressed && _grabKeyboardPassiveGrab != null) {
             int rk = _grabKeyboardPassiveGrab.getKey();

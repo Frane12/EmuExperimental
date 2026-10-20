@@ -3,7 +3,7 @@
 Keep Wine's r50 native frames for Preferences, Render, file dialogs, menus and
 tooltips. Do not resize, restyle, raise, minimize or focus any auxiliary window.
 This is a lightweight guest-side Win32 policy, independent of Vulkan and X11
-pixel transport. A .blend reload can restore main geometry, so verify it again.
+pixel transport. Fit once at startup or after a .blend reload, only when the\nmain is foreground and no auxiliary window, native fullscreen or interaction is active.
 """
 import os
 
@@ -36,7 +36,7 @@ class LayoutController:
         # A .blend may restore the already selected main HWND's geometry.
         self.applied.discard(self.main)
 
-    def update(self, windows, desktop, apply):
+    def update(self, windows, desktop, apply, foreground=None, interacting=False):
         if min(desktop) <= 0:
             return
         live = {w['handle'] for w in windows}
@@ -57,12 +57,20 @@ class LayoutController:
         main_window = next((w for w in visible if w['handle'] == self.main), None)
         if main_window is None:
             return
-        rect = (0, 0, desktop[0], desktop[1])
-        style = main_window['style'] & ~(FRAME | WINDOW_STATE | POPUP)
-        # Reapply only after a geometry/style change or .blend reload.
-        if (self.main in self.applied and main_window['style'] == style and
-                main_window['rect'] == rect):
+        # Never compete with GHOST fullscreen, modal windows, menus or drags.
+        # Applied means ownership was handed back to Blender. Geometry drift is
+        # intentional until a project load explicitly requests another fit.
+        if self.main in self.applied:
             return
+        if foreground != self.main or interacting:
+            return
+        if any(w['handle'] != self.main for w in visible):
+            return
+        # Blender's native fullscreen uses WS_POPUP. Let GHOST own that state.
+        if main_window['style'] & POPUP:
+            return
+        rect = (0, 0, desktop[0], desktop[1])
+        style = main_window['style'] & ~(FRAME | WINDOW_STATE)
         if apply(self.main, style, rect, 'primary'):
             self.applied.add(self.main)
 
@@ -74,8 +82,17 @@ def install():
     import ctypes
     from ctypes import wintypes as wt
     user = ctypes.WinDLL('user32', use_last_error=True)
+    class GUIThreadInfo(ctypes.Structure):
+        _fields_ = [('cbSize', wt.DWORD), ('flags', wt.DWORD),
+                    ('hwndActive', wt.HWND), ('hwndFocus', wt.HWND),
+                    ('hwndCapture', wt.HWND), ('hwndMenuOwner', wt.HWND),
+                    ('hwndMoveSize', wt.HWND), ('hwndCaret', wt.HWND),
+                    ('rcCaret', wt.RECT)]
+
     callback_type = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
     bindings = {
+        'GetForegroundWindow': ([], wt.HWND),
+        'GetGUIThreadInfo': ([wt.DWORD, ctypes.POINTER(GUIThreadInfo)], wt.BOOL),
         'EnumWindows': ([callback_type, wt.LPARAM], wt.BOOL),
         'GetWindowThreadProcessId': ([wt.HWND, ctypes.POINTER(wt.DWORD)], wt.DWORD),
         'GetClassNameW': ([wt.HWND, wt.LPWSTR, ctypes.c_int], ctypes.c_int),
@@ -146,7 +163,14 @@ def install():
         try:
             desktop = (user.GetSystemMetrics(0), user.GetSystemMetrics(1))
             if min(desktop) > 0:
-                controller.update(snapshot(), desktop, apply)
+                info = GUIThreadInfo()
+                info.cbSize = ctypes.sizeof(info)
+                # Failure is treated as busy: no blind geometry/focus mutation.
+                available = user.GetGUIThreadInfo(0, ctypes.byref(info))
+                busy = not available or bool(info.flags & 0x1e or info.hwndCapture)
+                controller.update(snapshot(), desktop, apply,
+                                  foreground=user.GetForegroundWindow(),
+                                  interacting=busy)
         except Exception as error:
             message = str(error)
             if message != last_error[0]:

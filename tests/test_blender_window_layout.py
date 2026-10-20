@@ -1,4 +1,4 @@
-"""Pure-policy regressions: only primary GHOST_WindowClass may be restyled."""
+"""Regression scenarios for fullscreen ownership during real window transitions."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -16,93 +16,102 @@ def window(handle, title='Blender', rect=(-4, 19, 1288, 724), owner=0, **updates
     return info
 
 
-class PrimaryOnlyFullscreenTests(unittest.TestCase):
-    def test_only_primary_becomes_borderless_fullscreen_for_both_profiles(self):
-        for desktop in ((1280, 720), (960, 544)):
-            calls = []
-            w = window(1, rect=(-4, 0, desktop[0]+8, desktop[1]+8))
-            layout.LayoutController().update([w], desktop,
-                lambda *args: calls.append(args) or True)
-            self.assertEqual(len(calls), 1)
-            self.assertEqual(calls[0][0], 1)
-            self.assertEqual(calls[0][2], (0, 0, *desktop))
-            self.assertFalse(calls[0][1] & layout.FRAME)
+class FullscreenOwnershipTests(unittest.TestCase):
+    def setUp(self):
+        self.state = layout.LayoutController()
+        self.calls = []
+        self.main = window(1)
 
-    def test_secondary_windows_are_never_touched_even_if_larger_than_primary(self):
-        calls = []
-        windows = [window(1), window(2, 'Preferences', (10, 16, 664, 555)),
-                   window(3, 'Blender Render', (0, 0, 3000, 2000)),
-                   window(4, 'Blender', (2, 4, 1068, 627), owner=1)]
-        state = layout.LayoutController()
-        state.update(windows, (1280, 720), lambda *args: calls.append(args) or True)
-        self.assertEqual(state.main, 1)
-        self.assertEqual([call[0] for call in calls], [1])
+    def update(self, windows=None, foreground=1, interacting=False, desktop=(1280,720)):
+        self.state.update(windows if windows is not None else [self.main],
+            desktop, lambda *args: self.calls.append(args) or True,
+            foreground=foreground, interacting=interacting)
 
-    def test_existing_main_handle_is_unchanged_when_new_blender_window_opens(self):
-        state = layout.LayoutController()
-        calls = []
-        send = lambda *args: calls.append(args) or True
-        primary = window(1)
-        state.update([primary], (1280,720), send)
-        primary['style'] = 0
-        primary['rect'] = (0,0,1280,720)
-        # New Render Window can have the generic title 'Blender' and be huge.
-        state.update([primary, window(10, 'Blender', (0,0,1800,1200))],
-                     (1280,720), send)
-        self.assertEqual(state.main, 1)
-        self.assertEqual([c[0] for c in calls], [1])
+    def test_startup_fits_only_main_for_both_profiles(self):
+        for desktop in ((1280,720), (960,544)):
+            self.setUp()
+            self.main['rect'] = (-4,0,desktop[0]+8,desktop[1]+8)
+            self.update(desktop=desktop)
+            self.assertEqual(len(self.calls),1)
+            self.assertEqual(self.calls[0][0],1)
+            self.assertEqual(self.calls[0][2],(0,0,*desktop))
+            self.assertFalse(self.calls[0][1] & layout.FRAME)
 
-    def test_already_fitted_main_requires_no_second_win32_call(self):
-        state=layout.LayoutController()
-        calls=[]
-        send=lambda *args: calls.append(args) or True
-        state.update([window(1, style=0, rect=(0,0,1280,720))], (1280,720),send)
-        state.update([window(1, style=0, rect=(0,0,1280,720))], (1280,720),send)
-        self.assertEqual(len(calls),1)
+    def test_no_focus_or_other_app_defers_startup(self):
+        self.update(foreground=None)
+        self.update(foreground=99)
+        self.assertEqual(self.calls,[])
+        self.update()
+        self.assertEqual(len(self.calls),1)
 
-    def test_project_reload_and_geometry_drift_are_repaired_only_on_primary(self):
-        state=layout.LayoutController()
-        calls=[]
-        send=lambda *args: calls.append(args) or True
-        main=window(1, rect=(0,0,1280,720), style=0)
-        dialog=window(2,'Preferences',(15,15,600,400))
-        state.update([main,dialog],(1280,720),send)
-        state.update([main,dialog],(1280,720),send)
-        main['rect']=(0,23,1280,697)
-        state.update([main,dialog],(1280,720),send)
-        state.project_loaded()
-        main['rect']=(0,0,1280,720)
-        state.update([main,dialog],(1280,720),send)
-        self.assertEqual([c[0] for c in calls],[1,1,1])
+    def test_visible_render_defers_fit_even_if_main_is_foreground(self):
+        render=window(2,'Render Result - Blender 4.5 LTS',(10,10,900,600),owner=1)
+        self.update([self.main,render])
+        self.update([self.main,render],foreground=2)
+        self.assertEqual(self.calls,[])
+        self.assertEqual(self.state.main,1)
+        self.update()
+        self.assertEqual([c[0] for c in self.calls],[1])
 
-    def test_no_primary_means_no_mutation(self):
-        calls=[]
-        state=layout.LayoutController()
-        state.update([window(2,'Preferences'), window(3,'Default IME',(0,0,1,1)),
-                      window(4,'Blender',(0,0,100,40)),
-                      window(5,'Blender',(0,0,668,547)),
-                      window(6,'Render Result - Blender 4.5 LTS',(0,0,968,552))],
-                      (960,544),lambda *args:calls.append(args) or True)
-        self.assertEqual(calls,[])
-        self.assertIsNone(state.main)
+    def test_unowned_generic_auxiliary_also_defers_fit(self):
+        self.update([self.main,window(2,'Blender',(10,10,800,500))])
+        self.assertEqual(self.calls,[])
+        self.update()
+        self.assertEqual(len(self.calls),1)
 
-    def test_failures_can_retry_and_closed_main_reselects(self):
-        state=layout.LayoutController()
-        calls=[]
-        state.update([window(1)],(1280,720),lambda *args:False)
-        self.assertNotIn(1,state.applied)
-        state.update([window(1)],(1280,720),lambda *args:calls.append(args) or True)
-        self.assertIn(1,state.applied)
-        state.update([window(3)],(1280,720),lambda *args:calls.append(args) or True)
-        self.assertEqual([c[0] for c in calls],[1,3])
+    def test_hidden_and_minimized_auxiliary_does_not_block(self):
+        self.update([self.main,window(2,visible=False),window(3,iconic=True)])
+        self.assertEqual(len(self.calls),1)
 
-    def test_user_minimization_does_not_trigger_restoration(self):
-        state=layout.LayoutController()
-        calls=[]
-        send=lambda *args:calls.append(args) or True
-        state.update([window(1)],(1280,720),send)
-        state.update([window(1, iconic=True)],(1280,720),send)
-        self.assertEqual(len(calls),1)
+    def test_menu_capture_move_and_resize_defer_fit(self):
+        self.update(interacting=True)
+        self.assertEqual(self.calls,[])
+        self.update()
+        self.assertEqual(len(self.calls),1)
+
+    def test_drift_after_initial_fit_belongs_to_blender(self):
+        self.update()
+        self.main['rect']=(0,23,1280,697)
+        self.main['style']=layout.FRAME
+        self.update()
+        self.update()
+        self.assertEqual(len(self.calls),1)
+
+    def test_native_fullscreen_is_never_restyled(self):
+        self.main['style'] |= layout.POPUP
+        self.update()
+        self.assertEqual(self.calls,[])
+        self.main['style'] &= ~layout.POPUP
+        self.update()
+        self.assertEqual(len(self.calls),1)
+
+    def test_reload_remains_pending_until_render_closes_and_main_activates(self):
+        self.update()
+        self.state.project_loaded()
+        render=window(2,'Render Result - Blender 4.5 LTS',(10,10,900,600))
+        self.update([self.main,render],foreground=2)
+        self.update(foreground=99)
+        self.assertEqual(len(self.calls),1)
+        self.update()
+        self.update()
+        self.assertEqual([c[0] for c in self.calls],[1,1])
+
+    def test_minimized_main_is_not_restored(self):
+        self.main['iconic']=True
+        self.update()
+        self.assertEqual(self.calls,[])
+
+    def test_render_title_never_establishes_a_main(self):
+        self.update([window(2,'Render Result - Blender 4.5 LTS')],foreground=2)
+        self.assertIsNone(self.state.main)
+        self.assertEqual(self.calls,[])
+
+    def test_failed_fit_retries_and_closed_main_can_be_replaced(self):
+        self.state.update([self.main],(1280,720),lambda *args:False,foreground=1)
+        self.assertNotIn(1,self.state.applied)
+        self.update()
+        self.update([window(3)],foreground=3)
+        self.assertEqual([c[0] for c in self.calls],[1,3])
 
 
 if __name__ == '__main__':

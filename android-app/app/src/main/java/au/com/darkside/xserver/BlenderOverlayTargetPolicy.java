@@ -25,5 +25,16 @@ final class BlenderOverlayTargetPolicy {
         }
         return null;
     }
+    // A click must focus the window under the pointer, never a different sibling.
+    static <T> T atPointer(List<T> order, Info<T> info, T pointerTopLevel) {
+        T blender=choose(order,info);
+        return blender!=null && pointerTopLevel!=null &&
+                info.eligible(pointerTopLevel) &&
+                info.client(pointerTopLevel)==info.client(blender)?pointerTopLevel:null;
+    }
+    static boolean mayActivate(boolean keyboardGrab,boolean pointerGrab,
+                               boolean buttonsHeld,boolean keysHeld) {
+        return !keyboardGrab && !pointerGrab && !buttonsHeld && !keysHeld;
+    }
     private BlenderOverlayTargetPolicy(){}
 }

@@ -23,6 +23,10 @@ final class BlenderPopupPolicy {
     static boolean primary(String title, int width, int height,
                            int desktopWidth, int desktopHeight) {
         if (title == null || width < 350 || height < 200) return false;
+        if (title.startsWith("Render Result - Blender") ||
+                title.startsWith("Render - Blender") ||
+                title.startsWith("Preferences - Blender") ||
+                title.startsWith("Blender Preferences")) return false;
         if (title.contains(" - Blender ")) return true;
         // Blender initially gives both primary and auxiliary frames this name.
         // Only a nearly desktop-sized frame may be the owner at that stage.
