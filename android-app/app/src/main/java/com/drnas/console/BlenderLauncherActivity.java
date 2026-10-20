@@ -65,7 +65,8 @@ public final class BlenderLauncherActivity extends Activity {
             if(state.getBoolean("waitingExternal")) {waitingExternal=true;return;}
         }
         if(isR64Lab() && !labChoiceMade) showR64LabChoice();
-        else if(r64WinecfgBaseline || "background".equals(r64LabMode)) prepareRuntime();
+        else if(r64WinecfgBaseline || "background".equals(r64LabMode) ||
+                R64Arm64Isolation.isCpuOnly(r64LabMode)) prepareRuntime();
         else checkStartupAccess();
     }
     /**
@@ -84,12 +85,18 @@ public final class BlenderLauncherActivity extends Activity {
                 .setItems(new CharSequence[]{
                         "1 · TEST WINECFG (referenca)",
                         "2 · TEST BLENDER BACKGROUND (bez GUI-ja)",
-                        "3 · TEST BLENDER VULKAN (GUI + Wine SEH)"},(dialog,index)->{
+                        "3 · TEST BLENDER VULKAN (GUI + Wine SEH)",
+                        "4 · CMD BEZ BOOTSTRAP (bez X11)",
+                        "5 · CMD SA BOOTSTRAP (bez X11)",
+                        "6 · BLENDER HEADLESS (bez X11)"},(dialog,index)->{
                     labChoiceMade=true;
-                    r64LabMode=index==0?"winecfg":index==1?"background":"vulkan";
+                    r64LabMode=new String[]{"winecfg","background","vulkan",
+                            R64Arm64Isolation.CMD_NORMAL,R64Arm64Isolation.CMD_BOOTSTRAP,
+                            R64Arm64Isolation.HEADLESS}[index];
                     r64WinecfgBaseline="winecfg".equals(r64LabMode);
                     status.setText("R64 LAB test: "+r64LabMode+"…");
-                    if(r64WinecfgBaseline || "background".equals(r64LabMode))
+                    if(r64WinecfgBaseline || "background".equals(r64LabMode) ||
+                            R64Arm64Isolation.isCpuOnly(r64LabMode))
                         prepareRuntime();
                     else checkStartupAccess();
                 })
