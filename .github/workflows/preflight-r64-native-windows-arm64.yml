@@ -1,0 +1,79 @@
+name: Blender r64 - Windows ARM64 native runner preflight (NO BLENDER BUILD)
+on:
+  push:
+    branches:
+      - experiment/blender-4514-mali-vulkan-native-r64
+    paths:
+      - ".github/workflows/preflight-r64-native-windows-arm64.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arm64-native-preflight:
+    name: Validate native ARM64 Windows host tools (NO Blender download/build)
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    steps:
+      - name: Inventory actual host CPU, disk and installed Visual Studio toolchains
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $arch=[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+          Write-Host "Native host architecture: $arch"
+          if ($arch -ne 'Arm64') { throw "Expected true native Windows ARM64 host, not $arch" }
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='FreeGB';E={[math]::Round($_.Free/1GB,1)}},@{N='UsedGB';E={[math]::Round($_.Used/1GB,1)}} | Format-Table
+          $drive=[IO.Path]::GetPathRoot($env:RUNNER_TEMP).Substring(0,1)
+          $free=(Get-PSDrive -Name $drive).Free/1GB
+          Write-Host "Working disk $drive free: $([math]::Round($free,1)) GiB"
+          if ($free -lt 25) { Write-Warning 'Less than 25 GiB free: full Blender may not fit; no build will be attempted' }
+          cmake --version
+          git --version
+          git lfs version
+          $commands=Get-Command clang-cl.exe,msbuild.exe,cl.exe -ErrorAction SilentlyContinue
+          $commands | Select-Object Name,Source | Format-Table
+          $llvm=Get-Command clang-cl.exe -ErrorAction Stop
+          $out=@(& $llvm.Source --version 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw "Cannot execute LLVM: $($out -join ';')" }
+          Write-Host "LLVM on ARM64: $($out[0])"
+          $where=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (!(Test-Path $where)) { throw 'Missing vswhere' }
+          & $where -latest -products '*' -property installationPath
+          if ($LASTEXITCODE -ne 0) { throw 'VS not installed' }
+          $install=@(& $where -latest -version '[18.0,19.0)' -products '*' -property installationPath)
+          if (!$install) { throw 'Missing Visual Studio 2026 required by windows-11-arm image' }
+          Write-Host "VS2026: $($install -join ';')"
+          $vsPath=$install[0].Trim()
+          $vcvars=Join-Path $vsPath 'VC\Auxiliary\Build\vcvarsall.bat'
+          if (!(Test-Path $vcvars)) { throw 'VS2026 ARM64 developer tools missing' }
+          Write-Host "VS2026 ARM64 tool environment available: $vcvars"
+      - name: Compile and RUN tiny native ARM64 Windows codegen helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $src=Join-Path $env:RUNNER_TEMP 'r64-arm64-toolcheck'
+          New-Item -ItemType Directory -Force $src | Out-Null
+          @'
+          cmake_minimum_required(VERSION 3.25)
+          project(drnas_arm64_host_probe LANGUAGES CXX)
+          add_executable(drnas_arm64_host_probe main.cpp)
+          '@ | Set-Content -Encoding utf8 (Join-Path $src 'CMakeLists.txt')
+          @'
+          #include <iostream>
+          int main() { std::cout << "DRNAS_NATIVE_ARM64_HOST_TOOL_OK" << std::endl; return 0; }
+          '@ | Set-Content -Encoding utf8 (Join-Path $src 'main.cpp')
+          $outDir=Join-Path $env:RUNNER_TEMP 'r64-arm64-toolcheck-build'
+          & cmake -S $src -B $outDir -G 'Visual Studio 18 2026' -A ARM64 -T ClangCl
+          if ($LASTEXITCODE -ne 0) { throw "VS2026 native ARM64 ClangCl CMake configure failed: $LASTEXITCODE" }
+          & cmake --build $outDir --config Release --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Native ARM64 mini-build failed: $LASTEXITCODE" }
+          $exe=Join-Path $outDir 'Release/drnas_arm64_host_probe.exe'
+          if (!(Test-Path $exe)) { throw 'Missing probe exe' }
+          $bytes=[IO.File]::ReadAllBytes($exe);$off=[BitConverter]::ToInt32($bytes,60)
+          $machine=[BitConverter]::ToUInt16($bytes,$off+4)
+          if ($machine -ne 0xAA64) { throw "Probe PE not ARM64: 0x$('{0:X4}' -f $machine)" }
+          $result=@(& $exe 2>&1)
+          if ($LASTEXITCODE -ne 0 -or $result -notcontains 'DRNAS_NATIVE_ARM64_HOST_TOOL_OK') {
+            throw "Native ARM64 executable did not run on native host: $($result -join ';')"
+          }
+          Write-Host 'PASS: true native Windows ARM64 GitHub runner can build and EXECUTE ARM64 helper binaries'
+          Write-Host 'NOTE: This does NOT build Blender, validate its C++ Vulkan patch or generate an APK'

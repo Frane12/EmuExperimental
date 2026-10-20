@@ -1,0 +1,198 @@
+diff --git a/intern/ghost/intern/GHOST_ContextVK.cc b/intern/ghost/intern/GHOST_ContextVK.cc
+--- a/intern/ghost/intern/GHOST_ContextVK.cc
++++ b/intern/ghost/intern/GHOST_ContextVK.cc
+@@ -279,14 +279,14 @@
+     VkPhysicalDeviceFeatures device_features = {};
+ #ifndef __APPLE__
+     device_features.geometryShader = VK_TRUE;
+-    /* MoltenVK supports logicOp, needs to be build with MVK_USE_METAL_PRIVATE_API. */
+-    device_features.logicOp = VK_TRUE;
+-#endif
+-    device_features.dualSrcBlend = VK_TRUE;
+-    device_features.imageCubeArray = VK_TRUE;
+-    device_features.multiDrawIndirect = VK_TRUE;
+-    device_features.multiViewport = VK_TRUE;
+-    device_features.shaderClipDistance = VK_TRUE;
++    /* Optional mobile features are enabled only when advertised by the driver. */
++    device_features.logicOp = features.features.logicOp;
++#endif
++    device_features.dualSrcBlend = features.features.dualSrcBlend;
++    device_features.imageCubeArray = VK_TRUE;
++    device_features.multiDrawIndirect = features.features.multiDrawIndirect;
++    device_features.multiViewport = features.features.multiViewport;
++    device_features.shaderClipDistance = features.features.shaderClipDistance;
+     device_features.drawIndirectFirstInstance = VK_TRUE;
+     device_features.fragmentStoresAndAtomics = VK_TRUE;
+     device_features.samplerAnisotropy = features.features.samplerAnisotropy;
+@@ -316,12 +316,14 @@
+     vulkan_12_features.timelineSemaphore = VK_TRUE;
+     feature_struct_ptr.push_back(&vulkan_12_features);
+ 
+-    /* Enable provoking vertex. */
+-    VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features = {};
+-    provoking_vertex_features.sType =
+-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT;
+-    provoking_vertex_features.provokingVertexLast = VK_TRUE;
+-    feature_struct_ptr.push_back(&provoking_vertex_features);
++    /* Must not pass extension-only features when the extension is unavailable. */
++    VkPhysicalDeviceProvokingVertexFeaturesEXT provoking_vertex_features = {};
++    provoking_vertex_features.sType =
++        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROVOKING_VERTEX_FEATURES_EXT;
++    provoking_vertex_features.provokingVertexLast = VK_TRUE;
++    if (extension_enabled(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME)) {
++      feature_struct_ptr.push_back(&provoking_vertex_features);
++    }
+ 
+     /* Enable dynamic rendering. */
+     VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering = {};
+@@ -497,17 +499,20 @@
+       }
+     }
+ 
+-#ifdef __APPLE__
+-    if (!device_vk.features.features.dualSrcBlend || !device_vk.features.features.imageCubeArray) {
+-      continue;
+-    }
+-#else
+-    if (!device_vk.features.features.geometryShader || !device_vk.features.features.dualSrcBlend ||
+-        !device_vk.features.features.logicOp || !device_vk.features.features.imageCubeArray)
+-    {
+-      continue;
+-    }
+-#endif
++#ifdef __APPLE__
++    if (!device_vk.features.features.dualSrcBlend || !device_vk.features.features.imageCubeArray) {
++      continue;
++    }
++#else
++    /* Keep these hard requirements aligned with VKBackend::missing_capabilities_get.
++     * Mali's logicOp and dualSrcBlend are intentionally optional. */
++    if (!device_vk.features.features.geometryShader ||
++        !device_vk.features.features.fragmentStoresAndAtomics ||
++        !device_vk.features.features.imageCubeArray)
++    {
++      continue;
++    }
++#endif
+ 
+     int device_score = 0;
+     switch (device_vk.properties.properties.deviceType) {
+@@ -1242,11 +1247,8 @@
+   optional_device_extensions.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+ #endif
+ 
+-#ifdef __APPLE__
+-  optional_device_extensions.push_back(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
+-#else
+-  required_device_extensions.push_back(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
+-#endif
++  /* First-vertex provoking semantics are the Vulkan default when absent. */
++  optional_device_extensions.push_back(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
+   optional_device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+   optional_device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
+   optional_device_extensions.push_back(VK_EXT_DYNAMIC_RENDERING_UNUSED_ATTACHMENTS_EXTENSION_NAME);
+diff --git a/source/blender/gpu/vulkan/vk_backend.cc b/source/blender/gpu/vulkan/vk_backend.cc
+--- a/source/blender/gpu/vulkan/vk_backend.cc
++++ b/source/blender/gpu/vulkan/vk_backend.cc
+@@ -141,25 +141,13 @@
+   if (features.features.geometryShader == VK_FALSE) {
+     missing_capabilities.append("geometry shaders");
+   }
+-  if (features.features.logicOp == VK_FALSE) {
+-    missing_capabilities.append("logical operations");
+-  }
+-#endif
+-  if (features.features.dualSrcBlend == VK_FALSE) {
+-    missing_capabilities.append("dual source blending");
+-  }
++#endif
++  /* Logic operations and dual-source blending are optional on Mali GPUs. */
+   if (features.features.imageCubeArray == VK_FALSE) {
+     missing_capabilities.append("image cube array");
+   }
+-  if (features.features.multiDrawIndirect == VK_FALSE) {
+-    missing_capabilities.append("multi draw indirect");
+-  }
+-  if (features.features.multiViewport == VK_FALSE) {
+-    missing_capabilities.append("multi viewport");
+-  }
+-  if (features.features.shaderClipDistance == VK_FALSE) {
+-    missing_capabilities.append("shader clip distance");
+-  }
++  /* Multi-draw indirect uses a per-command fallback when unsupported.
++   * Viewport count >1 and shader clip distance remain under device test. */
+   if (features.features.drawIndirectFirstInstance == VK_FALSE) {
+     missing_capabilities.append("draw indirect first instance");
+   }
+@@ -188,12 +176,7 @@
+   if (!extensions.contains(VK_KHR_SWAPCHAIN_EXTENSION_NAME)) {
+     missing_capabilities.append(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+   }
+-#ifndef __APPLE__
+-  /* Metal doesn't support provoking vertex. */
+-  if (!extensions.contains(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME)) {
+-    missing_capabilities.append(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME);
+-  }
+-#endif
++  /* Provoking-vertex is optional; GHOST and pipelines must omit unsupported state. */
+ 
+   return missing_capabilities;
+ }
+diff --git a/source/blender/gpu/vulkan/render_graph/vk_command_buffer_wrapper.cc b/source/blender/gpu/vulkan/render_graph/vk_command_buffer_wrapper.cc
+--- a/source/blender/gpu/vulkan/render_graph/vk_command_buffer_wrapper.cc
++++ b/source/blender/gpu/vulkan/render_graph/vk_command_buffer_wrapper.cc
+@@ -96,7 +96,14 @@
+                                            uint32_t draw_count,
+                                            uint32_t stride)
+ {
+-  vkCmdDrawIndirect(vk_command_buffer_, buffer, offset, draw_count, stride);
++  if (!VKBackend::get().device.physical_device_features_get().multiDrawIndirect) {
++    /* Without multiDrawIndirect, drawCount must be one. Preserve all commands. */
++    for (uint32_t i = 0; i < draw_count; ++i) {
++      vkCmdDrawIndirect(vk_command_buffer_, buffer, offset + VkDeviceSize(i) * stride, 1, stride);
++    }
++    return;
++  }
++  vkCmdDrawIndirect(vk_command_buffer_, buffer, offset, draw_count, stride);
+ }
+ 
+ void VKCommandBufferWrapper::draw_indexed_indirect(VkBuffer buffer,
+@@ -104,7 +111,14 @@
+                                                    uint32_t draw_count,
+                                                    uint32_t stride)
+ {
+-  vkCmdDrawIndexedIndirect(vk_command_buffer_, buffer, offset, draw_count, stride);
++  if (!VKBackend::get().device.physical_device_features_get().multiDrawIndirect) {
++    for (uint32_t i = 0; i < draw_count; ++i) {
++      vkCmdDrawIndexedIndirect(
++          vk_command_buffer_, buffer, offset + VkDeviceSize(i) * stride, 1, stride);
++    }
++    return;
++  }
++  vkCmdDrawIndexedIndirect(vk_command_buffer_, buffer, offset, draw_count, stride);
+ }
+ 
+ void VKCommandBufferWrapper::dispatch(uint32_t group_count_x,
+diff --git a/source/blender/gpu/vulkan/vk_pipeline_pool.cc b/source/blender/gpu/vulkan/vk_pipeline_pool.cc
+--- a/source/blender/gpu/vulkan/vk_pipeline_pool.cc
++++ b/source/blender/gpu/vulkan/vk_pipeline_pool.cc
+@@ -294,10 +294,15 @@
+   vk_pipeline_rasterization_state_create_info_.frontFace = graphics_info.state.invert_facing ?
+                                                                VK_FRONT_FACE_COUNTER_CLOCKWISE :
+                                                                VK_FRONT_FACE_CLOCKWISE;
+-  vk_pipeline_rasterization_provoking_vertex_state_info_.provokingVertexMode =
+-      graphics_info.state.provoking_vert == GPU_VERTEX_LAST ?
+-          VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT :
+-          VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
++  vk_pipeline_rasterization_provoking_vertex_state_info_.provokingVertexMode =
++      graphics_info.state.provoking_vert == GPU_VERTEX_LAST ?
++          VK_PROVOKING_VERTEX_MODE_LAST_VERTEX_EXT :
++          VK_PROVOKING_VERTEX_MODE_FIRST_VERTEX_EXT;
++  /* A Mali device without VK_EXT_provoking_vertex cannot use extension-only pNext.
++   * Vulkan defaults to FIRST_VERTEX, so LAST_VERTEX flat shading needs visual QA. */
++  vk_pipeline_rasterization_state_create_info_.pNext =
++      VKBackend::get().device.supports_extension(VK_EXT_PROVOKING_VERTEX_EXTENSION_NAME) ?
++          &vk_pipeline_rasterization_provoking_vertex_state_info_ : nullptr;
+ 
+   /* Dynamic state */
+   vk_pipeline_dynamic_state_create_info_.dynamicStateCount = vk_dynamic_states_.size();

@@ -1,0 +1,181 @@
+name: DRNAS Blender r64 - NATIVE Windows ARM64 full build (PRIVATE)
+# Native ARM64 avoids invoking ARM64-built shader and DNA helper tools on x64 Windows.
+on:
+  push:
+    branches:
+      - experiment/blender-4514-mali-vulkan-native-r64
+    paths:
+      - ".github/workflows/build-blender-r64-native-win-arm64.yml"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: drnas-r64-native-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  compile:
+    name: Build patched Blender v4.5.14 on Windows ARM64 VS2026
+    runs-on: windows-11-arm
+    timeout-minutes: 325
+    env:
+      GIT_TERMINAL_PROMPT: "0"
+      GIT_LFS_SKIP_SMUDGE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify real native ARM64 build machine and disk headroom
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $arch=[Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+          if ($arch -ne 'Arm64') { throw "Not native Windows ARM64: $arch" }
+          $disk=[IO.Path]::GetPathRoot($env:RUNNER_TEMP).Substring(0,1)
+          $free=(Get-PSDrive $disk).Free
+          Write-Host "Native ARM64 host; $([math]::Round($free/1GB,1)) GiB free"
+          if ($free -lt 45GB) { throw 'Not enough free disk (<45GB)' }
+          cmake --version
+          git lfs version
+          $clang=Get-Command clang-cl.exe -ErrorAction Stop
+          $version=@(& $clang.Source --version 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw 'clang-cl not functional' }
+          Write-Host "Native compiler available: $($version[0])"
+      - name: Checkout pinned upstream Blender and apply reviewed DRNAS Vulkan C++ patch
+        shell: pwsh
+        timeout-minutes: 35
+        run: |
+          $ErrorActionPreference='Stop'
+          $src=Join-Path $env:RUNNER_TEMP 'drnas-blender4514-src'
+          git clone -c core.longpaths=true --filter=blob:none --depth 1 --branch v4.5.14 --single-branch https://github.com/blender/blender.git $src
+          if ($LASTEXITCODE -ne 0) { throw 'Upstream source clone failed' }
+          $sha=(git -C $src rev-parse HEAD).Trim()
+          if ($sha -ne '62c1db4208e862312bc36db5bc15d4a6dbcfa3e3') { throw "Wrong source SHA: $sha" }
+          python tools/check_blender_mali_patch.py $src
+          if ($LASTEXITCODE -ne 0) { throw 'Patch preflight failed' }
+          $patch=Join-Path $PWD.Path 'patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch'
+          git -C $src apply -- $patch
+          if ($LASTEXITCODE -ne 0) { throw 'Patch apply failed' }
+          git -C $src diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Patch diff check failed' }
+          git -C $src diff --stat
+          "DRNAS_BLENDER_SRC=$src" >> $env:GITHUB_ENV
+          "DRNAS_BLENDER_SHA=$sha" >> $env:GITHUB_ENV
+      - name: Fetch Windows ARM64 Blender submodule dependencies and LFS data
+        shell: pwsh
+        timeout-minutes: 105
+        run: |
+          $ErrorActionPreference='Stop'
+          $src=$env:DRNAS_BLENDER_SRC
+          # Blender's .gitmodules marks platform libraries with update=none.
+          # Override that setting for this *one* pinned ARM64 dependency, as in
+          # the verified x64-host checkout; otherwise Git silently 'Skipping submodule'.
+          git -C $src -c submodule.lib/windows_arm64.update=checkout submodule update --init --depth 1 -- lib/windows_arm64
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 library submodule failed' }
+          $lib=Join-Path $src 'lib/windows_arm64'
+          if (!(Test-Path (Join-Path $lib '.git'))) { throw 'No ARM64 dependency metadata' }
+          $env:GIT_LFS_SKIP_SMUDGE='0'
+          git -C $lib lfs pull
+          if ($LASTEXITCODE -ne 0) { throw 'ARM64 dependency LFS pull failed' }
+          $env:GIT_LFS_SKIP_SMUDGE='1'
+          $disk=[IO.Path]::GetPathRoot($src).Substring(0,1)
+          if ((Get-PSDrive $disk).Free -lt 30GB) { throw 'Not enough free build disk after dependencies' }
+      - name: CMake configure native Windows ARM64 with VS2026 and ClangCl
+        shell: pwsh
+        timeout-minutes: 50
+        run: |
+          $ErrorActionPreference='Stop'
+          $src=$env:DRNAS_BLENDER_SRC
+          $build=Join-Path $env:RUNNER_TEMP 'drnas-blender4514-native-build'
+          $lib=Join-Path $src 'lib/windows_arm64'
+          $config=Join-Path $src 'build_files/cmake/config/blender_full.cmake'
+          # Required by Blender 4.5 ARM64's platform_win32.cmake:56-73.
+          # Import genuine developer variables VSCMD_VER & VCToolsRedistDir,
+          # without bypassing Blender's Visual Studio requirements.
+          $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          if (!(Test-Path -LiteralPath $vswhere)) { throw 'VS2026 vswhere.exe missing' }
+          $installs=@(& $vswhere -latest -version '[18.0,19.0)' -property installationPath)
+          if ($LASTEXITCODE -ne 0 -or !$installs) { throw 'VS2026 installation missing' }
+          $vsInstall=([string]$installs[0]).Trim()
+          $vcvars=Join-Path $vsInstall 'VC/Auxiliary/Build/vcvarsall.bat'
+          if (!(Test-Path -LiteralPath $vcvars -PathType Leaf)) { throw "VS2026 vcvarsall missing: $vcvars" }
+          $envScript=Join-Path $env:RUNNER_TEMP 'drnas-vs2026-arm64.cmd'
+          @(
+            '@echo off'
+            ('call "'+$vcvars+'" arm64 1>nul')
+            'if errorlevel 1 exit /b 1'
+            'set'
+          ) | Set-Content -LiteralPath $envScript -Encoding ascii
+          $envLines=@(& cmd.exe /d /c $envScript 2>&1)
+          if ($LASTEXITCODE -ne 0) { throw "VS2026 vcvarsall failed: $($envLines[-1])" }
+          $imported=0
+          foreach($entry in $envLines) {
+            $line=[string]$entry
+            if($line -match '^([A-Za-z_][A-Za-z0-9_]*)=(.*)$') {
+              [Environment]::SetEnvironmentVariable($Matches[1],$Matches[2],'Process')
+              $imported++
+            }
+          }
+          if ($env:VSCMD_VER -notmatch '^18\.[0-9]+' -or $env:VSCMD_ARG_TGT_ARCH -ne 'arm64') {
+            throw "Invalid developer environment VSCMD_VER=$env:VSCMD_VER target=$env:VSCMD_ARG_TGT_ARCH"
+          }
+          if (!$env:VCToolsRedistDir) { throw 'VCToolsRedistDir missing from genuine ARM64 VS2026 developer environment' }
+          Write-Host "Imported $imported VS2026 dev environment entries (VSCMD_VER=$env:VSCMD_VER, target=$env:VSCMD_ARG_TGT_ARCH)"
+          & cmake -S $src -B $build -G 'Visual Studio 18 2026' -A ARM64 -T ClangCl -C $config -DLIBDIR:PATH=$lib -DWITH_CYCLES_OSL:BOOL=OFF -DWITH_WINDOWS_EXTERNAL_MANIFEST:BOOL=ON
+          if ($LASTEXITCODE -ne 0) { throw "Native Windows ARM64 CMake failed: $LASTEXITCODE" }
+          $cache=Get-Content (Join-Path $build 'CMakeCache.txt') -Raw
+          if ($cache -notmatch '(?m)^CMAKE_GENERATOR_PLATFORM:INTERNAL=ARM64\r?$') { throw 'CMake generator is not ARM64' }
+          if ($cache -notmatch '(?m)^LIBDIR:PATH=.+windows_arm64\r?$') { throw 'CMake using wrong library architecture' }
+          if (!(Test-Path (Join-Path $build 'Blender.sln')) -and !(Test-Path (Join-Path $build 'Blender.slnx'))) { throw 'Blender solution (.sln or .slnx) missing' }
+          "DRNAS_BLENDER_BUILD=$build" >> $env:GITHUB_ENV
+          Write-Host 'PASS: native Windows ARM64 Blender CMake configuration'
+      - name: Compile and INSTALL full native Windows ARM64 Blender
+        shell: pwsh
+        timeout-minutes: 180
+        run: |
+          $ErrorActionPreference='Stop'
+          & cmake --build $env:DRNAS_BLENDER_BUILD --config Release --target INSTALL --parallel 2
+          if ($LASTEXITCODE -ne 0) { throw "Real native Blender build failed: $LASTEXITCODE" }
+      - name: Validate Windows ARM64 PE and bundle distribution plus GPL source patch
+        shell: pwsh
+        timeout-minutes: 30
+        run: |
+          $ErrorActionPreference='Stop'
+          $bin=Join-Path $env:DRNAS_BLENDER_BUILD 'bin/Release'
+          $exe=Join-Path $bin 'blender.exe'
+          if (!(Test-Path $exe -PathType Leaf)) { throw "blender.exe missing: $exe" }
+          $bytes=[IO.File]::ReadAllBytes($exe)
+          $offset=[BitConverter]::ToInt32($bytes,60)
+          if ($offset -lt 64 -or $offset+6 -ge $bytes.Length -or [BitConverter]::ToUInt32($bytes,$offset) -ne 0x4550) { throw 'Bad Windows PE' }
+          if ([BitConverter]::ToUInt16($bytes,$offset+4) -ne 0xAA64) { throw 'Compiled EXE is not ARM64 PE 0xAA64' }
+          $out=Join-Path $env:RUNNER_TEMP 'drnas-blender-native-output'
+          New-Item $out -ItemType Directory -Force | Out-Null
+          $zip=Join-Path $out 'Blender-4.5.14-DRNAS-MaliVulkan-r64-WindowsARM64-NATIVE-PRIVATE.zip'
+          Compress-Archive -Path (Join-Path $bin '*') -DestinationPath $zip -CompressionLevel Optimal
+          if ((Get-Item $zip).Length -gt 1900MB) { throw 'ZIP too large for GitHub release asset' }
+          $digest=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  $(Split-Path $zip -Leaf)" | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @(
+            'Blender v4.5.14 patched for DRNAS Mali Vulkan r64. Native Windows ARM64 build.'
+            "Source: blender v4.5.14 $env:DRNAS_BLENDER_SHA + attached Vulkan r64 patch."
+            "SHA256: $digest"
+            'NOT an Android APK; Mali functionality NOT verified. GPL-2.0-or-later.'
+            'Blender v4.5.14 upstream source: https://github.com/blender/blender/tree/v4.5.14'
+          ) | Set-Content (Join-Path $out 'README.txt') -Encoding utf8
+          Copy-Item 'patches/blender-4.5.14-mali-vulkan-optional-features-r64.patch' $out
+          "DRNAS_BLENDER_OUTPUT=$out" >> $env:GITHUB_ENV
+          Write-Host "PASS: native Windows ARM64 Blender ZIP, SHA256=$digest"
+      - name: Store in PRIVATE DRAFT GitHub release only
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:GITHUB_REPOSITORY -ne 'Frane12/EmuExperimental') { throw 'Wrong GitHub repo' }
+          $private=(gh api "repos/$env:GITHUB_REPOSITORY" --jq '.private').Trim()
+          if ($LASTEXITCODE -ne 0 -or $private -ne 'true') { throw 'Refusing to publish to public repo' }
+          $out=$env:DRNAS_BLENDER_OUTPUT
+          $tag="blender-r64-native-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $zip=Join-Path $out 'Blender-4.5.14-DRNAS-MaliVulkan-r64-WindowsARM64-NATIVE-PRIVATE.zip'
+          gh release create $tag $zip (Join-Path $out 'README.txt') (Join-Path $out 'SHA256SUMS.txt') (Join-Path $out 'blender-4.5.14-mali-vulkan-optional-features-r64.patch') --draft --target $env:GITHUB_SHA --title 'Blender r64 native Windows ARM64 — PRIVATE, NOT DEVICE TESTED' --notes-file (Join-Path $out 'README.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Private draft upload failed' }
