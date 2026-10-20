@@ -5,6 +5,7 @@ on:
       - experiment/blender-4514-mali-vulkan-native-r64
     paths:
       - ".github/workflows/build-mali-r64-lab.yml"
+      - "tools/package_blender.py"
   workflow_dispatch:
 permissions:
   contents: write
