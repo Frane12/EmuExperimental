@@ -16,10 +16,12 @@ final class WineGuiSession implements AutoCloseable {
     private volatile boolean diagnosticsEnabled;
     private volatile boolean r64WinecfgBaseline;
     private volatile boolean r64BlenderBackground, r64BlenderVulkan;
+    private volatile String r64CpuMode="";
     void setR64WinecfgBaseline(boolean value) { r64WinecfgBaseline=value; }
     void setR64BlenderLabMode(String mode) {
         r64BlenderBackground="background".equals(mode);
         r64BlenderVulkan="vulkan".equals(mode);
+        r64CpuMode=R64Arm64Isolation.isCpuOnly(mode)?mode:"";
     }
     private volatile int frameCap;
     private volatile String dxvkVariant;
@@ -186,14 +188,21 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final boolean blenderShell=BlenderShellLaunch.ID.equals(app);
+        final boolean cpuOnly=R64Arm64Isolation.isCpuOnly(r64CpuMode);
+        final boolean cmdProbe=R64Arm64Isolation.isCommand(r64CpuMode);
+        if(cpuOnly && (!blenderShell ||
+                !"com.drnas.console.mali.r64.lab".equals(context.getPackageName())))
+            throw new IOException("CPU-only diagnostic requires isolated R64 LAB");
         File blenderFolder=null;
         if(r64WinecfgBaseline && !blenderShell)
             throw new IOException("R64 Winecfg baseline requires the isolated Blender Wine profile");
-        if(blenderShell && !r64WinecfgBaseline) {
-            if(!r64BlenderBackground)
+        if(blenderShell && !r64WinecfgBaseline && !cmdProbe) {
+            if(!r64BlenderBackground && !cpuOnly)
                 blenderFolder=BlenderProjectDrive.map(context,prefix,log);
             BundledBlender.install(context,prefix,log);
         }
+        if(cpuOnly)log.accept("DRNAS_R64_CPU_MODE="+r64CpuMode+
+                "; no guest X11/GL/Vulkan and no project mapping");
         if(r64BlenderBackground)
             log.accept("DRNAS_R64_BACKGROUND=SELECTED; Blender installed; skip D: mapping, "+
                     "custom startup, GPU backend and Windows GUI");
@@ -215,16 +224,16 @@ final class WineGuiSession implements AutoCloseable {
         // Compatible G52/G72/G76 may attempt pinned PanVK variants;
         // other Mali chips use their own system Vulkan driver. Driver loads
         // are accepted only after bounded native Vulkan preflight.
-        final boolean maliBlender=blenderShell && MaliPanvkRuntime.matchesDevice();
+        final boolean maliBlender=blenderShell && !cpuOnly && MaliPanvkRuntime.matchesDevice();
         // Diagnostic modes are deterministic: a saved user OpenGL profile must
         // not silently change the Vulkan GUI experiment.
-        final boolean nativeOpenGl=(r64BlenderBackground || r64BlenderVulkan)?
+        final boolean nativeOpenGl=(cpuOnly || r64BlenderBackground || r64BlenderVulkan)?
                 false:appProfile.nativeOpenGl();
         // Blender's default CLI explicitly requests --gpu-backend vulkan.
         // The normal default app profile is not marked Native Vulkan, which
         // previously skipped winevulkan.dll's bridge / override on Adreno.
         // The isolated OpenGL profile remains an explicit opt-out.
-        final boolean nativeVulkan=!r64BlenderBackground && needsNativeWineVulkan(
+        final boolean nativeVulkan=!cpuOnly && !r64BlenderBackground && needsNativeWineVulkan(
                 blenderShell,appProfile.nativeVulkan() || maliBlender,nativeOpenGl);
         if(blenderShell)log.accept("DRNAS_BLENDER_VULKAN_BRIDGE_MODE requested="+nativeVulkan+
                 " selectedOpenGL="+nativeOpenGl+
@@ -277,7 +286,8 @@ final class WineGuiSession implements AutoCloseable {
         // DLLs are swapped exclusively before launching Wine: switching mode
         // in the UI needs Reset Wine, never a live d3d9/dxgi replacement.
         String selectedDxvk=dxvkVariant==null?appProfile.dxvk(DxvkVariants.selected(context)):dxvkVariant;
-        boolean asyncDxvk=DxvkVariants.install(context,new File(base,"prefix"),prefix,log,selectedDxvk);
+        boolean asyncDxvk=cpuOnly?false:DxvkVariants.install(
+                context,new File(base,"prefix"),prefix,log,selectedDxvk);
         if(!blenderShell)WineGraphicsTests.install(context,prefix,log);
         // Always available source-owned Paint, independent of Wine's optional mspaint.
         if(!blenderShell)try { DrnasPaintRuntime.install(context,prefix,log); }
@@ -331,6 +341,10 @@ final class WineGuiSession implements AutoCloseable {
         env.put("WINESERVER",serverElf.getAbsolutePath());env.put("PROTON_NO_NTSYNC","1");
         WineBootProbe.configureBootstrapMode(env);
         displayEnvironment(env);
+        if(cpuOnly) {
+            R64Arm64Isolation.configure(env,r64CpuMode);
+            log.accept("DRNAS_R64_CPU_BOOTSTRAP="+env.containsKey("WINEBOOTSTRAPMODE"));
+        }
         // A Windows ARM64 blender.exe importing the bundled x86_64 DXVK
         // dxgi.dll produces STATUS_INVALID_IMAGE_FORMAT (c000007b).
         // Keep standard DXVK for x64 games, but choose Wine's ARM64 builtins
@@ -350,7 +364,7 @@ final class WineGuiSession implements AutoCloseable {
         // fails ARM64 Blender with c000007b. Stage the actual Wine ARM64
         // builtin PE for this ARM64 session only; DxvkVariants.install()
         // restores the original pinned x64 DLL on the next session.
-        if(WineNativeDllPolicy.isNativeArm64(guestPeMachine))
+        if(!cmdProbe && WineNativeDllPolicy.isNativeArm64(guestPeMachine))
             WineNativeDllPolicy.stageArm64Dxgi(lib,prefix,guestPeMachine,log);
         // Normal Wine desktop / Explorer is a distinct launch mode where the
         // Android launcher does not know which ARM64 Blender.exe Wine opens.
@@ -381,7 +395,7 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_PE_IMPORT_AUDIT: Wine +module/+loaddll enabled for Native Vulkan "+
                     "to identify the exact dxgi.dll resolution path; exported raw trace is authoritative.");
         env.put("DXVK_LOG_LEVEL",diagnosticsEnabled?"debug":"error");
-        if(r64WinecfgBaseline || r64BlenderBackground || r64BlenderVulkan) {
+        if(r64WinecfgBaseline || r64BlenderBackground || r64BlenderVulkan || cpuOnly) {
             // Trace only the opted-in LAB run. This exposes guest process
             // exits and SEH exception frames without penalizing Blender runs.
             env.put("WINEDEBUG","-all,err+all,+seh,+process");
@@ -416,10 +430,11 @@ final class WineGuiSession implements AutoCloseable {
             plan.remove("turnipIcd");
             plan.remove("turnipAutoSelected");
         }
-        boolean pinnedTurnipSelected=TurnipRuntime.selectBundledA840H29(context,plan,log);
+        boolean pinnedTurnipSelected=!cpuOnly &&
+                TurnipRuntime.selectBundledA840H29(context,plan,log);
         log.accept("DRNAS_PINNED_TURNIP_SELECTION="+(pinnedTurnipSelected?
                 "STAGED_AND_SELECTED_NOT_YET_VERIFIED":"NOT_SELECTED"));
-        TurnipRuntime.configureWine(context,plan,env,log);
+        if(!cpuOnly)TurnipRuntime.configureWine(context,plan,env,log);
         if(maliBlender&&!TurnipRuntime.automaticSystemBackend(context)) {
             boolean panvkSelected=MaliPanvkRuntime.select(context,env,log);
             log.accept("DRNAS_MALI_PANVK_EXPERIMENT="+(panvkSelected?
@@ -432,13 +447,15 @@ final class WineGuiSession implements AutoCloseable {
         // or a claim that our X11 server implements GLX/DRI3.
         // All non-Blender apps retain their existing Wine/DXVK environment.
         File blenderMesaLib=null;
-        if(blenderShell || nativeOpenGl) {
+        if(!cpuOnly && (blenderShell || nativeOpenGl)) {
             File mesa = WineOpenGlRuntime.install(context,log);
             if(nativeOpenGl) WineOpenGlRuntime.configure(mesa,env,log);
             else WineOpenGlRuntime.exposeBlenderLibGl(mesa,env,log);
             if(blenderShell)blenderMesaLib=mesa;
         }
-        if(r64BlenderBackground) {
+        if(cpuOnly) {
+            log.accept("DRNAS_R64_CPU_GPU_PREFLIGHT=SKIPPED");
+        } else if(r64BlenderBackground) {
             log.accept("DRNAS_R64_BACKGROUND_VULKAN_PREFLIGHT=SKIPPED; no Vulkan context, "+
                     "no GPU first-present test for this CPU/Python-only isolation");
         }
@@ -452,26 +469,28 @@ final class WineGuiSession implements AutoCloseable {
         }
         else TurnipRuntime.probeWine(context,guiRuntime,env,log,raw);
         if(stopped)return;
-        if(!r64BlenderBackground) {
+        if(!r64BlenderBackground && !cpuOnly) {
             audio=new PulseAudioRuntime();
             try {audio.start(context,env,log,raw);}
             catch(Exception e) {audio.close();log.accept("Audio unavailable: "+e.getMessage()+
                     "; desktop remains available.");}
         } else log.accept("DRNAS_R64_BACKGROUND_AUDIO=SKIPPED; CPU/Python smoke only");
         File linker=new File("/system/bin/linker64");
-        X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
+        if(!cpuOnly) {
+            X11Probe.check(6012);log.accept("X11 protocol 11 handshake VERIFIED; DISPLAY="+env.get("DISPLAY"));
+        } else log.accept("DRNAS_R64_CPU_X11_HANDSHAKE=SKIPPED");
         for(String relative:new String[]{"wine/aarch64-unix/winex11.so",
                 "wine/aarch64-windows/winex11.drv","wine/aarch64-windows/winecfg.exe"}) {
             File f=new File(lib,relative);log.accept("GUI component "+relative+": "+(f.isFile()?f.length()+" bytes":"MISSING"));
         }
         File[] dependencies=lib.listFiles((dir,name)->name.startsWith("libX") || name.contains("xcb") || name.contains("freetype") || name.contains("fontconfig"));
         if(dependencies!=null)for(File f:dependencies)log.accept("GUI runtime library: "+f.getName());
-        WineNativeDependencyAudit.report(guiRuntime,lib,env,log);
-        if(blenderShell) {
+        if(!cpuOnly)WineNativeDependencyAudit.report(guiRuntime,lib,env,log);
+        if(blenderShell && !cpuOnly) {
             log.accept("DRNAS_BLENDER_LIBGL_PROBE_REVISION=R64_NATIVE_SONAME_01");
             WineGuiRuntime.probeBlenderLibGl(nativeDir,blenderMesaLib,env,log,raw);
         }
-        WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
+        if(!cpuOnly)WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
         // v0.5.39: the sacrificial native WSI probe returned VK_SUCCESS on
         // vkQueuePresentKHR, but hung inside vkDestroySwapchainKHR for 15s.
         // Never run that suspect teardown automatically in front of Wine:
@@ -497,7 +516,8 @@ final class WineGuiSession implements AutoCloseable {
             // Only locally imported, offline setup files. No .NET or websetup.
             // The [Dependencies] progress messages drive the first-install bar.
             log.accept("[Startup] Provjera offline DirectX / VC++ paketa");
-            WineDependencyBundle.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            if(!cpuOnly)WineDependencyBundle.installPending(context,prefix,linker,wine,proton,env,raw,log);
+            else log.accept("DRNAS_R64_CPU_INSTALLERS=SKIPPED");
             if(stopped)return;
             // Wine explorer.exe's /desktop=shell paints a solid background unless
             // the guest desktop wallpaper is installed and registered. A proper
@@ -507,7 +527,7 @@ final class WineGuiSession implements AutoCloseable {
             catch(Exception error) { log.accept("Wine wallpaper setup skipped: "+error.getMessage()); }
             if(stopped)return;
             if(!blenderShell)FexPerformanceProfile.apply(env);
-            if(blenderShell && !r64WinecfgBaseline && !r64BlenderBackground)
+            if(blenderShell && !r64WinecfgBaseline && !r64BlenderBackground && !cpuOnly)
                 BlenderWindowSetup.ensure(prefix,linker,wine,proton,env,log,raw);
             if(blenderShell)log.accept("DRNAS_BLENDER_LEAN: no game controller shim, Paint, game diagnostics, Mono installer, wallpaper or FEX performance setup; Wine ABI and graphics dependencies retained");
             guestTools=new GuestTools(linker,wine,proton,new HashMap<>(env),log,raw);
@@ -523,7 +543,7 @@ final class WineGuiSession implements AutoCloseable {
                      "config".equals(app)?" with winecfg.exe":" with taskbar and file manager")+
                     "; HWUI desktop + Mesa Vulkan X11 readback presentation (experimental).");
             Map<String,String> dxvkSeen=new HashMap<>();
-            DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
+            if(!cpuOnly)DxvkDiagnosticSnapshot.prime(tmp,dxvkSeen);
             log.accept("DRNAS_DXVK_AUDIT previous session logs ignored until modified; tracking only fresh updates.");
             if(r64WinecfgBaseline) {
                 File pe=new File(lib,"wine/aarch64-windows/winecfg.exe");
@@ -531,17 +551,24 @@ final class WineGuiSession implements AutoCloseable {
                     throw new IOException("R64 baseline Winecfg guest PE missing: "+pe);
                 log.accept("DRNAS_R64_BASELINE_WINECFG_PE=VERIFIED bytes="+pe.length());
             }
-            ProcessBuilder pb=new ProcessBuilder(r64WinecfgBaseline?
+            final String cmdMarker=cmdProbe?R64Arm64Isolation.newMarker():null;
+            ProcessBuilder pb=new ProcessBuilder(cmdProbe?
+                    R64Arm64Isolation.cmdCommand(linker,wine,cmdMarker):
+                    r64WinecfgBaseline?
                     winecfgBaselineCommand(linker,wine):
-                    r64BlenderBackground?blenderCommand(linker,wine,r64BackgroundArgs()):
+                    (r64BlenderBackground || R64Arm64Isolation.HEADLESS.equals(r64CpuMode))?
+                            blenderCommand(linker,wine,r64BackgroundArgs()):
                     r64BlenderVulkan?blenderCommand(linker,wine,r64VulkanGuiArgs()):
                     blenderShell?blenderCommand(linker,wine,launchArgs):
                     command(linker,wine,launchMode,launchArgs))
-                    .directory(blenderShell && !r64WinecfgBaseline && !r64BlenderBackground?
+                    .directory(blenderShell && !r64WinecfgBaseline && !r64BlenderBackground && !cpuOnly?
                             blenderFolder:proton)
                     .redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
-            log.accept(r64WinecfgBaseline?"[Startup] R64 test Winecfg · čekam Windows prozor":
+            log.accept(cmdProbe?"[Startup] R64 CMD ARM64 · čekam marker":
+                    R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?
+                    "[Startup] R64 Blender headless bez X11 · čekam Python test":
+                    r64WinecfgBaseline?"[Startup] R64 test Winecfg · čekam Windows prozor":
                     r64BlenderBackground?"[Startup] R64 Blender background · čekam Python test":
                     r64BlenderVulkan?"[Startup] R64 Blender Vulkan · čekam GPU prozor":
                     blenderShell?"[Startup] Pokretanje Blendera · čekam Windows prozor":
@@ -555,19 +582,37 @@ final class WineGuiSession implements AutoCloseable {
                         " (Winecfg guest process; X11 map and actual GDI pixels not yet verified)");
             final java.util.concurrent.atomic.AtomicBoolean backgroundPythonSeen=
                     new java.util.concurrent.atomic.AtomicBoolean();
+            final java.util.concurrent.atomic.AtomicBoolean cmdSeen=
+                    new java.util.concurrent.atomic.AtomicBoolean();
             Consumer<String> capture=line->{
                 if(line.startsWith("DRNAS_R64_BACKGROUND_PYTHON_OK "))
                     backgroundPythonSeen.set(true);
+                if(R64Arm64Isolation.matchesMarker(line,cmdMarker))cmdSeen.set(true);
                 log.accept(line);
             };
             Thread output=WineServerDiagnostics.pipe(launcher,
+                    cmdProbe?"[R64 CMD] ":
+                    R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?"[Blender headless] ":
                     r64WinecfgBaseline?"[Winecfg baseline] ":
                     r64BlenderBackground?"[Blender background] ":
                     r64BlenderVulkan?"[Blender Vulkan] ":"[GUI Wine] ",
                     capture,60,raw,()->diagnosticsEnabled || r64WinecfgBaseline ||
-                        r64BlenderBackground || r64BlenderVulkan);
+                        r64BlenderBackground || r64BlenderVulkan || cpuOnly);
             try {
-                if(r64BlenderBackground) {
+                if(cmdProbe) {
+                    boolean ended=launcher.waitFor(R64Arm64Isolation.CMD_TIMEOUT_SECONDS,TimeUnit.SECONDS);
+                    if(!ended){launcher.destroyForcibly();launcher.waitFor(3,TimeUnit.SECONDS);}
+                    output.join(1500);
+                    int exit=ended?launcher.exitValue():-1;
+                    boolean drained=!output.isAlive(),serverAlive=server.alive();
+                    boolean pass=ended && exit==0 && cmdSeen.get() && drained && serverAlive;
+                    log.accept("DRNAS_R64_CMD_RESULT="+(!ended?"TIMEOUT":pass?"PASS":"FAIL")+
+                            " mode="+r64CpuMode+" exit="+exit+" marker="+cmdSeen.get()+
+                            " streamDrained="+drained+" wineserverAlive="+serverAlive+
+                            " bootstrap="+env.containsKey("WINEBOOTSTRAPMODE"));
+                    return;
+                }
+                if(r64BlenderBackground || R64Arm64Isolation.HEADLESS.equals(r64CpuMode)) {
                     // Headless Blender must terminate and report a Python marker.
                     // No X11 window is expected. Kill runaway Wine after 90 sec.
                     boolean finished=launcher.waitFor(90,TimeUnit.SECONDS);
@@ -579,7 +624,8 @@ final class WineGuiSession implements AutoCloseable {
                     int exit=finished?launcher.exitValue():-1;
                     String outcome=!finished?"TIMEOUT":
                             exit==0 && backgroundPythonSeen.get()?"PASS":"FAIL";
-                    log.accept("DRNAS_R64_BACKGROUND_RESULT="+outcome+
+                    log.accept((R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?
+                            "DRNAS_R64_HEADLESS_RESULT=":"DRNAS_R64_BACKGROUND_RESULT=")+outcome+
                             " exit="+exit+" pythonMarker="+backgroundPythonSeen.get()+
                             " timeoutSec=90; GUI/Vulkan not implied");
                     return;
