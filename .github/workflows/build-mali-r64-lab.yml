@@ -82,6 +82,29 @@ jobs:
               pe = int.from_bytes(exe[60:64], "little")
               assert exe[pe:pe+6] == b"PE\0\0\x64\xaa", "Not Windows ARM64 Blender"
               print("DRNAS_MALI_R64_ARCHIVE_VERIFIED", "flat" if flat else "wrapped")
+              expanded = sum(info.file_size for info in z.infolist() if not info.is_dir())
+              assert 0 < expanded <= 3 * 1024**3, "r64 payload exceeds safe 3 GiB budget"
+              assert len(z.infolist()) <= 20_000, "Too many ZIP entries for Android extractor"
+          # Pin installer limits to the verified release ZIP, never to the old
+          # 707 MiB official package. Reserve room before creating staging files.
+          margin = 256 * 1024**2
+          cap = min(3 * 1024**3, expanded + margin)
+          free_required = expanded + margin
+          java_file = pathlib.Path("android-app/app/src/main/java/com/drnas/console/BundledBlenderArchive.java")
+          updates = {
+              "static final long MAX_EXPANDED=3L*1024*1024*1024;":
+                  f"static final long MAX_EXPANDED={cap}L;",
+              "static final long EXPECTED_EXPANDED=707171882L;":
+                  f"static final long EXPECTED_EXPANDED={expanded}L;",
+              "static final long REQUIRED_FREE_BYTES=900L*1024*1024;":
+                  f"static final long REQUIRED_FREE_BYTES={free_required}L;",
+          }
+          for old, new in updates.items():
+              assert source.count(old) == 1, f"Missing installer bound: {old}"
+              source = source.replace(old, new)
+          java_file.write_text(source)
+          print("DRNAS_MALI_R64_INSTALLER_PREFLIGHT", "expanded", expanded,
+                "limit", cap, "min_free", free_required)
           PY
       - name: Bundle Android X11 and OpenGL runtime
         run: |
