@@ -38,4 +38,23 @@ public class BlenderOverlayTargetPolicyTest {
         Fake first=new Fake(blender,true,true),second=new Fake(blender,true,true);
         assertSame(second,BlenderOverlayTargetPolicy.choose(Arrays.asList(first,second),INFO));
     }
+    @Test public void clickingMainDoesNotActivateOverlappingRenderElsewhere() {
+        Object client=new Object();
+        Fake main=new Fake(client,true,true),render=new Fake(client,false,true);
+        assertSame(main,BlenderOverlayTargetPolicy.atPointer(Arrays.asList(main,render),INFO,main));
+        assertSame(render,BlenderOverlayTargetPolicy.atPointer(Arrays.asList(main,render),INFO,render));
+    }
+    @Test public void foreignOrUnavailablePointerTargetDoesNotStealFocus() {
+        Object client=new Object();
+        Fake main=new Fake(client,true,true),foreign=new Fake(new Object(),false,true);
+        Fake hidden=new Fake(client,false,false);
+        assertNull(BlenderOverlayTargetPolicy.atPointer(Arrays.asList(main,foreign,hidden),INFO,foreign));
+        assertNull(BlenderOverlayTargetPolicy.atPointer(Arrays.asList(main,hidden),INFO,hidden));
+        assertNull(BlenderOverlayTargetPolicy.atPointer(Arrays.asList(main),INFO,null));
+    }
+    @Test public void menuGrabDragAndKeyChordEachPreventActivation() {
+        for(int state=0;state<16;state++)
+            assertEquals(state==0,BlenderOverlayTargetPolicy.mayActivate(
+                (state&1)!=0,(state&2)!=0,(state&4)!=0,(state&8)!=0));
+    }
 }
