@@ -1,0 +1,214 @@
+name: DRNAS EMU LAB v1 PRIVATE APK
+on:
+  push:
+    branches: [experiment/drnas-emu-lab-v1]
+    paths:
+      - ".github/workflows/build-drnas-emu-lab.yml"
+      - "android-app/**"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: drnas-emu-lab-v1
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android platform SDK
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+      - name: Use installed Android NDK and CMake
+        run: |
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          test -f "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Embed pinned Proton 11.0-2 ARM64EC, FEX 2609 and DXVK 1.10.3
+        run: |
+          python3 -m py_compile tools/package_bundled_runtime.py
+          python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
+      - name: Bundle verified Blender 4.5.14 Windows ARM64
+        run: |
+          python3 tools/package_blender.py android-app/app/src/main/assets
+      - name: Bundle pinned Bionic X11 and font dependencies plus loader probe
+        run: |
+          python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
+          mkdir -p android-app/app/src/main/jniLibs/arm64-v8a
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/gui_dependency_probe.c -ldl -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_gui_probe.so
+      - name: Bundle separately pinned Mesa EGL / Zink native libraries for OpenGL apps
+        run: |
+          python3 -m py_compile tools/package_opengl_runtime.py
+          python3 tools/package_opengl_runtime.py android-app/app/src/main/assets/opengl-runtime-v1.zip
+          unzip -t android-app/app/src/main/assets/opengl-runtime-v1.zip
+      - name: Bundle independently SHA-pinned Mali-G52 PanVK Kbase r4 driver
+        run: |
+          set -euo pipefail
+          mkdir -p android-app/app/src/main/assets/mali
+          curl -fL --retry 3 --retry-delay 3 --max-time 180 \
+            "https://github.com/JimVulkan/mali-panvk/releases/download/v1.3.0/mali-panvk-26.3.0-devel-r4.zip" \
+            -o android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
+          echo "1bf5fdbc6fa7134100f747692436eeee5e112e640a8b5064345facbfac918787  android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip" | sha256sum -c -
+          unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip
+          unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F libvulkan_panfrost.so
+          unzip -l android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r4.zip | grep -F NOTICE.txt
+      - name: Bundle additional pinned Mali drivers and dependencies
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --max-time 180 "https://github.com/JimVulkan/mali-panvk/releases/download/v1.2.0/mali-panvk-26.3.0-devel-r3.zip" -o android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip
+          echo "a53aa1747e19e8471bb839de21b570c70a34d868206ffac852e3e684cd284167  android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip" | sha256sum -c -
+          curl -fL --retry 3 --max-time 180 "https://github.com/LukeValen/panvk-mali-g52/releases/download/v0.0.2-alpha/PanVk-V7-0.0.2-alpha.zip" -o android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip
+          echo "a5da75ae597b23337825c5a35d480c7a7cc0c8655d35850ca5fd25b37ac78289  android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip" | sha256sum -c -
+          unzip -t android-app/app/src/main/assets/mali/mali-panvk-26.3.0-devel-r3.zip
+          unzip -t android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip
+          unzip -l android-app/app/src/main/assets/mali/PanVk-V7-0.0.2-alpha.zip | grep -E 'libvulkan_panfrost.so|libc\+\+_shared.so|libdrm.so'
+      - name: Test primary and auxiliary Blender window layout
+        run: python3 -m unittest discover -s tests -p 'test_blender_window_layout.py'
+      - name: Bundle pinned Android PulseAudio and AAudio output
+        run: |
+          python3 tools/package_audio_runtime.py android-app/app/src/main
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/vulkan_device_probe.c -ldl -pthread -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_vulkan_probe.so
+          readelf -d android-app/app/src/main/jniLibs/arm64-v8a/libpulse*.so | grep NEEDED
+      - name: Build source-owned D3D9 cube diagnostic for Wine WOW64
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-mingw-w64-i686 gcc-mingw-w64-x86-64
+          mkdir -p android-app/app/src/main/assets/graphics-tests
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows -static-libgcc tools/graphics-tests/TestD3D.c -ld3d9 -lgdi32 -luser32 -lm -o android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+          python3 -c "import hashlib,pathlib; p=pathlib.Path('android-app/app/src/main/assets/graphics-tests/TestD3D.exe'); p.with_suffix('.sha256').write_text(hashlib.sha256(p.read_bytes()).hexdigest())"
+          file android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+      - name: Build source-owned Windows XInput 32/64-bit bridge and guest probe
+        run: |
+          set -euxo pipefail
+          mkdir -p android-app/app/src/main/assets/xinput/x86 android-app/app/src/main/assets/xinput/x64
+          for dll in xinput1_3 xinput1_4 xinput9_1_0; do
+            sed "s/xinput1_3/${dll}/g" tools/graphics-tests/xinput1_3.def > "$RUNNER_TEMP/${dll}.def"
+            i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              -shared -Wl,--kill-at -o "android-app/app/src/main/assets/xinput/x86/${dll}.dll" \
+              tools/graphics-tests/DrnasXInput.c "$RUNNER_TEMP/${dll}.def"
+            x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              -shared -Wl,--kill-at -o "android-app/app/src/main/assets/xinput/x64/${dll}.dll" \
+              tools/graphics-tests/DrnasXInput.c "$RUNNER_TEMP/${dll}.def"
+            for arch in x86 x64; do
+              path="android-app/app/src/main/assets/xinput/${arch}/${dll}.dll"
+              sha256sum "$path" | cut -d' ' -f1 > "$path.sha256"
+              file "$path"
+            done
+          done
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows \
+            tools/graphics-tests/XInputProbe.c -luser32 -o android-app/app/src/main/assets/xinput/XInputProbe.exe
+          i686-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x86/xinput1_3.dll | grep 'XInputGetState'
+          x86_64-w64-mingw32-objdump -p android-app/app/src/main/assets/xinput/x64/xinput1_3.dll | grep 'XInputGetState'
+          python3 tests/test_xinput_build_sources.py
+      - name: Build source-owned Retro Paint and RetroPad Windows applications
+        run: |
+          set -euxo pipefail
+          mkdir -p android-app/app/src/main/assets/windows-tools
+          for app in DrnasRetroPaint DrnasRetroPad; do
+            i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror \
+              -municode -mwindows -static-libgcc \
+              "tools/windows-tools/${app}.c" -luser32 -lgdi32 -lcomdlg32 \
+              -o "android-app/app/src/main/assets/windows-tools/${app/DrnasRetro/DRNAS}.exe"
+          done
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc \
+            tools/windows-tools/DrnasDesktop.c -luser32 -lgdi32 -lm \
+            -o android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc \
+            tools/windows-tools/DrnasLinkLaunch.c -lole32 -luuid -lshell32 \
+            -o android-app/app/src/main/assets/windows-tools/DRNASLinkLaunch.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASLinkLaunch.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
+          test -s android-app/app/src/main/assets/windows-tools/DRNASPad.exe
+          file android-app/app/src/main/assets/windows-tools/DRNASPaint.exe
+          file android-app/app/src/main/assets/windows-tools/DRNASPad.exe
+      - name: Test scoped XCB Present guard
+        run: python3 tests/test_xcb_present_guard.py
+      - name: Test pinned Turnip packaging policy
+        run: python3 -m unittest discover -s tests -p 'test_turnip_bundle.py'
+      - name: Validate both DXVK standard/async WCP payloads
+        run: python3 tests/test_dxvk_bundle.py
+      # X11PixelCodecTest is included in the JVM regression step.
+      - name: Run JVM regression tests before checking signing secrets
+        working-directory: android-app
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+      - name: Reuse the established permanent signing identity from the PRIVATE draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Security boundary: this convenient private alpha identity store is NOT suitable
+          # for public repositories. It can later be migrated to GitHub Actions Secrets.
+          [[ "$GITHUB_REPOSITORY" == "Frane12/EmuExperimental" ]] || { echo "::error::Wrong repository"; exit 1; }
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private')" == "true" ]] || {
+            echo "::error::Permanent signing key MUST NOT be restored or generated in a public repository."
+            exit 1
+          }
+          identity_tag="drnas-private-signing-identity-v1"
+          root="$RUNNER_TEMP/drnas-permanent-signing"
+          mkdir -p "$root"
+          if gh release view "$identity_tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx 'true'; then
+            echo "Reusing existing permanent signing certificate from private draft release."
+            gh release download "$identity_tag" --repo "$GITHUB_REPOSITORY" \
+              --pattern "drnas-identity-v1.tar.gz" --dir "$root"
+            tar -xzf "$root/drnas-identity-v1.tar.gz" -C "$root" drnas-signing.p12 password.txt
+          else
+            echo "::error::Established permanent signing identity missing; refusing to generate a replacement key."
+            exit 1
+          fi
+          password="$(cat "$root/password.txt")"
+          test -n "$password"
+          echo "::add-mask::$password"
+          keytool -list -storetype PKCS12 -keystore "$root/drnas-signing.p12" \
+            -storepass "$password" -alias drnas-stable >/dev/null
+          keytool -exportcert -storetype PKCS12 -keystore "$root/drnas-signing.p12" \
+            -storepass "$password" -alias drnas-stable \
+            -file "$root/drnas-signing.der" >/dev/null
+          cert="$(sha256sum "$root/drnas-signing.der" | cut -d' ' -f1)"
+          echo "DRNAS_EXPECTED_CERT_SHA256=$cert" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEYSTORE_FILE=$root/drnas-signing.p12" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_STORE_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEY_ALIAS=drnas-stable" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_KEY_PASSWORD=$password" >> "$GITHUB_ENV"
+          echo "DRNAS_SIGNING_MODE=stable" >> "$GITHUB_ENV"
+          echo "Permanent signing certificate SHA-256: $cert"
+      - name: Build isolated PrefixFix LAB APK using permanent signing identity
+        working-directory: android-app
+        env:
+          DRNAS_REQUIRE_STABLE_SIGNING: "1"
+          DRNAS_PREFIX_RECOVERY_LAB: "0"
+          DRNAS_EMU_LAB: "1"
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify isolated APK and stable signature
+        run: |
+          set -euo pipefail
+          apk=android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep "package: name='com.drnas.console.lab'"
+          unzip -l "$apk" | grep 'lib/arm64-v8a/libdrnas_host.so'
+          cert=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr '[:upper:]' '[:lower:]')
+          [[ "$cert" == "$DRNAS_EXPECTED_CERT_SHA256" ]] || exit 1
+          mkdir -p "$RUNNER_TEMP/lab"
+          cp "$apk" "$RUNNER_TEMP/lab/DRNAS-EMU-LAB-v1-SIGNED.apk"
+          sha256sum "$RUNNER_TEMP/lab/"*.apk > "$RUNNER_TEMP/lab/SHA256SUMS.txt"
+      - name: Store APK in PRIVATE draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$(gh api repos/"$GITHUB_REPOSITORY" --jq .private)" == true ]] || exit 1
+          tag="drnas-emu-lab-v1-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" "$RUNNER_TEMP/lab/"* --draft --target "$GITHUB_SHA" --title "DRNAS EMU LAB v1 (PRIVATE)" --notes "Experimental isolated Android app; com.drnas.console.lab. Not validated on-device."
