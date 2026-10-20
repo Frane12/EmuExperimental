@@ -10,7 +10,7 @@ import java.util.zip.*;
 /** Transactional first-use extraction. No Android or Wine APIs; tested on JVM. */
 final class BundledBlenderArchive {
     static final String VERSION="4.5.14";
-    static final String SHA256="0153ecefc96a0e23985e6edcdbe04e909ba2078258f4ff6a05c21d4b7c756911";
+    static final String SHA256="8802767f9ac63a6e8054e6e37b3ba994b49c2fb6d37d34cfc50ae48491851d6f";
     static final String NAME="blender-"+VERSION+"-windows-arm64.zip";
     static final String DIRECTORY="Blender-"+VERSION;
     static final String WINDOWS_EXE="C:\\DRNAS\\Apps\\"+DIRECTORY+"\\blender.exe";
@@ -238,15 +238,33 @@ final class BundledBlenderArchive {
             byte[] buffer=new byte[128*1024];
             long total=0;int entries=0,lastPercent=-1;
             String root="blender-"+VERSION+"-windows-arm64/";
+            int layout=0; // 1 = version-wrapped ZIP, 2 = compiled flat ZIP
             try(DigestInputStream checked=new DigestInputStream(input,digest);
                 ZipInputStream zip=new ZipInputStream(checked)) {
                 ZipEntry entry;
                 while((entry=zip.getNextEntry())!=null) {
                     if(++entries>20000)throw new IOException("Too many Blender entries");
                     String name=entry.getName();
-                    if(!name.startsWith(root)||name.indexOf('\\')>=0)throw new IOException("Invalid Blender archive root");
-                    String relative=name.substring(root.length());
-                    if(relative.isEmpty())continue;
+                    // Official Blender ZIP has a versioned root. The locally compiled
+                    // r64 Windows ARM64 distribution was zipped from bin/Release/*,
+                    // so blender.exe is at the archive root. Accept exactly one layout.
+                    if(name==null||name.isEmpty()||name.startsWith("/")||
+                            name.indexOf('\\')>=0||name.indexOf(':')>=0)
+                        throw new IOException("Unsafe Blender archive path");
+                    boolean wrapped=name.startsWith(root);
+                    if(layout==0)layout=wrapped?1:2;
+                    else if((layout==1)!=wrapped)
+                        throw new IOException("Mixed Blender archive roots");
+                    String relative=wrapped?name.substring(root.length()):name;
+                    if(relative.isEmpty()) {
+                        if(!entry.isDirectory())throw new IOException("Invalid Blender archive root");
+                        continue;
+                    }
+                    String clean=relative.endsWith("/")&&entry.isDirectory()?
+                            relative.substring(0,relative.length()-1):relative;
+                    for(String part:clean.split("/",-1))
+                        if(part.isEmpty()||part.equals(".")||part.equals(".."))
+                            throw new IOException("Unsafe Blender archive path");
                     Path output=stage.resolve(relative).normalize();
                     if(!output.startsWith(stage)||output.equals(stage))throw new IOException("Unsafe Blender archive path");
                     if(entry.isDirectory())Files.createDirectories(output);
