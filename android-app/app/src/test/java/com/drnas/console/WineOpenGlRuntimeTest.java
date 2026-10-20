@@ -21,13 +21,13 @@ public class WineOpenGlRuntimeTest {
             env.put("VK_DRIVER_FILES","/chosen/turnip_icd.json");
             ArrayList<String> log=new ArrayList<>();
             WineOpenGlRuntime.exposeBlenderLibGl(lib,env,log::add);
-            assertEquals("/native:/wine:"+lib.getCanonicalPath(),env.get("LD_LIBRARY_PATH"));
+            assertEquals(lib.getCanonicalPath()+":/native:/wine",env.get("LD_LIBRARY_PATH"));
             assertEquals("/chosen/turnip_icd.json",env.get("VK_DRIVER_FILES"));
             assertFalse(env.containsKey("WINE_USE_EGL"));
             assertFalse(env.containsKey("GALLIUM_DRIVER"));
             assertTrue(log.stream().anyMatch(s->s.contains("LIBGL_LINKER_READY")));
             WineOpenGlRuntime.exposeBlenderLibGl(lib,env,log::add);
-            assertEquals("/native:/wine:"+lib.getCanonicalPath(),env.get("LD_LIBRARY_PATH"));
+            assertEquals(lib.getCanonicalPath()+":/native:/wine",env.get("LD_LIBRARY_PATH"));
         } finally { for(File file:lib.listFiles())file.delete(); lib.delete(); }
     }
 

@@ -1227,6 +1227,9 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("DRNAS_ARM64_BLENDER_DXGI:") ||
                 line.startsWith("DRNAS_BLENDER_ARM64_PE") ||
                 line.startsWith("DRNAS_BLENDER_VULKAN_BRIDGE_MODE") ||
+                line.contains("DRNAS_BLENDER_LIBGL_PROBE") ||
+                line.startsWith("DRNAS_OPENGL_MESA_BUNDLE_VERIFIED") ||
+                line.startsWith("DRNAS_BLENDER_LIBGL_LINKER_READY") ||
                 line.contains("DRNAS_BLENDER_WINDOW_LAYOUT") ||
                 line.startsWith("DRNAS_X11_CRITICAL_") ||
                 line.contains("DRNAS_X11_CRITICAL_") || line.startsWith("DRNAS_BLENDER_PERF_") ||

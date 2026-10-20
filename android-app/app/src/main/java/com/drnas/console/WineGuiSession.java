@@ -385,10 +385,12 @@ final class WineGuiSession implements AutoCloseable {
         // This is loader repair, NOT a silent change to Blender's Vulkan CLI
         // or a claim that our X11 server implements GLX/DRI3.
         // All non-Blender apps retain their existing Wine/DXVK environment.
+        File blenderMesaLib=null;
         if(blenderShell || nativeOpenGl) {
             File mesa = WineOpenGlRuntime.install(context,log);
             if(nativeOpenGl) WineOpenGlRuntime.configure(mesa,env,log);
             else WineOpenGlRuntime.exposeBlenderLibGl(mesa,env,log);
+            if(blenderShell)blenderMesaLib=mesa;
         }
         if(blenderShell&&!nativeOpenGl) {
             // The Java X server already exists at this point. Check it before
@@ -412,6 +414,10 @@ final class WineGuiSession implements AutoCloseable {
         File[] dependencies=lib.listFiles((dir,name)->name.startsWith("libX") || name.contains("xcb") || name.contains("freetype") || name.contains("fontconfig"));
         if(dependencies!=null)for(File f:dependencies)log.accept("GUI runtime library: "+f.getName());
         WineNativeDependencyAudit.report(guiRuntime,lib,env,log);
+        if(blenderShell) {
+            log.accept("DRNAS_BLENDER_LIBGL_PROBE_REVISION=R64_NATIVE_SONAME_01");
+            WineGuiRuntime.probeBlenderLibGl(nativeDir,blenderMesaLib,env,log,raw);
+        }
         WineGuiRuntime.probe(nativeDir,new File(lib,"wine/aarch64-unix/winex11.so"),env,log,raw);
         // v0.5.39: the sacrificial native WSI probe returned VK_SUCCESS on
         // vkQueuePresentKHR, but hung inside vkDestroySwapchainKHR for 15s.

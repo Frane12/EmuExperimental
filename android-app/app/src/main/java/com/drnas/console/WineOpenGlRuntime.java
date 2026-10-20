@@ -110,7 +110,7 @@ final class WineOpenGlRuntime {
         String path=lib.getCanonicalPath();
         String prior=env.getOrDefault("LD_LIBRARY_PATH","");
         if(!Arrays.asList(prior.split(":")).contains(path))
-            env.put("LD_LIBRARY_PATH",prior.isEmpty()?path:prior+":"+path);
+            env.put("LD_LIBRARY_PATH",prior.isEmpty()?path:path+":"+prior);
         log.accept("DRNAS_BLENDER_LIBGL_LINKER_READY libGL.so.1 + EGL/Zink staged; "+
                 "Vulkan ICD unchanged; dlopen/context/first frame still unverified");
     }

@@ -5,7 +5,40 @@
 
 /* Separate bounded Bionic process. dlerror belongs to the same loader namespace
  * and LD_LIBRARY_PATH as Wine. Never load guest modules into the Android UI. */
+/* Wine's WGL uses dlopen by SONAME. Probe in a NEW Bionic process with
+ * exactly Wine's LD_LIBRARY_PATH; never preload absolute path before SONAME. */
+static int blender_libgl_probe(const char *absolute_file) {
+    const char *search=getenv("LD_LIBRARY_PATH");
+    printf("DRNAS_BLENDER_LIBGL_PROBE_ENV=%s\n",
+      search && strstr(search,"/opengl-runtime/v1/lib") ?
+      "MESA_PATH_PRESENT" : "MESA_PATH_MISSING");
+    dlerror();
+    void *named=dlopen("libGL.so.1",RTLD_NOW|RTLD_LOCAL);
+    if(named) {
+        printf("DRNAS_BLENDER_LIBGL_PROBE_SONAME=OK (Wine WGL context not verified)\n");
+        dlclose(named);
+        return 0;
+    }
+    const char *why=dlerror();
+    printf("DRNAS_BLENDER_LIBGL_PROBE_SONAME=FAILED reason=%s\n",
+        why?why:"unknown");
+    dlerror();
+    void *absolute=dlopen(absolute_file,RTLD_NOW|RTLD_LOCAL);
+    if(absolute) {
+        printf("DRNAS_BLENDER_LIBGL_PROBE_ABSOLUTE=OK (SONAME path not resolved)\n");
+        dlclose(absolute);
+        return 31;
+    }
+    why=dlerror();
+    printf("DRNAS_BLENDER_LIBGL_PROBE_ABSOLUTE=FAILED reason=%s\n",
+        why?why:"unknown");
+    return 32;
+}
+
 int main(int argc,char **argv) {
+    setvbuf(stdout,NULL,_IONBF,0);
+    if(argc==3 && strcmp(argv[1],"--blender-libgl-probe")==0)
+        return blender_libgl_probe(argv[2]);
     const char *names[]={"libX11.so.6","libXext.so.6","libXrender.so.1","libXrandr.so.2",
         "libXcursor.so.1","libXi.so.6","libXinerama.so.1","libXfixes.so.3",
         "libXcomposite.so.1","libXxf86vm.so.1","libfreetype.so.6","libfontconfig.so.1","libvulkan.so.1",

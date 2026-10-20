@@ -113,6 +113,36 @@ final class WineGuiRuntime {
             output.join(1000);
         } finally {if(p.isAlive())p.destroyForcibly();p.getInputStream().close();}
     }
+    /** Launch a fresh Bionic child before Wine, so dlopen failures are
+     * observable even when quiet Blender logging suppresses routine probes. */
+    static void probeBlenderLibGl(File nativeDir,File mesaLib,Map<String,String> env,
+                                   Consumer<String> log,RawWineTrace raw) throws Exception {
+        File exe=new File(nativeDir,"libdrnas_gui_probe.so");
+        File hostGL=new File(mesaLib,"libGL.so.1");
+        if(!exe.isFile() || !hostGL.isFile())
+            throw new IOException("R64 Bionic OpenGL probe prerequisite missing");
+        ProcessBuilder pb=new ProcessBuilder("/system/bin/linker64",exe.getAbsolutePath(),
+                 "--blender-libgl-probe",hostGL.getCanonicalPath()).redirectErrorStream(true);
+        pb.environment().clear();pb.environment().putAll(env);
+        pb.environment().remove("LD_PRELOAD");
+        Process child=pb.start();
+        Thread pipe=WineServerDiagnostics.pipe(child,"[Bionic GL] ",log,20,raw);
+        try {
+            if(!child.waitFor(8,TimeUnit.SECONDS)) {
+                child.destroyForcibly();
+                throw new IOException("R64 Bionic libGL probe timed out");
+            }
+            pipe.join(1000);
+            if(child.exitValue()!=0)
+                throw new IOException("R64 Bionic libGL dlopen failed (exit="+child.exitValue()+
+                        "); check DRNAS_BLENDER_LIBGL_PROBE in exported log");
+            log.accept("DRNAS_BLENDER_LIBGL_PROBE_OK: Bionic SONAME resolution works; "+
+                    "Wine WGL/Vulkan first frame still unverified");
+        } finally {
+            if(child.isAlive())child.destroyForcibly();
+            child.getInputStream().close();
+        }
+    }
     private WineGuiRuntime(){}
 }
 
