@@ -98,8 +98,8 @@ public class BundledBlenderArchiveTest {
         assertFalse(Files.exists(target));
         assertFalse(Files.exists(root.resolve("escape.txt")));
     }
-    @Test public void pinnedNativeR64ZipHash() {
-        assertEquals("8802767f9ac63a6e8054e6e37b3ba994b49c2fb6d37d34cfc50ae48491851d6f",
+    @Test public void pinnedOfficialV11ZipHash() {
+        assertEquals("0153ecefc96a0e23985e6edcdbe04e909ba2078258f4ff6a05c21d4b7c756911",
                 BundledBlenderArchive.SHA256);
     }
 
