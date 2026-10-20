@@ -137,6 +137,72 @@ jobs:
           cmake --install /tmp/freetype-build
           test -f /tmp/android-deps/lib/libfreetype.a
           grep -q '^#define FT_CONFIG_OPTION_USE_BROTLI' /tmp/android-deps/include/freetype2/freetype/config/ftoption.h
+      - name: Cross-compile OpenImageIO dependencies and library for Android ARM64
+        run: |
+          set -euxo pipefail
+          export PKG_CONFIG_LIBDIR=/tmp/android-deps/lib/pkgconfig
+          export CMAKE_BUILD_PARALLEL_LEVEL=4
+          android_cmake() {
+            cmake -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DANDROID_STL=c++_shared \
+              -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+              -DCMAKE_INSTALL_PREFIX=/tmp/android-deps -DCMAKE_INSTALL_LIBDIR=lib \
+              -DCMAKE_PREFIX_PATH=/tmp/android-deps -DCMAKE_FIND_ROOT_PATH=/tmp/android-deps \
+              -DBUILD_TESTING=OFF "$@"
+          }
+          build_install() {
+            cmake --build "$1" --parallel 4
+            cmake --install "$1"
+          }
+          git clone --depth 1 --branch v3.1.7 https://github.com/AcademySoftwareFoundation/Imath.git /tmp/imath-src
+          android_cmake -S /tmp/imath-src -B /tmp/imath-build -DBUILD_SHARED_LIBS=ON -DPYTHON=OFF
+          build_install /tmp/imath-build
+          git clone --depth 1 --branch v3.3.2 https://github.com/AcademySoftwareFoundation/openexr.git /tmp/openexr-src
+          android_cmake -S /tmp/openexr-src -B /tmp/openexr-build -DBUILD_SHARED_LIBS=ON \
+            -DImath_DIR=/tmp/android-deps/lib/cmake/Imath \
+            -DOPENEXR_BUILD_TOOLS=OFF -DOPENEXR_BUILD_EXAMPLES=OFF -DOPENEXR_BUILD_PYTHON=OFF \
+            -DOPENEXR_FORCE_INTERNAL_DEFLATE=ON
+          build_install /tmp/openexr-build
+          git clone --depth 1 --branch v4.7.0 https://github.com/libsdl-org/libtiff.git /tmp/tiff-src
+          android_cmake -S /tmp/tiff-src -B /tmp/tiff-build -DBUILD_SHARED_LIBS=ON \
+            -Dtiff-tools=OFF -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF \
+            -Djpeg=ON -Djpeg12=OFF -Dzstd=OFF -Dlibdeflate=OFF -Dlzma=OFF -Dwebp=OFF \
+            -DJPEG_INCLUDE_DIR=/tmp/android-deps/include -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a
+          build_install /tmp/tiff-build
+          git clone --depth 1 --branch v2.4.2 https://github.com/AcademySoftwareFoundation/OpenColorIO.git /tmp/ocio-src
+          android_cmake -S /tmp/ocio-src -B /tmp/ocio-build -DBUILD_SHARED_LIBS=ON \
+            -DImath_DIR=/tmp/android-deps/lib/cmake/Imath \
+            -DOCIO_BUILD_APPS=OFF -DOCIO_BUILD_TESTS=OFF -DOCIO_BUILD_GPU_TESTS=OFF \
+            -DOCIO_BUILD_PYTHON=OFF -DOCIO_BUILD_DOCS=OFF -DOCIO_USE_SIMD=OFF \
+            -DOCIO_INSTALL_EXT_PACKAGES=MISSING
+          build_install /tmp/ocio-build
+          git clone --depth 1 --branch 11.0.2 https://github.com/fmtlib/fmt.git /tmp/fmt-src
+          android_cmake -S /tmp/fmt-src -B /tmp/fmt-build -DBUILD_SHARED_LIBS=OFF -DFMT_TEST=OFF -DFMT_DOC=OFF
+          build_install /tmp/fmt-build
+          git clone --depth 1 --branch v1.3.0 https://github.com/Tessil/robin-map.git /tmp/robin-src
+          android_cmake -S /tmp/robin-src -B /tmp/robin-build -DTSL_ROBIN_MAP_BUILD_TESTS=OFF
+          build_install /tmp/robin-build
+          git clone --depth 1 --branch v3.0.6.1 https://github.com/AcademySoftwareFoundation/OpenImageIO.git /tmp/oiio-src
+          android_cmake -S /tmp/oiio-src -B /tmp/oiio-build -DBUILD_SHARED_LIBS=ON \
+            -DOIIO_BUILD_TOOLS=OFF -DOIIO_BUILD_TESTS=OFF -DBUILD_DOCS=OFF -DINSTALL_DOCS=OFF -DINSTALL_FONTS=OFF \
+            -DUSE_PYTHON=OFF -DUSE_QT=OFF -DUSE_FREETYPE=OFF -DUSE_TBB=OFF \
+            -DUSE_OpenVDB=OFF -DUSE_FFmpeg=OFF -DUSE_OpenCV=OFF -DUSE_DCMTK=OFF \
+            -DUSE_LibRaw=OFF -DUSE_Libheif=OFF -DUSE_OpenJPEG=OFF -DUSE_JXL=OFF \
+            -DUSE_WebP=OFF -DUSE_Ptex=OFF -DUSE_GIF=OFF -DUSE_SIMD=0 \
+            -DOpenImageIO_BUILD_MISSING_DEPS=NONE \
+            -DImath_DIR=/tmp/android-deps/lib/cmake/Imath \
+            -DOpenEXR_DIR=/tmp/android-deps/lib/cmake/OpenEXR \
+            -DOpenColorIO_DIR=/tmp/android-deps/lib/cmake/OpenColorIO \
+            -Dfmt_DIR=/tmp/android-deps/lib/cmake/fmt -DRobinmap_ROOT=/tmp/android-deps \
+            -DJPEG_INCLUDE_DIR=/tmp/android-deps/include -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a \
+            -DPNG_PNG_INCLUDE_DIR=/tmp/android-deps/include -DPNG_LIBRARY=/tmp/android-deps/lib/libpng16.a \
+            -DTIFF_INCLUDE_DIR=/tmp/android-deps/include -DTIFF_LIBRARY=/tmp/android-deps/lib/libtiff.so
+          build_install /tmp/oiio-build
+          test -f /tmp/android-deps/include/OpenImageIO/imageio.h
+          test -f /tmp/android-deps/lib/libOpenImageIO.so
+          readelf -h /tmp/android-deps/lib/libOpenImageIO.so | tee native-results/oiio-elf.txt
+          grep -q 'Machine:.*AArch64' native-results/oiio-elf.txt
       - name: Probe pinned Blender source configure against Android NDK
         run: |
           set +e
@@ -156,9 +222,10 @@ jobs:
             -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 \
             -DWITH_HEADLESS=ON -DWITH_GHOST_X11=OFF -DWITH_GHOST_WAYLAND=OFF \
             -DWITH_VULKAN_BACKEND=OFF \
-            -DWITH_OPENIMAGEIO=OFF \
             -DWITH_CYCLES=OFF -DWITH_PYTHON=OFF -DWITH_AUDASPACE=OFF \
             -DWITH_LIBS_PRECOMPILED=OFF \
+            -DCMAKE_PREFIX_PATH=/tmp/android-deps -DCMAKE_FIND_ROOT_PATH=/tmp/android-deps \
+            -DOPENIMAGEIO_ROOT_DIR=/tmp/android-deps \
             -DJPEG_INCLUDE_DIR=/tmp/android-deps/include \
             -DJPEG_LIBRARY=/tmp/android-deps/lib/libjpeg.a \
             -DPNG_PNG_INCLUDE_DIR=/tmp/android-deps/include \
