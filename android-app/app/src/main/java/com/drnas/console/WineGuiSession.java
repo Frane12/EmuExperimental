@@ -215,7 +215,9 @@ final class WineGuiSession implements AutoCloseable {
             log.accept("DRNAS_R64_BASELINE=SELECTED Winecfg.exe; Blender unpack and project access SKIPPED; "+
                     "retain Blender Wine ARM64/X11/Vulkan/Mesa environment");
         final AppLaunchSettings.Profile appProfile=AppLaunchSettings.load(context,app);
-        final String guestTarget=blenderShell?"execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
+        final String guestTarget=FreeCadPreview.ID.equals(app)?
+                "execwin:"+FreeCadPreview.launchWinePath(prefix):
+                blenderShell?"execwin:"+BundledBlenderArchive.WINDOWS_EXE:app.startsWith("link:") ?
                 "linkwin:"+windowsPath(new File(prefix,"drive_c"),
                         WineShortcuts.resolveLink(prefix,app.substring(5)),'C'):
                 UserShortcuts.isId(app)?"execwin:"+userWindowsPath(context,prefix,
