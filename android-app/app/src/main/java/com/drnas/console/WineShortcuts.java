@@ -45,6 +45,7 @@ final class WineShortcuts {
     static boolean isLaunchRequest(String app) {
         if(app==null)return false;
         if(UserShortcuts.isId(app))return true;
+        if(FreeCadPreview.ID.equals(app))return true;
         if(app.startsWith("builtin:"))return builtinExecutable(app.substring(8))!=null;
         return app.startsWith("link:") && app.length()<600 && app.toLowerCase(Locale.ROOT).endsWith(".lnk");
     }
