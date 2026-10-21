@@ -28,7 +28,7 @@ android {
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        manifestPlaceholders["appLabel"] = "DRNAS FreeCAD LAB"
+        manifestPlaceholders["appLabel"] = "FreeCAD · DRNAS LAB"
         versionCode = 130
         versionName = "1.1-freecad-private-lab"
     }
@@ -72,7 +72,7 @@ android {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
                 applicationIdSuffix = ".prealpha01r4lab"
-                manifestPlaceholders["appLabel"] = "DRNAS FreeCAD LAB"
+                manifestPlaceholders["appLabel"] = "FreeCAD · DRNAS LAB"
             }
         }
         release {

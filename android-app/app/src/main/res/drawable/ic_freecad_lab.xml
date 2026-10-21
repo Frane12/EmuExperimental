@@ -1,0 +1,34 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Original DRNAS FreeCAD LAB launcher artwork, not the Blender icon. -->
+    <path android:fillColor="#10283D"
+        android:pathData="M22,10 L86,10 Q98,10 98,22 L98,86 Q98,98 86,98 L22,98 Q10,98 10,86 L10,22 Q10,10 22,10 Z"/>
+    <path android:fillColor="#327FAB"
+        android:pathData="M22,13 L86,13 Q95,13 95,22 L95,86 Q95,95 86,95 L22,95 Q13,95 13,86 L13,22 Q13,13 22,13 Z"/>
+    <path android:fillColor="#174562"
+        android:pathData="M25,17 L83,17 Q91,17 91,25 L91,83 Q91,91 83,91 L25,91 Q17,91 17,83 L17,25 Q17,17 25,17 Z"/>
+    <!-- Isometric CAD body: light top, cyan front and cobalt right side. -->
+    <path android:fillColor="#DDF9FF"
+        android:pathData="M28,40 L53,26 L80,40 L54,55 Z"/>
+    <path android:fillColor="#48DAD4"
+        android:pathData="M28,40 L54,55 L54,83 L28,68 Z"/>
+    <path android:fillColor="#2376BD"
+        android:pathData="M54,55 L80,40 L80,68 L54,83 Z"/>
+    <path android:fillColor="#167BA5"
+        android:pathData="M31,44 L51,56 L51,77 L31,66 Z"/>
+    <path android:fillColor="#64A5E9"
+        android:pathData="M57,57 L77,46 L77,66 L57,78 Z"/>
+    <!-- Drafting edges: crisp and recognizable at launcher size. -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M53,26 L55,26 L81,40 L80,42 L54,57 L27,42 L27,40 Z"/>
+    <path android:fillColor="#B5FFFF"
+        android:pathData="M52.5,55 L55.5,55 L55.5,82 L54,84 L52.5,82 Z"/>
+    <path android:fillColor="#B5FFFF"
+        android:pathData="M27,40 L30,41 L30,67 L54,81 L54,84 L27,69 Z"/>
+    <!-- Accent badge to differentiate FreeCAD engineering LAB from Blender. -->
+    <path android:fillColor="#E34A53"
+        android:pathData="M70,19 L85,19 L89,23 L89,38 L86,42 L71,42 L67,38 L67,23 Z"/>
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M73,24 L84,24 L84,27 L76,27 L76,30 L82,30 L82,33 L76,33 L76,38 L73,38 Z"/>
+</vector>
