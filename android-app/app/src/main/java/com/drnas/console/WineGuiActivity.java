@@ -32,6 +32,7 @@ import au.com.darkside.xserver.XServer;
  * The v0.5.16 working Winecfg path remains available with an explicit intent.
  */
 public final class WineGuiActivity extends Activity {
+    private boolean freecadShell;
     private XServer xserver;
     private WineGuiSession session;
     private RawWineTrace raw;
@@ -282,6 +283,7 @@ public final class WineGuiActivity extends Activity {
         verboseLogs=getPreferences(MODE_PRIVATE).getBoolean("verbose_diagnostics",false);
         String profileRequest=getIntent().getStringExtra("DRNAS_GUI_APP");
         blenderShell=BlenderShellLaunch.ID.equals(profileRequest);
+        freecadShell=FreeCadPreview.ID.equals(profileRequest);
         boolean r64Lab=blenderShell && ("com.drnas.console.mali.r64.lab".equals(getPackageName()) ||
                 "com.drnas.console.mali.r64.gui.lab".equals(getPackageName()));
         String r64Mode=r64Lab?getIntent().getStringExtra("DRNAS_R64_LAB_MODE"):null;
@@ -392,7 +394,8 @@ public final class WineGuiActivity extends Activity {
         startupAnimation=new StartupAnimationView(this,blenderShell);
         layout.addView(startupAnimation,new FrameLayout.LayoutParams(-1,-1));
         startupStatus=new TextView(this);
-        startupStatus.setText(blenderShell?"Starting Blender":"Priprema Windows desktopa…");
+        startupStatus.setText(blenderShell?"Starting Blender":
+                freecadShell?"Pokretanje FreeCAD-a…":"Priprema Windows desktopa…");
         startupStatus.setTextColor(0xFFE0EFF8);
         startupStatus.setTextSize(blenderShell?19:14);
         startupStatus.setPadding(dp(24),dp(8),dp(24),dp(8));
@@ -658,7 +661,8 @@ public final class WineGuiActivity extends Activity {
                         log("Desktop stopped: "+e.getClass().getSimpleName()+": "+e.getMessage());
                         runOnUiThread(()->{
                             if(!destroyed) {
-                                startupStatus.setText((blenderShell?"Blender startup failed. ":"Windows se nije pokrenuo. ")+
+                                startupStatus.setText((blenderShell?"Blender startup failed. ":
+                                        freecadShell?"FreeCAD nije pokrenut. ":"Windows se nije pokrenuo. ")+
                                         e.getClass().getSimpleName()+": "+e.getMessage());
                                 startupAnimation.stop();
                                 startupStatus.setVisibility(View.VISIBLE);
@@ -1240,6 +1244,7 @@ public final class WineGuiActivity extends Activity {
                 line.startsWith("DRNAS_R64_PROCESS ") ||
                 line.contains("DRNAS_R64_BACKGROUND_PYTHON_OK") ||
                 line.contains("DRNAS_BLENDER_LIBGL_PROBE") ||
+                line.startsWith("DRNAS_FREECAD_") ||
                 line.startsWith("DRNAS_OPENGL_MESA_BUNDLE_VERIFIED") ||
                 line.startsWith("DRNAS_BLENDER_LIBGL_LINKER_READY") ||
                 line.contains("DRNAS_BLENDER_WINDOW_LAYOUT") ||
@@ -1289,6 +1294,16 @@ public final class WineGuiActivity extends Activity {
                         ". Pošalji DRNAS TXT log.");
                 startupStatus.setVisibility(View.VISIBLE);
                 if(shareLog!=null)shareLog.setVisibility(blenderShell?View.GONE:View.VISIBLE);
+            });
+        }
+        if(freecadShell && line.startsWith("DRNAS_FREECAD_PROCESS_EXIT=")) {
+            runOnUiThread(()->{
+                if(destroyed)return;
+                startupAnimation.stop();startupAnimation.setVisibility(View.GONE);
+                String code=line.substring("DRNAS_FREECAD_PROCESS_EXIT=".length()).split(" ",2)[0];
+                startupStatus.setText("FreeCAD proces je završio (exit="+code+
+                        "). Izvezi TXT log kroz ⋮ → Pošalji log.");
+                startupStatus.setVisibility(View.VISIBLE);
             });
         }
         if(WineGuiSession.isLaunchMarker(line)){
@@ -1542,7 +1557,8 @@ public final class WineGuiActivity extends Activity {
 
     private void writeDiagnosticLog(OutputStream out) throws IOException {
         String header="DRNAS desktop diagnostics\nApp: "+getPackageName()+
-                "\nRelease candidate: Blender v1.1 (versionCode 129)"+
+                "\nRelease candidate: "+(getPackageName().contains("freecadlab")?
+                        "FreeCAD LAB Proton 11":"Blender v1.1")+" (diagnostic build)"+
                 "\nDevice: "+android.os.Build.MANUFACTURER+" "+android.os.Build.MODEL+
                 "\nAndroid API: "+android.os.Build.VERSION.SDK_INT+
                 "\nDesktop launch requested: "+desktopLaunchRequested+

@@ -7,6 +7,16 @@ import java.util.*;
 public class WineGuiSessionTest {
     private static final File LINKER=new File("/system/bin/linker64");
     private static final File WINE=new File("/data/app/wine");
+    @Test public void freecadDirectLaunchHasNoExplorerOrCmd() {
+        String exe="C:\\Program Files\\FreeCAD_1.1.4-Windows-x86_64-py311\\FreeCAD.exe";
+        List<String> args=WineGuiSession.freeCadCommand(LINKER,WINE,exe,List.of());
+        assertEquals(List.of("/system/bin/linker64","/data/app/wine",exe),args);
+        assertFalse(args.contains("explorer.exe"));
+        assertFalse(args.contains("start.exe"));
+        assertTrue(WineGuiSession.isLaunchMarker("Launching FreeCAD directly through Wine"));
+        assertThrows(IllegalArgumentException.class,
+                ()->WineGuiSession.freeCadCommand(LINKER,WINE,"../../evil.exe",List.of()));
+    }
     @Test public void directBlenderLaunchStartsTheWindowMappingWatchdog() {
         assertTrue(WineGuiSession.isLaunchMarker("Launching Blender directly without Explorer desktop/taskbar"));
         assertTrue(WineGuiSession.isLaunchMarker("Launching R64 Winecfg baseline without Blender or Explorer"));

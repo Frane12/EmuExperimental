@@ -54,7 +54,8 @@ final class WineGuiSession implements AutoCloseable {
         return nativeVulkanProfile || (blenderShell && !nativeOpenGlProfile);
     }
     static boolean isLaunchMarker(String line) {
-        return line!=null && (line.startsWith("Launching Wine explorer") ||
+        return line!=null && (line.startsWith("Launching FreeCAD directly") ||
+                line.startsWith("Launching Wine explorer") ||
                 line.startsWith("Launching Blender directly") ||
                 line.startsWith("Launching R64 Winecfg baseline") ||
                 line.startsWith("Launching R64 Blender Vulkan GUI"));
@@ -76,6 +77,18 @@ final class WineGuiSession implements AutoCloseable {
     /** Isolate actual Vulkan GUI without user CLI flags and Python startup. */
     static List<String> r64VulkanGuiArgs() {
         return Arrays.asList("--gpu-backend","vulkan","--factory-startup");
+    }
+    /** Launch a verified C: program directly; no explorer/start.exe shell indirection. */
+    static List<String> freeCadCommand(File linker,File wine,String guestExe,List<String> flags) {
+        if(guestExe==null || guestExe.length()>500 ||
+                !guestExe.toLowerCase(Locale.ROOT).startsWith("c:\\") ||
+                !guestExe.toLowerCase(Locale.ROOT).endsWith(".exe") ||
+                guestExe.contains("..") || guestExe.indexOf((char)0)>=0)
+            throw new IllegalArgumentException("FreeCAD validated Windows C: exe required");
+        List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
+        args.set(args.size()-1,guestExe);
+        if(flags!=null)args.addAll(flags);
+        return args;
     }
     static List<String> blenderCommand(File linker,File wine,List<String> launchArguments) {
         List<String> args=new ArrayList<>(WineLaunchProbe.linkerCommand(linker,wine));
@@ -190,6 +203,7 @@ final class WineGuiSession implements AutoCloseable {
             throw new IOException("Verified Wineboot prefix missing");
         WinePrefixLayout.ensure(prefix,log);
         final boolean blenderShell=BlenderShellLaunch.ID.equals(app);
+        final boolean freecadShell=FreeCadPreview.ID.equals(app);
         final boolean cpuOnly=R64Arm64Isolation.isCpuOnly(r64CpuMode);
         final boolean cmdProbe=R64Arm64Isolation.isCommand(r64CpuMode);
         if(cpuOnly && (!blenderShell ||
@@ -355,8 +369,23 @@ final class WineGuiSession implements AutoCloseable {
         // for an ARM64/ARM64EC EXE or an explicit Native Vulkan profile.
         File directGuestExe=blenderShell?
                 new File(prefix,"drive_c/DRNAS/Apps/"+BundledBlenderArchive.DIRECTORY+"/blender.exe"):
+                freecadShell?FreeCadPreview.findExecutable(new File(prefix,"drive_c")):
                 UserShortcuts.isId(app)?UserShortcuts.resolve(context,app):null;
+        if(freecadShell && directGuestExe==null)
+            throw new IOException("FreeCAD executable not found in private C: prefix");
         int guestPeMachine=directGuestExe==null?0:WineNativeDllPolicy.guestMachine(directGuestExe);
+        if(freecadShell) {
+            log.accept("DRNAS_FREECAD_PE_PREFLIGHT machine=0x"+
+                    Integer.toHexString(guestPeMachine)+
+                    " bytes="+directGuestExe.length()+" target="+guestTarget.substring(8)+
+                    " (Windows x64 compatibility not proven)");
+            for(String dll:new String[]{"libarm64ecfex.dll","libwow64fex.dll"}) {
+                File fex=new File(prefix,"drive_c/windows/system32/"+dll);
+                log.accept("DRNAS_FREECAD_FEX_BRIDGE "+dll+"="+
+                        (fex.isFile()?fex.length()+" bytes":"MISSING")+
+                        " (bridge presence does NOT prove x64 guest execution)");
+            }
+        }
         if(blenderShell)
             log.accept("DRNAS_BLENDER_ARM64_PE machine=0x"+
                     Integer.toHexString(guestPeMachine)+
@@ -391,7 +420,8 @@ final class WineGuiSession implements AutoCloseable {
         // actual loader selection (+loaddll/+module) to distinguish Wine's
         // builtin dxgi.dll from the packaged x86/x64 DXVK copy. Never turn
         // high-volume DLL tracing on for regular DirectX gaming sessions.
-        env.put("WINEDEBUG",diagnosticsEnabled?
+        env.put("WINEDEBUG",freecadShell?"-all,err+all,+seh,+process":
+                diagnosticsEnabled?
                 (nativeVulkan?
                  "-all,err+all,+seh,+process,+module,+loaddll,+timestamp,+pid":
                  "-all,err+all,+seh,+process,+timestamp,+pid"):"-all,err+all");
@@ -454,13 +484,17 @@ final class WineGuiSession implements AutoCloseable {
         // route omitted this dependency and Wine logged OpenGL disabled.
         // This is loader repair, NOT a silent change to Blender's Vulkan CLI
         // or a claim that our X11 server implements GLX/DRI3.
-        // All non-Blender apps retain their existing Wine/DXVK environment.
+        // Evidence from FreeCAD LAB: winex11 WGL could not dlopen libGL.so.1.
+        // Apply the existing checksum-verified bundled Mesa runtime ONLY to
+        // FreeCAD, Blender or an explicitly chosen OpenGL shortcut.
         File blenderMesaLib=null;
-        if(!cpuOnly && (blenderShell || nativeOpenGl)) {
+        if(!cpuOnly && (blenderShell || nativeOpenGl || freecadShell)) {
             File mesa = WineOpenGlRuntime.install(context,log);
             if(nativeOpenGl) WineOpenGlRuntime.configure(mesa,env,log);
             else WineOpenGlRuntime.exposeBlenderLibGl(mesa,env,log);
             if(blenderShell)blenderMesaLib=mesa;
+            if(freecadShell)log.accept("DRNAS_FREECAD_LIBGL_LINKER_READY"+
+                    " Mesa libGL.so.1 + libEGL.so.1 available to Wine; OpenGL context not verified");
         }
         if(cpuOnly) {
             log.accept("DRNAS_R64_CPU_GPU_PREFLIGHT=SKIPPED");
@@ -548,6 +582,7 @@ final class WineGuiSession implements AutoCloseable {
                     r64BlenderBackground?"DRNAS_R64_BACKGROUND_LAUNCH: headless Blender Python check":
                     r64BlenderVulkan?"Launching R64 Blender Vulkan GUI without Explorer":
                     blenderShell?"Launching Blender directly without Explorer desktop/taskbar":
+                    freecadShell?"Launching FreeCAD directly through Wine (no Explorer/start.exe); Windows x64/FEX and Qt/WGL unverified":
                     "Launching Wine explorer.exe virtual desktop "+
                     DESKTOP_WIDTH+"x"+DESKTOP_HEIGHT+
                     ("files".equals(app)?" with winefile.exe":
@@ -573,8 +608,10 @@ final class WineGuiSession implements AutoCloseable {
                             blenderCommand(linker,wine,r64BackgroundArgs()):
                     r64BlenderVulkan?blenderCommand(linker,wine,r64VulkanGuiArgs()):
                     blenderShell?blenderCommand(linker,wine,launchArgs):
+                    freecadShell?freeCadCommand(linker,wine,guestTarget.substring(8),launchArgs):
                     command(linker,wine,launchMode,launchArgs))
-                    .directory(blenderShell && !r64WinecfgBaseline && !r64BlenderBackground && !cpuOnly?
+                    .directory(freecadShell?directGuestExe.getParentFile():
+                            blenderShell && !r64WinecfgBaseline && !r64BlenderBackground && !cpuOnly?
                             blenderFolder:proton)
                     .redirectErrorStream(true);
             pb.environment().clear();pb.environment().putAll(env);
@@ -587,6 +624,7 @@ final class WineGuiSession implements AutoCloseable {
                     r64BlenderBackground?"[Startup] R64 Blender background · čekam Python test":
                     r64BlenderVulkan?"[Startup] R64 Blender Vulkan · čekam GPU prozor":
                     blenderShell?"[Startup] Pokretanje Blendera · čekam Windows prozor":
+                    freecadShell?"[Startup] Pokretanje FreeCAD-a · provjera loadera":
                     "[Startup] Pokretanje Explorera · čekam Windows prozor");
             if(nativeVulkan)log.accept("DRNAS_WINEVULKAN_LAUNCH_ARGUMENTS "+launchArgs+
                     " | WineVulkan files checked, actual Windows Vulkan device unverified.");
@@ -614,8 +652,9 @@ final class WineGuiSession implements AutoCloseable {
                     R64Arm64Isolation.HEADLESS.equals(r64CpuMode)?"[Blender headless] ":
                     r64WinecfgBaseline?"[Winecfg baseline] ":
                     r64BlenderBackground?"[Blender background] ":
-                    r64BlenderVulkan?"[Blender Vulkan] ":"[GUI Wine] ",
-                    capture,60,raw,()->diagnosticsEnabled || r64WinecfgBaseline ||
+                    r64BlenderVulkan?"[Blender Vulkan] ":
+                    freecadShell?"[FreeCAD] ":"[GUI Wine] ",
+                    capture,60,raw,()->freecadShell || diagnosticsEnabled || r64WinecfgBaseline ||
                         r64BlenderBackground || r64BlenderVulkan || cpuOnly);
             try {
                 if(cmdProbe) {
@@ -665,7 +704,7 @@ final class WineGuiSession implements AutoCloseable {
                     return;
                 }
                 File helper=new File(prefix,"drive_c/DRNAS/Tools/DRNASDesktop.exe");
-                if(helper.isFile() && !blenderShell){
+                if(helper.isFile() && !blenderShell && !freecadShell){
                     android.content.SharedPreferences options=AppOptionsView.desktop(context);
                     List<String> desktopArgs=command(linker,wine,"exec:"+helper.getAbsolutePath());
                     desktopArgs.add(options.getBoolean("desktop_live",true)?"/live:1":"/live:0");
@@ -693,6 +732,10 @@ final class WineGuiSession implements AutoCloseable {
                 // Explorer can delegate its window to a child and return.
                 // Exit alone is never proof that a GUI exists.
                 if(!launcher.isAlive()&&!exitReported) {
+                    if(freecadShell)
+                        log.accept("DRNAS_FREECAD_PROCESS_EXIT="+launcher.exitValue()+
+                                " guest="+guestTarget.substring(8)+
+                                " (native loader/FEX errors in Wine trace; GUI not implied)");
                     if(r64WinecfgBaseline)
                         log.accept("DRNAS_R64_BASELINE_PROCESS_EXIT="+launcher.exitValue()+
                                 " (inspect guest process and SEH trace)");
