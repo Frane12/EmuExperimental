@@ -72,7 +72,7 @@ android {
                 // Missing project signing secrets: install experimental CI APK
                 // alongside existing DRNAS and earlier LAB builds without uninstalling data.
                 applicationIdSuffix = ".prealpha01r4lab"
-                manifestPlaceholders["appLabel"] = "Blender DRNAS LAB"
+                manifestPlaceholders["appLabel"] = "DRNAS FreeCAD LAB"
             }
         }
         release {
