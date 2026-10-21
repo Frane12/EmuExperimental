@@ -769,7 +769,7 @@ public final class MainActivity extends Activity {
                             "a CAD prikaz ispravan OpenGL. Test neće mijenjati Blender.")
                     .setPositiveButton("PROBAJ",(d,w)->startActivity(
                             new Intent(this,WineGuiActivity.class)
-                                    .putExtra("DRNAS_GUI_APP","execwin:"+winePath)))
+                                    .putExtra("DRNAS_GUI_APP",FreeCadPreview.ID)))
                     .setNegativeButton("ODUSTANI",null).show();
         } catch (IOException error) {
             new AppDialogBuilder(this).setTitle("FreeCAD · preflight error")
