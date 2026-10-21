@@ -25,8 +25,26 @@ final class RetroIconView extends View {
         super.onDraw(target);
         int save=target.save();
         target.scale(getWidth()/64f,getHeight()/64f);
-        String key=id.startsWith("builtin:")?id.substring(8):id.startsWith("user:")?"game":"link";
+        String key=FreeCadPreview.ID.equals(id)?"freecad":
+                id.startsWith("builtin:")?id.substring(8):id.startsWith("user:")?"game":"link";
         switch(key) {
+            case "freecad":
+                // Small original CAD wireframe logo, drawn locally without image assets.
+                box(target,4,4,60,60,12,0xFF132D4B);
+                box(target,7,7,57,57,10,0xFF438AC6);
+                box(target,10,10,54,54,8,0xFF173855);
+                line(target,17,26,31,18,0xFFB9F9FF,3);
+                line(target,31,18,47,26,0xFFB9F9FF,3);
+                line(target,47,26,32,35,0xFFB9F9FF,3);
+                line(target,32,35,17,26,0xFFB9F9FF,3);
+                line(target,17,26,17,43,0xFF63E7DA,3);
+                line(target,17,43,32,52,0xFF63E7DA,3);
+                line(target,32,52,47,43,0xFF63E7DA,3);
+                line(target,47,43,47,26,0xFF63E7DA,3);
+                line(target,32,35,32,52,0xFFE9FFFF,3);
+                circle(target,31,18,2,0xFFFFBD64);
+                circle(target,47,43,2,0xFFFFBD64);
+                break;
             case "game":
                 box(target,5,19,59,50,12,0xFF67E7C5);
                 box(target,8,22,56,47,10,0xFF193C55);

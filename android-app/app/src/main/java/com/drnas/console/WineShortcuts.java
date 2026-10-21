@@ -52,9 +52,14 @@ final class WineShortcuts {
     static File prefix(Context context) {
         return new File(context.getFilesDir(),"containers/default/wineboot-probe/template/.wine");
     }
+    /** First slot in the FreeCAD test emulator, even before Windows is configured. */
+    static Entry freeCadLabEntry() {
+        return new Entry(FreeCadPreview.ID,"FreeCAD LAB","▧","Proton 11 · Windows x64 test");
+    }
     static List<Entry> list(Context context) {
         List<Entry> user=UserShortcuts.list(context);
         List<Entry> entries=new ArrayList<>(user);
+        entries.add(0,freeCadLabEntry());
         for(String[] spec:BUILTINS)entries.add(new Entry("builtin:"+spec[0],spec[1],spec[2],"Wine"));
         File drive=new File(prefix(context),"drive_c");
         if(!drive.isDirectory())return entries;

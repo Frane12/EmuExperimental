@@ -9,6 +9,13 @@ import static org.junit.Assert.*;
 
 public final class WineShortcutsTest {
     @Rule public TemporaryFolder folder=new TemporaryFolder();
+    @Test public void freeCadTileIsDedicatedLabShortcut() {
+        WineShortcuts.Entry tile=WineShortcuts.freeCadLabEntry();
+        assertEquals(FreeCadPreview.ID,tile.id);
+        assertEquals("FreeCAD LAB",tile.title);
+        assertTrue(tile.status.contains("Proton 11"));
+        assertTrue(WineShortcuts.isLaunchRequest(tile.id));
+    }
     @Test public void nativeUtilitiesHaveExplicitExecutables(){
         assertEquals("notepad.exe",WineShortcuts.builtinExecutable("notepad"));
         assertEquals("taskmgr.exe",WineShortcuts.builtinExecutable("tasks"));

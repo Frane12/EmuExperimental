@@ -709,7 +709,6 @@ public final class MainActivity extends Activity {
             addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
             addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
                     v->openWineGui());
-            addButton(panel,"FreeCAD (LAB) · Proton 11",false,v->startFreeCadPreview());
             note(panel,"Za svoju igru otvori File Explorer, pronađi .exe na C: ili R: i odaberi Dodaj na početni ekran. Dugi dodir na ikonu otvara postavke. Prihvati sprema, Odbaci zanemaruje promjene. Postojeći Wine Desktop / Start Menu prečaci također se prikazuju.");
         }
         TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
@@ -724,6 +723,12 @@ public final class MainActivity extends Activity {
         }
         if(!WineShortcuts.isLaunchRequest(entry.id)) {
             Toast.makeText(this,"Wine prečac nije dostupan.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        // FreeCAD needs a validated Windows PE executable and explicit user
+        // confirmation. The home tile is not an auto-installer.
+        if (FreeCadPreview.ID.equals(entry.id)) {
+            startFreeCadPreview();
             return;
         }
         // A new Activity inherits the same persistent prefix and starts the
@@ -747,7 +752,7 @@ public final class MainActivity extends Activity {
             File exe = FreeCadPreview.findExecutable(driveC);
             if (exe == null) {
                 new AppDialogBuilder(this).setTitle("FreeCAD · nije instaliran")
-                        .setMessage("Za privatni test stavi Windows x64 FreeCAD portable u "+
+                        .setMessage("Za test stavi Windows x64 FreeCAD portable u "+
                                 "C:\\FreeCAD\\bin\\FreeCAD.exe ili instaliraj u "+
                                 "C:\\Program Files\\FreeCAD...\\bin\\FreeCAD.exe. "+
                                 "Ovo ne preuzima FreeCAD i ne dira Blender.")
@@ -763,7 +768,7 @@ public final class MainActivity extends Activity {
                 return;
             }
             final String winePath = WineGuiSession.windowsPath(driveC,exe,'C');
-            new AppDialogBuilder(this).setTitle("FreeCAD · PRIVATE LAB")
+            new AppDialogBuilder(this).setTitle("FreeCAD · Proton 11 LAB")
                     .setMessage("Pronađen Windows "+architecture+" FreeCAD na "+winePath+
                             ". Pokretanje nije potvrđeno. x64 zahtijeva ispravan FEX/WOW64, "+
                             "a CAD prikaz ispravan OpenGL. Test neće mijenjati Blender.")
