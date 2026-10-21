@@ -1,0 +1,141 @@
+name: DRNAS FreeCAD Proton 11 - PRIVATE APK smoke
+on:
+  push:
+    branches: [feature/private-freecad-proton11-test-20261021]
+    paths:
+      - ".github/workflows/freecad-proton11-private-apk.yml"
+      - "android-app/**"
+      - "tools/package_*.py"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: freecad-proton11-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  freecad-private-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - name: Checkout isolated FreeCAD LAB
+        uses: actions/checkout@v4
+
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle build cache
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+          cache-read-only: false
+
+      - name: Prepare Android SDK NDK and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/cmdline-tools/16.0/bin:$PATH"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+          test -f "$ANDROID_HOME/ndk/27.2.12479018/build/cmake/android.toolchain.cmake"
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zstd gcc-mingw-w64-i686 gcc-mingw-w64-x86-64
+
+      - name: Run unit tests including FreeCAD safety checks before packaging
+        working-directory: android-app
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+
+      - name: Fetch checksum-pinned Proton 11 FEX DXVK and DRNAS Turnip
+        run: |
+          set -euo pipefail
+          python3 tools/package_bundled_runtime.py android-app/app/src/main/assets
+          test -s android-app/app/src/main/assets/runtime-components-v1.json
+
+      - name: Package native Android OpenGL EGL Zink
+        run: |
+          set -euo pipefail
+          python3 tools/package_opengl_runtime.py android-app/app/src/main/assets/opengl-runtime-v1.zip
+          unzip -tq android-app/app/src/main/assets/opengl-runtime-v1.zip
+
+      - name: Package native Bionic X11 font runtime and GL dependency closure
+        run: |
+          set -euo pipefail
+          python3 tools/package_gui_runtime.py "$RUNNER_TEMP/imagefs_bionic.txz" android-app/app/src/main/assets/gui-runtime-v1.zip
+          python3 tools/package_opengl_runtime.py --verify android-app/app/src/main/assets/gui-runtime-v1.zip android-app/app/src/main/assets/opengl-runtime-v1.zip
+          mkdir -p android-app/app/src/main/jniLibs/arm64-v8a
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/gui_dependency_probe.c -ldl -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_gui_probe.so
+
+      - name: Package pinned Android audio and GPU probes
+        run: |
+          set -euo pipefail
+          python3 tools/package_audio_runtime.py android-app/app/src/main
+          "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang" -Wall -Wextra -Werror -fPIE -pie -Wl,-z,max-page-size=16384 android-app/app/src/main/cpp/vulkan_device_probe.c -ldl -pthread -o android-app/app/src/main/jniLibs/arm64-v8a/libdrnas_vulkan_probe.so
+
+      - name: Compile bundled Windows desktop helpers without building Blender
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-app/app/src/main/assets/windows-tools
+          for app in DrnasRetroPaint DrnasRetroPad; do
+            i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc "tools/windows-tools/${app}.c" -luser32 -lgdi32 -lcomdlg32 -o "android-app/app/src/main/assets/windows-tools/${app/DrnasRetro/DRNAS}.exe"
+          done
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc tools/windows-tools/DrnasDesktop.c -luser32 -lgdi32 -lm -o android-app/app/src/main/assets/windows-tools/DRNASDesktop.exe
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -municode -mwindows -static-libgcc tools/windows-tools/DrnasLinkLaunch.c -lole32 -luuid -lshell32 -o android-app/app/src/main/assets/windows-tools/DRNASLinkLaunch.exe
+          mkdir -p android-app/app/src/main/assets/graphics-tests
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows -static-libgcc tools/graphics-tests/TestD3D.c -ld3d9 -lgdi32 -luser32 -lm -o android-app/app/src/main/assets/graphics-tests/TestD3D.exe
+          sha256sum android-app/app/src/main/assets/graphics-tests/TestD3D.exe | cut -d' ' -f1 > android-app/app/src/main/assets/graphics-tests/TestD3D.sha256
+          mkdir -p android-app/app/src/main/assets/xinput/x86 android-app/app/src/main/assets/xinput/x64
+          for dll in xinput1_3 xinput1_4 xinput9_1_0; do
+            sed "s/xinput1_3/${dll}/g" tools/graphics-tests/xinput1_3.def > "$RUNNER_TEMP/${dll}.def"
+            i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -Wl,--kill-at -o "android-app/app/src/main/assets/xinput/x86/${dll}.dll" tools/graphics-tests/DrnasXInput.c "$RUNNER_TEMP/${dll}.def"
+            x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -shared -Wl,--kill-at -o "android-app/app/src/main/assets/xinput/x64/${dll}.dll" tools/graphics-tests/DrnasXInput.c "$RUNNER_TEMP/${dll}.def"
+            for arch in x86 x64; do
+              sha256sum "android-app/app/src/main/assets/xinput/${arch}/${dll}.dll" | cut -d' ' -f1 > "android-app/app/src/main/assets/xinput/${arch}/${dll}.dll.sha256"
+            done
+          done
+          i686-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Werror -mwindows tools/graphics-tests/XInputProbe.c -luser32 -o android-app/app/src/main/assets/xinput/XInputProbe.exe
+
+      - name: Assemble separate FreeCAD LAB APK
+        working-directory: android-app
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify FreeCAD package identity and native components
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=android-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "name='com.drnas.console.freecadlab"
+          unzip -l "$APK" | grep 'runtime-components-v1.json'
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libdrnas_host.so'
+          unzip -l "$APK" | grep 'assets/opengl-runtime-v1.zip'
+          unzip -l "$APK" | grep 'assets/gui-runtime-v1.zip'
+          unzip -l "$APK" | grep 'assets/windows-tools/DRNASDesktop.exe'
+          mkdir -p "$RUNNER_TEMP/drnas-freecad-lab"
+          cp "$APK" "$RUNNER_TEMP/drnas-freecad-lab/DRNAS-FreeCAD-Proton11-PRIVATE-LAB.apk"
+          cp docs/FREECAD_PROTON11_PRIVATE_SMOKE.md "$RUNNER_TEMP/drnas-freecad-lab/README.md"
+          (cd "$RUNNER_TEMP/drnas-freecad-lab" && sha256sum *.apk > SHA256SUMS.txt)
+
+      - name: Preserve APK in PRIVATE GitHub draft release (no public publication)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(gh api repos/$GITHUB_REPOSITORY --jq .private)" = "true"
+          tag="freecad-proton11-private-lab-${GITHUB_RUN_ID}"
+          gh release create "$tag" "$RUNNER_TEMP/drnas-freecad-lab/"* \
+            --draft --target "$GITHUB_SHA" \
+            --title "DRNAS FreeCAD Proton 11 PRIVATE LAB (untested)" \
+            --notes "Isolated FreeCAD Windows x64 compatibility test. Does not include FreeCAD binaries. Not tested on device. Different Android package ID from Blender."
+
+      - name: Report completed PRIVATE draft tag
+        if: success()
+        run: echo "FreeCAD PRIVATE LAB complete; see the private GitHub Releases drafts."
