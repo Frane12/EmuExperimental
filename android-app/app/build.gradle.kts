@@ -24,13 +24,13 @@ android {
     namespace = "com.drnas.console"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.drnas.console"
+        applicationId = "com.drnas.console.freecadlab"
         minSdk = 26
         targetSdk = 35
         ndk { abiFilters += listOf("arm64-v8a") }
-        manifestPlaceholders["appLabel"] = "Blender"
+        manifestPlaceholders["appLabel"] = "DRNAS FreeCAD LAB"
         versionCode = 130
-        versionName = "1.1"
+        versionName = "1.1-freecad-private-lab"
     }
     packaging {
         jniLibs.useLegacyPackaging = true
