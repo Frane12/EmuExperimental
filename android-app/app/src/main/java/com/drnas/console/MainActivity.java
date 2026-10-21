@@ -709,6 +709,7 @@ public final class MainActivity extends Activity {
             addButton(panel,"↻  Osvježi Wine prečace",false,v->render());
             addButton(panel,"▣  Otvori Wine Explorer za instalaciju programa",false,
                     v->openWineGui());
+            addButton(panel,"FreeCAD (LAB) · Proton 11",false,v->startFreeCadPreview());
             note(panel,"Za svoju igru otvori File Explorer, pronađi .exe na C: ili R: i odaberi Dodaj na početni ekran. Dugi dodir na ikonu otvara postavke. Prihvati sprema, Odbaci zanemaruje promjene. Postojeći Wine Desktop / Start Menu prečaci također se prikazuju.");
         }
         TextView footnote=label("ⓘ  Wine shortcuts appear here. "+
@@ -729,6 +730,51 @@ public final class MainActivity extends Activity {
         // named guest app inside Wine's virtual desktop. No host shell parsing.
         startActivity(new Intent(this,WineGuiActivity.class)
                 .putExtra("DRNAS_GUI_APP",entry.id));
+    }
+
+    /**
+     * Only a private preview entry: discover a user-installed FreeCAD on C:.
+     * Never download or automatically execute third-party binaries.
+     */
+    private void startFreeCadPreview() {
+        if (wineBooting || container.isBusy() || !readyForDesktop()) {
+            Toast.makeText(this,"Pokreni Windows prije FreeCAD testa.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            File driveC = new File(getFilesDir(),
+                    "containers/default/wineboot-probe/template/.wine/drive_c");
+            File exe = FreeCadPreview.findExecutable(driveC);
+            if (exe == null) {
+                new AppDialogBuilder(this).setTitle("FreeCAD · nije instaliran")
+                        .setMessage("Za privatni test stavi Windows x64 FreeCAD portable u "+
+                                "C:\\FreeCAD\\bin\\FreeCAD.exe ili instaliraj u "+
+                                "C:\\Program Files\\FreeCAD...\\bin\\FreeCAD.exe. "+
+                                "Ovo ne preuzima FreeCAD i ne dira Blender.")
+                        .setPositiveButton("OTVORI EXPLORER",(d,w)->openWineFiles())
+                        .setNegativeButton("ZATVORI",null).show();
+                return;
+            }
+            String architecture = FreeCadPreview.architecture(exe);
+            if (!"x64".equals(architecture) && !"arm64".equals(architecture)) {
+                new AppDialogBuilder(this).setTitle("FreeCAD · nepodržani EXE")
+                        .setMessage("Prepoznati PE tip: "+architecture+". Očekujemo Windows x64 ili ARM64.")
+                        .setNegativeButton("ZATVORI",null).show();
+                return;
+            }
+            final String winePath = WineGuiSession.windowsPath(driveC,exe,'C');
+            new AppDialogBuilder(this).setTitle("FreeCAD · PRIVATE LAB")
+                    .setMessage("Pronađen Windows "+architecture+" FreeCAD na "+winePath+
+                            ". Pokretanje nije potvrđeno. x64 zahtijeva ispravan FEX/WOW64, "+
+                            "a CAD prikaz ispravan OpenGL. Test neće mijenjati Blender.")
+                    .setPositiveButton("PROBAJ",(d,w)->startActivity(
+                            new Intent(this,WineGuiActivity.class)
+                                    .putExtra("DRNAS_GUI_APP","execwin:"+winePath)))
+                    .setNegativeButton("ODUSTANI",null).show();
+        } catch (IOException error) {
+            new AppDialogBuilder(this).setTitle("FreeCAD · preflight error")
+                    .setMessage(error.getMessage()).setNegativeButton("ZATVORI",null).show();
+        }
     }
 
     private boolean compactHome(){return AppOptionsView.desktop(this).getBoolean("ui_compact",true);}
