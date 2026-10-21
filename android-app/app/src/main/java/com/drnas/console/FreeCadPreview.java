@@ -7,7 +7,19 @@ import java.util.Locale;
 
 /** Read-only FreeCAD Windows executable discovery. No installation or file mutation. */
 final class FreeCadPreview {
+    static final String ID = "freecad-lab";
     private FreeCadPreview() {}
+
+    /** Rechecks the installed binary when the Wine process is actually launched. */
+    static String launchWinePath(File prefix) throws IOException {
+        File cDrive = new File(prefix, "drive_c");
+        File exe = findExecutable(cDrive);
+        if (exe == null) throw new IOException("FreeCAD Windows EXE is not installed on C:");
+        String pe = architecture(exe);
+        if (!"x64".equals(pe) && !"arm64".equals(pe))
+            throw new IOException("Unsupported FreeCAD PE type: " + pe);
+        return WineGuiSession.windowsPath(cDrive, exe, 'C');
+    }
 
     static File findExecutable(File cDrive) throws IOException {
         File root = cDrive.getCanonicalFile();
