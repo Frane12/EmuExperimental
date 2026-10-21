@@ -22,10 +22,9 @@
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustNothing"
             android:configChanges="orientation|screenSize|keyboardHidden" />
-        <activity android:name=".MainActivity" android:exported="false" />
+        <!-- FreeCAD LAB opens the real DRNAS Console, not the Blender bootstrap. -->
         <activity
-            android:name=".BlenderLauncherActivity"
-            android:screenOrientation="landscape"
+            android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
@@ -33,6 +32,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".BlenderLauncherActivity"
+            android:screenOrientation="landscape" android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
     </application>
 </manifest>
 
